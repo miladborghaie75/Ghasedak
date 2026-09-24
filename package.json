@@ -1,0 +1,30 @@
+{
+  "name": "ghasedak",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.12.1",
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "dev:storefront": "pnpm --filter @ghasedak/storefront dev",
+    "dev:api": "pnpm --filter @ghasedak/api dev",
+    "db:generate": "pnpm --filter @ghasedak/database db:generate",
+    "db:migrate": "pnpm --filter @ghasedak/database db:migrate",
+    "db:deploy": "pnpm --filter @ghasedak/database db:deploy"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.8.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "sharp",
+      "@tailwindcss/oxide",
+      "esbuild"
+    ]
+  }
+}

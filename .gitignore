@@ -1,0 +1,27 @@
+node_modules
+dist
+.turbo
+.next
+out
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+
+# env — هرگز commit نشود (بند ۹۳)
+.env
+.env.*
+!.env.example
+
+# لاگ‌ها و فایل‌های محلی
+*.log
+coverage
+.freebuff
+
+# باینری‌های PostgreSQL محلی (Zonky) — از دیسک حذف نمی‌شوند، فقط از مخزن خارج
+infrastructure/pg/
+
+# بایگانی‌ها و منابع مرجع خارجی
+asset/
+*.zip
+__MACOSX/
+._*

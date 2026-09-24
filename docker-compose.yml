@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ghasedak
+      POSTGRES_PASSWORD: ghasedak
+      POSTGRES_DB: ghasedak
+    ports:
+      - "5432:5432"
+    volumes:
+      - ghasedak_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ghasedak"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - ghasedak_redis:/data
+
+volumes:
+  ghasedak_db:
+  ghasedak_redis:

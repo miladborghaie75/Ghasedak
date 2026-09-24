@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+/*
+ * توکن‌های «لباس زیر قاصدک» — رنگ‌ها از بریف پین شده‌اند.
+ * Claymorphism کنترل‌شده: فقط ۳ سطح سایه تعریف می‌شود.
+ * ASSUMPTION: تک‌تم روشن (dark mode خارج از اسکوپ این مرحله).
+ */
+@theme {
+  --font-sans: "Vazirmatn Variable", Vazirmatn, "Segoe UI", Tahoma, sans-serif;
+  --font-display: Lalezar, "Vazirmatn Variable", Vazirmatn, sans-serif;
+
+  --color-bg: #fbf8fe;
+  --color-surface: #ffffff;
+  --color-ink: #29232f;
+  --color-muted: #756a7b;
+  --color-line: #e3dce8;
+  --color-plum: #3b2948;
+  --color-primary: #a67dea;
+  --color-primary-hover: #8f64d0;
+  --color-primary-strong: #6e46b8;
+  --color-primary-light: #eee6f8;
+  --color-primary-tint: #f6f1fc;
+  --color-primary-soft: #d9c8f2;
+  --color-primary-press: #5a379c;
+  --color-sage: #8fa89b;
+  --color-dusty-rose: #c9829d;
+  --color-success: #3f8a68;
+  --color-error: #c94a5a;
+
+  --radius-card: 1.25rem;
+  --radius-blob: 1.75rem;
+
+  --shadow-clay-1: 0 1px 2px rgba(41, 35, 47, 0.05),
+    0 10px 24px -8px rgba(59, 41, 72, 0.12);
+  --shadow-clay-2: 0 2px 4px rgba(41, 35, 47, 0.06),
+    0 18px 44px -12px rgba(59, 41, 72, 0.22);
+  --shadow-clay-3: 0 4px 10px rgba(41, 35, 47, 0.12),
+    0 24px 56px -14px rgba(59, 41, 72, 0.3);
+  --shadow-inset-top: inset 0 1.5px 0 rgba(255, 255, 255, 0.85);
+}
+
+/* اعداد فارسی جدولی برای قیمت‌ها */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ورود Bottom Sheet */
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* پین هیرو — فقط زیر بریک‌پوینت lg چشمک می‌زند (نشانه تاچ‌پذیری موبایل) */
+@keyframes pin-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 2px 4px rgba(41, 35, 47, 0.12),
+      0 0 0 0 rgba(166, 125, 234, 0.45);
+  }
+  50% {
+    box-shadow:
+      0 2px 4px rgba(41, 35, 47, 0.12),
+      0 0 0 9px rgba(166, 125, 234, 0);
+  }
+}
+
+@media (max-width: 1023.98px) {
+  .animate-pin-pulse {
+    animation: pin-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+/* خط پایه نام محصول — دقیقاً دو خط، بعدش سه‌نقطه */
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+   موشن اسکرول لندینگ — سبک و کم‌هزینه (بند UX): بلوک‌ها با
+   data-motion=reveal هنگام ورود به viewport ملایم بالا می‌آیند.
+   شدت و خاموش/روشن از تنظیمات ادمین (Setting: motion) کنترل می‌شود.
+   ============================================================ */
+[data-motion="reveal"] {
+  opacity: 0;
+  transform: translateY(var(--motion-offset, 14px));
+  transition: opacity 0.55s ease-out, transform 0.55s ease-out;
+  transition-delay: var(--motion-delay, 0ms);
+}
+[data-motion="reveal"].motion-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* شدت «ملایم» — جابه‌جایی کمتر */
+[data-motion-intensity="subtle"] {
+  --motion-offset: 10px;
+}
+/* شدت «برجسته» */
+[data-motion-intensity="playful"] {
+  --motion-offset: 26px;
+  transition-duration: 0.7s;
+}
+/* موشن خاموش از ادمین یا احترام به کاربر */
+[data-motion-enabled="off"] [data-motion="reveal"] {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-motion="reveal"] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  line-height: 1.75;
+}
+
+/* فوکوس یکدست و کاملاً visible */
+:focus-visible {
+  outline: 3px solid var(--color-primary-strong);
+  outline-offset: 2px;
+  border-radius: 6px;
+}

@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+/*
+ * ادمین — سیستم عملیاتی: خوانایی اول، برند قاصدک ثابت.
+ * (بند ۷۲: اغراق طراحی ممنوع؛ بند ۱۰۶: پالت برند)
+ */
+@theme {
+  --font-sans: "Vazirmatn Variable", "Vazirmatn", "Segoe UI", Tahoma, sans-serif;
+
+  --color-bg: #f4f1f7;
+  --color-surface: #ffffff;
+  --color-ink: #29232f;
+  --color-muted: #756a7b;
+  --color-line: #e3dce8;
+  --color-primary: #a67dea;
+  --color-primary-strong: #8f64d0;
+  --color-primary-soft: #eee6f8;
+  --color-deep: #3b2948;
+  --color-ok: #3f8a68;
+  --color-err: #c94a5a;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary-strong);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
