@@ -6,7 +6,7 @@ import { WishlistButton } from "@/components/commerce/WishlistButton";
 import { StickyBuyBar } from "@/components/commerce/StickyBuyBar";
 import { RelatedShelf } from "@/components/commerce/RelatedShelf";
 import { SizeGuideButton } from "@/components/commerce/SizeGuide";
-import { VariantMatrix } from "@/components/commerce/VariantMatrix";
+import { ProductOptions } from "@/components/commerce/ProductOptions";
 import { buildAxes } from "@/lib/variant-axes";
 import { Price } from "@/components/ui/Price";
 import { faNum } from "@/lib/format";
@@ -129,9 +129,9 @@ export default async function ProductPage({ params }: PageProps) {
             {sale == null && <span className="text-[12px] text-muted">از قیمت</span>}
           </div>
 
-          {/* ۵-۸) رنگ/سایز/سایزگاید/موجودی + ۱۰) افزودن */}
+          {/* ۵-۸) رنگ/سایز/سایزگاید/موجودی + ۱۰) افزودن + Size Finder (بند ۴۳) */}
           <div className="mt-5 rounded-card border border-line bg-surface p-4 shadow-clay-1">
-            <VariantMatrix product={product} axes={buildAxes(product)} />
+            <ProductOptions product={product} brandId={product.brandId} />
             <p className="mt-3 text-[12px] leading-6 text-muted">
               <strong className="font-extrabold text-ink">راهنمای سایز:</strong> برای انتخاب دقیق، دور سینه و زیر سینه را با متر اندازه بگیرید —{" "}
               <SizeGuideButton />

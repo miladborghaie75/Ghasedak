@@ -5,7 +5,7 @@
  * هر انتخاب، گزینه‌های ابعاد دیگر را محدود می‌کند؛ ترکیب ناموجود قابل انتخاب نیست.
  * در PDP و QuickAdd مشترک است — نسخه تکراری وجود ندارد.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCart } from "@/components/providers/CartProvider";
 import { StockStatus } from "@/components/ui/StockStatus";
 import { Price } from "@/components/ui/Price";
@@ -33,14 +33,28 @@ interface Props {
   /** ابعادی که این محصول دارد (به ترتیب نمایش) — از lib/variant-axes */
   axes: VariantAxis[];
   showHeader?: boolean;
+  /** اعمال بیرونی انتخاب (مثلاً از Size Finder) — با nonce تغییر، دوباره اعمال می‌شود */
+  preselect?: { size?: string; cup?: string | null; nonce: number };
 }
 
 type Selection = Partial<Record<AttributeKey, string>>;
 
-export function VariantMatrix({ product, axes, showHeader = false }: Props) {
+export function VariantMatrix({ product, axes, showHeader = false, preselect }: Props) {
   const { addLine, ready } = useCart();
   const [sel, setSel] = useState<Selection>({});
   const [added, setAdded] = useState(false);
+
+  // اعمال توصیه Size Finder — فقط وقتی nonce عوض شد (بند ۴۳: اتصال توصیه → انتخاب)
+  useEffect(() => {
+    if (!preselect || !preselect.nonce) return;
+    setSel((prev) => {
+      const next: Selection = { ...prev };
+      if (preselect.size) next.size = preselect.size;
+      if (preselect.cup) next.cup = preselect.cup;
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselect?.nonce]);
 
   const variant = useMemo(() => resolveVariant(product, sel), [product, sel]);
 
