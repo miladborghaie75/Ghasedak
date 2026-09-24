@@ -42,11 +42,11 @@ export function PayForm({ code, total }: { code: string; total: number }) {
         type="button"
         onClick={start}
         disabled={busy}
-        className="h-12 w-full rounded-full bg-primary text-sm font-black text-white disabled:opacity-60"
+        className="h-12 w-full rounded-full bg-primary text-sm font-black text-on-accent disabled:opacity-60"
       >
         {busy ? "در حال انتقال به درگاه…" : `پرداخت ${fa(total)} تومان`}
       </button>
-      {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
+      {error ? <p className="mt-2 text-xs text-app-err">{error}</p> : null}
       <p className="mt-3 text-[11px] leading-5 text-ink/50">
         با انتخاب روش پرداخت آنلاین به درگاه امن بانکی هدایت می‌شوید؛ مبلغ فقط پس از تایید سمت سرور نهایی می‌شود.
       </p>

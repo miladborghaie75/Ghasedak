@@ -29,7 +29,7 @@ export default function WishlistPage() {
           <p className="max-w-xs text-[13px] leading-7 text-muted">
             روی آیکون قلب هر محصول بزنید تا برای بعد ذخیره شود.
           </p>
-          <Link href="/" className="inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-white shadow-clay-1 hover:bg-primary-hover">
+          <Link href="/" className="inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent shadow-clay-1 hover:bg-primary-hover">
             دیدن محصولات
           </Link>
         </div>

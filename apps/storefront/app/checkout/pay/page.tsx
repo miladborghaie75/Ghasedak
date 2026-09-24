@@ -21,7 +21,7 @@ export default async function PayPage({
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
         <p className="text-sm font-bold text-ink">سفارشی برای پرداخت یافت نشد.</p>
-        <Link href="/" className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-white">
+        <Link href="/" className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent">
           بازگشت به فروشگاه
         </Link>
       </div>
@@ -54,7 +54,7 @@ export default async function PayPage({
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
         <h1 className="text-lg font-black text-ink">پرداخت انجام شده ✅</h1>
         <p className="mt-2 text-sm text-ink/70">سفارش {code} پرداخت شده و در حال پردازش است.</p>
-        <Link href={`/order/${code}`} className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-white">
+        <Link href={`/order/${code}`} className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent">
           پیگیری سفارش
         </Link>
       </div>

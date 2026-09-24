@@ -216,54 +216,54 @@ export default function ProductsClient() {
     <div className="flex flex-col gap-5">
       {/* نوار ابزار */}
       <div className="flex flex-wrap items-center gap-2">
-        <input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && searchNow()} placeholder="جستجو: نام محصول…" className="h-10 w-64 rounded-full border border-line bg-white px-4 text-sm" />
-        <button onClick={searchNow} disabled={loading} className="h-10 rounded-full bg-ink px-5 text-sm font-black text-white disabled:opacity-60">جستجو</button>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && searchNow()} placeholder="جستجو: نام محصول…" className="h-10 w-64 rounded-full border border-line bg-surface px-4 text-sm" />
+        <button onClick={searchNow} disabled={loading} className="h-10 rounded-full bg-ink px-5 text-sm font-black text-on-accent disabled:opacity-60">جستجو</button>
         <div className="mx-2 h-6 w-px bg-line" />
-        <input value={barcode} onChange={(e) => setBarcode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lookupBarcode()} placeholder="بارکد / SKU…" className="h-10 w-56 rounded-full border border-line bg-white px-4 text-sm" />
+        <input value={barcode} onChange={(e) => setBarcode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lookupBarcode()} placeholder="بارکد / SKU…" className="h-10 w-56 rounded-full border border-line bg-surface px-4 text-sm" />
         <button onClick={lookupBarcode} className="h-10 rounded-full border border-line px-4 text-sm font-bold">یافتن با بارکد</button>
-        <button onClick={() => setShowForm(!showForm)} className="ms-auto h-10 rounded-full bg-primary px-5 text-sm font-black text-white">
+        <button onClick={() => setShowForm(!showForm)} className="ms-auto h-10 rounded-full bg-primary px-5 text-sm font-black text-on-accent">
           {showForm ? "بستن فرم" : "+ محصول جدید"}
         </button>
       </div>
 
-      {barcodeHit ? <p className="rounded-xl bg-green-50 px-4 py-2 text-xs font-bold text-green-800">✅ {barcodeHit}</p> : null}
-      {msg ? <p className="rounded-xl bg-green-50 px-4 py-2 text-xs font-bold text-green-800">{msg}</p> : null}
-      {error ? <p className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-600">{error}</p> : null}
+      {barcodeHit ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">✅ {barcodeHit}</p> : null}
+      {msg ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">{msg}</p> : null}
+      {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
 
       {/* فرم محصول جدید — کامل (بند ۱۰) */}
       {showForm ? (
         <form onSubmit={submit} className="rounded-card border border-line bg-surface p-5">
           <h2 className="text-sm font-black text-ink">{editId ? "ویرایش محصول" : "تعریف محصول جدید"}</h2>
           <div className="mt-4 grid gap-3 lg:grid-cols-3">
-            <label className="text-xs font-bold text-ink/70">نام محصول *<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70">نام محصول *<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
             <label className="text-xs font-bold text-ink/70">دسته *
-              <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} required className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm">
+              <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} required className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm">
                 <option value="">— انتخاب —</option>
                 {catTree.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </label>
             <label className="text-xs font-bold text-ink/70">برند
-              <select value={form.brandId} onChange={(e) => setForm({ ...form, brandId: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm">
+              <select value={form.brandId} onChange={(e) => setForm({ ...form, brandId: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm">
                 <option value="">— بدون برند —</option>
                 {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </label>
-            <label className="text-xs font-bold text-ink/70">قیمت پایه (تومان) *<input type="number" value={form.basePrice} onChange={(e) => setForm({ ...form, basePrice: e.target.value })} required min={0} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
-            <label className="text-xs font-bold text-ink/70">قیمت فروش ویژه<input type="number" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} min={0} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
-            <label className="text-xs font-bold text-ink/70">هزینه تمام‌شده (فقط ادمین)<input type="number" value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} min={0} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
-            <label className="text-xs font-bold text-ink/70">شروع فروش ویژه<input type="date" value={form.saleStartsAt} onChange={(e) => setForm({ ...form, saleStartsAt: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
-            <label className="text-xs font-bold text-ink/70">پایان فروش ویژه<input type="date" value={form.saleEndsAt} onChange={(e) => setForm({ ...form, saleEndsAt: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
-            <label className="text-xs font-bold text-ink/70">وزن (گرم)<input type="number" value={form.weightGrams} onChange={(e) => setForm({ ...form, weightGrams: e.target.value })} min={0} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
-            <label className="text-xs font-bold text-ink/70">ویدیو (URL)<input value={form.videoUrl} onChange={(e) => setForm({ ...form, videoUrl: e.target.value })} dir="ltr" className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
-            <label className="text-xs font-bold text-ink/70">تگ‌ها (با ، جدا کنید)<input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70">قیمت پایه (تومان) *<input type="number" value={form.basePrice} onChange={(e) => setForm({ ...form, basePrice: e.target.value })} required min={0} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70">قیمت فروش ویژه<input type="number" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} min={0} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70">هزینه تمام‌شده (فقط ادمین)<input type="number" value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} min={0} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70">شروع فروش ویژه<input type="date" value={form.saleStartsAt} onChange={(e) => setForm({ ...form, saleStartsAt: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70">پایان فروش ویژه<input type="date" value={form.saleEndsAt} onChange={(e) => setForm({ ...form, saleEndsAt: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70">وزن (گرم)<input type="number" value={form.weightGrams} onChange={(e) => setForm({ ...form, weightGrams: e.target.value })} min={0} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70">ویدیو (URL)<input value={form.videoUrl} onChange={(e) => setForm({ ...form, videoUrl: e.target.value })} dir="ltr" className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70">تگ‌ها (با ، جدا کنید)<input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
             <label className="text-xs font-bold text-ink/70">وضعیت
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm">
+              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm">
                 <option value="DRAFT">پیش‌نویس</option>
                 <option value="PUBLISHED">منتشرشده</option>
               </select>
             </label>
-            <label className="text-xs font-bold text-ink/70 lg:col-span-2">توضیح کوتاه<input value={form.shortDescription} onChange={(e) => setForm({ ...form, shortDescription: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
-            <label className="text-xs font-bold text-ink/70 lg:col-span-3">توضیح کامل<textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70 lg:col-span-2">توضیح کوتاه<input value={form.shortDescription} onChange={(e) => setForm({ ...form, shortDescription: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70 lg:col-span-3">توضیح کامل<textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
           </div>
 
           {/* SEO */}
@@ -273,8 +273,8 @@ export default function ProductsClient() {
               <button type="button" onClick={suggestSeo} className="h-8 rounded-full bg-primary/10 px-3 text-xs font-black text-primary">✨ پیشنهاد هوشمند SEO</button>
             </div>
             <div className="mt-3 grid gap-3 lg:grid-cols-2">
-              <label className="text-xs font-bold text-ink/70">عنوان SEO ({form.seoTitle.length}/60)<input value={form.seoTitle} onChange={(e) => setForm({ ...form, seoTitle: e.target.value })} maxLength={60} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
-              <label className="text-xs font-bold text-ink/70">توضیح متا ({form.metaDescription.length}/160)<input value={form.metaDescription} onChange={(e) => setForm({ ...form, metaDescription: e.target.value })} maxLength={160} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
+              <label className="text-xs font-bold text-ink/70">عنوان SEO ({form.seoTitle.length}/60)<input value={form.seoTitle} onChange={(e) => setForm({ ...form, seoTitle: e.target.value })} maxLength={60} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+              <label className="text-xs font-bold text-ink/70">توضیح متا ({form.metaDescription.length}/160)<input value={form.metaDescription} onChange={(e) => setForm({ ...form, metaDescription: e.target.value })} maxLength={160} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
             </div>
           </div>
 
@@ -293,14 +293,14 @@ export default function ProductsClient() {
                   <input value={v.price} onChange={(e) => setVariants(variants.map((x, j) => j === i ? { ...x, price: e.target.value } : x))} placeholder="قیمت" type="number" className="rounded-lg border border-line px-2 py-1.5 text-xs" />
                   <input value={v.stockQty} onChange={(e) => setVariants(variants.map((x, j) => j === i ? { ...x, stockQty: e.target.value } : x))} placeholder="موجودی" type="number" className="rounded-lg border border-line px-2 py-1.5 text-xs" />
                   <input value={v.lowStockThreshold} onChange={(e) => setVariants(variants.map((x, j) => j === i ? { ...x, lowStockThreshold: e.target.value } : x))} placeholder="حد هشدار" type="number" className="rounded-lg border border-line px-2 py-1.5 text-xs" />
-                  <button type="button" onClick={() => removeVariant(i)} className="text-xs font-bold text-red-600">حذف</button>
+                  <button type="button" onClick={() => removeVariant(i)} className="text-xs font-bold text-app-err">حذف</button>
                 </div>
               ))}
             </div>
           </div>
 
           <div className="mt-5 flex gap-2">
-            <button type="submit" disabled={saving} className="h-11 rounded-full bg-primary px-6 text-sm font-black text-white disabled:opacity-60">
+            <button type="submit" disabled={saving} className="h-11 rounded-full bg-primary px-6 text-sm font-black text-on-accent disabled:opacity-60">
               {saving ? "در حال ذخیره…" : editId ? "ذخیره ویرایش" : "ایجاد محصول"}
             </button>
             <button type="button" onClick={() => { setShowForm(false); setEditId(null); setForm({ ...EMPTY }); setVariants([]); }} className="h-11 rounded-full border border-line px-6 text-sm font-bold">انصراف</button>

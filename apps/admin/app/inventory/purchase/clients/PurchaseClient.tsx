@@ -122,23 +122,23 @@ export default function PurchaseClient() {
       <div className="flex flex-wrap gap-2">
         {TABS.map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`rounded-full px-4 py-2 text-xs font-bold ${tab === k ? "bg-primary text-white" : "border border-line bg-surface text-muted"}`}>
+            className={`rounded-full px-4 py-2 text-xs font-bold ${tab === k ? "bg-primary text-on-accent" : "border border-line bg-surface text-muted"}`}>
             {label}
           </button>
         ))}
       </div>
-      {msg ? <p className="rounded-xl bg-green-50 px-4 py-2 text-xs font-bold text-green-800">{msg}</p> : null}
-      {error ? <p className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-600">{error}</p> : null}
+      {msg ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">{msg}</p> : null}
+      {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
 
       {tab === "suppliers" && (
         <>
           {canManage && (
             <div className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface p-4">
-              <input value={supForm.name} onChange={(e) => setSupForm({ ...supForm, name: e.target.value })} placeholder="نام تامین‌کننده" className="h-9 w-48 rounded-lg border border-line bg-white px-2 text-xs" />
-              <input value={supForm.phone} onChange={(e) => setSupForm({ ...supForm, phone: e.target.value })} placeholder="تلفن" dir="ltr" className="h-9 w-32 rounded-lg border border-line bg-white px-2 text-xs" />
-              <input value={supForm.taxId} onChange={(e) => setSupForm({ ...supForm, taxId: e.target.value })} placeholder="شناسه مالیاتی" dir="ltr" className="h-9 w-32 rounded-lg border border-line bg-white px-2 text-xs" />
-              <input value={supForm.notes} onChange={(e) => setSupForm({ ...supForm, notes: e.target.value })} placeholder="یادداشت" className="h-9 w-40 rounded-lg border border-line bg-white px-2 text-xs" />
-              <button onClick={() => void createSupplier()} disabled={loading || !supForm.name} className="h-9 rounded-full bg-primary px-4 text-xs font-bold text-white disabled:opacity-50">ثبت</button>
+              <input value={supForm.name} onChange={(e) => setSupForm({ ...supForm, name: e.target.value })} placeholder="نام تامین‌کننده" className="h-9 w-48 rounded-lg border border-line bg-surface px-2 text-xs" />
+              <input value={supForm.phone} onChange={(e) => setSupForm({ ...supForm, phone: e.target.value })} placeholder="تلفن" dir="ltr" className="h-9 w-32 rounded-lg border border-line bg-surface px-2 text-xs" />
+              <input value={supForm.taxId} onChange={(e) => setSupForm({ ...supForm, taxId: e.target.value })} placeholder="شناسه مالیاتی" dir="ltr" className="h-9 w-32 rounded-lg border border-line bg-surface px-2 text-xs" />
+              <input value={supForm.notes} onChange={(e) => setSupForm({ ...supForm, notes: e.target.value })} placeholder="یادداشت" className="h-9 w-40 rounded-lg border border-line bg-surface px-2 text-xs" />
+              <button onClick={() => void createSupplier()} disabled={loading || !supForm.name} className="h-9 rounded-full bg-primary px-4 text-xs font-bold text-on-accent disabled:opacity-50">ثبت</button>
             </div>
           )}
           <div className="overflow-hidden rounded-card border border-line bg-surface">
@@ -167,20 +167,20 @@ export default function PurchaseClient() {
           {canManage && (
             <div className="rounded-card border border-line bg-surface p-4">
               <h3 className="mb-3 text-sm font-black">سفارش خرید جدید</h3>
-              <select value={poSupplier} onChange={(e) => setPoSupplier(e.target.value)} className="mb-3 h-9 rounded-lg border border-line bg-white px-2 text-xs">
+              <select value={poSupplier} onChange={(e) => setPoSupplier(e.target.value)} className="mb-3 h-9 rounded-lg border border-line bg-surface px-2 text-xs">
                 <option value="">تامین‌کننده…</option>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
               {poLines.map((l, i) => (
                 <div key={i} className="mb-2 flex gap-2">
-                  <input value={l.sku} onChange={(e) => setPoLines(poLines.map((x, j) => j === i ? { ...x, sku: e.target.value } : x))} placeholder="SKU" dir="ltr" className="h-9 w-40 rounded-lg border border-line bg-white px-2 text-xs" />
-                  <input value={l.qty} onChange={(e) => setPoLines(poLines.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} type="number" min={1} placeholder="تعداد" className="h-9 w-20 rounded-lg border border-line bg-white px-2 text-center text-xs" />
-                  <input value={l.cost} onChange={(e) => setPoLines(poLines.map((x, j) => j === i ? { ...x, cost: e.target.value } : x))} type="number" min={0} placeholder="بها (تومان)" className="h-9 w-32 rounded-lg border border-line bg-white px-2 text-center text-xs" />
+                  <input value={l.sku} onChange={(e) => setPoLines(poLines.map((x, j) => j === i ? { ...x, sku: e.target.value } : x))} placeholder="SKU" dir="ltr" className="h-9 w-40 rounded-lg border border-line bg-surface px-2 text-xs" />
+                  <input value={l.qty} onChange={(e) => setPoLines(poLines.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} type="number" min={1} placeholder="تعداد" className="h-9 w-20 rounded-lg border border-line bg-surface px-2 text-center text-xs" />
+                  <input value={l.cost} onChange={(e) => setPoLines(poLines.map((x, j) => j === i ? { ...x, cost: e.target.value } : x))} type="number" min={0} placeholder="بها (تومان)" className="h-9 w-32 rounded-lg border border-line bg-surface px-2 text-center text-xs" />
                 </div>
               ))}
               <div className="flex gap-2">
                 <button onClick={() => setPoLines([...poLines, { sku: "", qty: "", cost: "" }])} className="rounded-full border border-line px-3 py-1.5 text-xs font-bold">+ ردیف</button>
-                <button onClick={() => void createPO()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-white">ثبت سفارش</button>
+                <button onClick={() => void createPO()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-on-accent">ثبت سفارش</button>
               </div>
             </div>
           )}
@@ -198,7 +198,7 @@ export default function PurchaseClient() {
                     <td className="p-3 text-center text-xs">{STATE_FA[p.status] ?? p.status}</td>
                     <td className="p-3 text-center">
                       {canManage && p.status === "DRAFT" && <>
-                        <button onClick={() => void poAction(p.id, "send")} className="ml-1 rounded-full bg-ink px-3 py-1 text-xs font-bold text-white">ارسال</button>
+                        <button onClick={() => void poAction(p.id, "send")} className="ml-1 rounded-full bg-ink px-3 py-1 text-xs font-bold text-on-accent">ارسال</button>
                         <button onClick={() => void poAction(p.id, "cancel")} className="rounded-full border border-line px-3 py-1 text-xs font-bold">لغو</button>
                       </>}
                     </td>
@@ -217,28 +217,28 @@ export default function PurchaseClient() {
             <div className="rounded-card border border-line bg-surface p-4">
               <h3 className="mb-3 text-sm font-black">دریافت کالا</h3>
               <div className="mb-3 flex flex-wrap gap-2">
-                <select value={grnSupplier} onChange={(e) => setGrnSupplier(e.target.value)} className="h-9 rounded-lg border border-line bg-white px-2 text-xs">
+                <select value={grnSupplier} onChange={(e) => setGrnSupplier(e.target.value)} className="h-9 rounded-lg border border-line bg-surface px-2 text-xs">
                   <option value="">تامین‌کننده…</option>
                   {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
-                <select value={grnWarehouse} onChange={(e) => setGrnWarehouse(e.target.value)} className="h-9 rounded-lg border border-line bg-white px-2 text-xs">
+                <select value={grnWarehouse} onChange={(e) => setGrnWarehouse(e.target.value)} className="h-9 rounded-lg border border-line bg-surface px-2 text-xs">
                   <option value="">انبار…</option>
                   {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                 </select>
-                <select value={grnPoId} onChange={(e) => setGrnPoId(e.target.value)} className="h-9 rounded-lg border border-line bg-white px-2 text-xs">
+                <select value={grnPoId} onChange={(e) => setGrnPoId(e.target.value)} className="h-9 rounded-lg border border-line bg-surface px-2 text-xs">
                   <option value="">بدون PO (خرید مستقیم)</option>
                   {pos.filter((p) => p.status === "SENT").map((p) => <option key={p.id} value={p.id}>PO {p.number}</option>)}
                 </select>
               </div>
               {grnLines.map((l, i) => (
                 <div key={i} className="mb-2 flex gap-2">
-                  <input value={l.sku} onChange={(e) => setGrnLines(grnLines.map((x, j) => j === i ? { ...x, sku: e.target.value } : x))} placeholder="SKU" dir="ltr" className="h-9 w-40 rounded-lg border border-line bg-white px-2 text-xs" />
-                  <input value={l.qty} onChange={(e) => setGrnLines(grnLines.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} type="number" min={1} placeholder="تعداد" className="h-9 w-20 rounded-lg border border-line bg-white px-2 text-center text-xs" />
-                  <input value={l.cost} onChange={(e) => setGrnLines(grnLines.map((x, j) => j === i ? { ...x, cost: e.target.value } : x))} type="number" min={0} placeholder="بها" className="h-9 w-28 rounded-lg border border-line bg-white px-2 text-center text-xs" />
-                  <input value={l.landed} onChange={(e) => setGrnLines(grnLines.map((x, j) => j === i ? { ...x, landed: e.target.value } : x))} type="number" min={0} placeholder="هزینه سربه‌دار" className="h-9 w-28 rounded-lg border border-line bg-white px-2 text-center text-xs" />
+                  <input value={l.sku} onChange={(e) => setGrnLines(grnLines.map((x, j) => j === i ? { ...x, sku: e.target.value } : x))} placeholder="SKU" dir="ltr" className="h-9 w-40 rounded-lg border border-line bg-surface px-2 text-xs" />
+                  <input value={l.qty} onChange={(e) => setGrnLines(grnLines.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} type="number" min={1} placeholder="تعداد" className="h-9 w-20 rounded-lg border border-line bg-surface px-2 text-center text-xs" />
+                  <input value={l.cost} onChange={(e) => setGrnLines(grnLines.map((x, j) => j === i ? { ...x, cost: e.target.value } : x))} type="number" min={0} placeholder="بها" className="h-9 w-28 rounded-lg border border-line bg-surface px-2 text-center text-xs" />
+                  <input value={l.landed} onChange={(e) => setGrnLines(grnLines.map((x, j) => j === i ? { ...x, landed: e.target.value } : x))} type="number" min={0} placeholder="هزینه سربه‌دار" className="h-9 w-28 rounded-lg border border-line bg-surface px-2 text-center text-xs" />
                 </div>
               ))}
-              <button onClick={() => void createGRN()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-white">ثبت دریافت</button>
+              <button onClick={() => void createGRN()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-on-accent">ثبت دریافت</button>
             </div>
           )}
           <div className="overflow-hidden rounded-card border border-line bg-surface">
@@ -269,22 +269,22 @@ export default function PurchaseClient() {
           {canManage && (
             <div className="rounded-card border border-line bg-surface p-4">
               <h3 className="mb-3 text-sm font-black">ثبت فاکتور خرید (Three-Way Match)</h3>
-              <select value={invGrn} onChange={(e) => setInvGrn(e.target.value)} className="mb-3 h-9 w-56 rounded-lg border border-line bg-white px-2 text-xs">
+              <select value={invGrn} onChange={(e) => setInvGrn(e.target.value)} className="mb-3 h-9 w-56 rounded-lg border border-line bg-surface px-2 text-xs">
                 <option value="">سند دریافت…</option>
                 {grns.map((g) => <option key={g.id} value={g.id}>{g.number} — {g.supplier.name}</option>)}
               </select>
               {invLines.map((l, i) => (
                 <div key={i} className="mb-2 flex gap-2">
-                  <input value={l.sku} onChange={(e) => setInvLines(invLines.map((x, j) => j === i ? { ...x, sku: e.target.value } : x))} placeholder="SKU" dir="ltr" className="h-9 w-40 rounded-lg border border-line bg-white px-2 text-xs" />
-                  <input value={l.qty} onChange={(e) => setInvLines(invLines.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} type="number" min={1} placeholder="تعداد" className="h-9 w-20 rounded-lg border border-line bg-white px-2 text-center text-xs" />
-                  <input value={l.cost} onChange={(e) => setInvLines(invLines.map((x, j) => j === i ? { ...x, cost: e.target.value } : x))} type="number" min={0} placeholder="بها فاکتور" className="h-9 w-28 rounded-lg border border-line bg-white px-2 text-center text-xs" />
+                  <input value={l.sku} onChange={(e) => setInvLines(invLines.map((x, j) => j === i ? { ...x, sku: e.target.value } : x))} placeholder="SKU" dir="ltr" className="h-9 w-40 rounded-lg border border-line bg-surface px-2 text-xs" />
+                  <input value={l.qty} onChange={(e) => setInvLines(invLines.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} type="number" min={1} placeholder="تعداد" className="h-9 w-20 rounded-lg border border-line bg-surface px-2 text-center text-xs" />
+                  <input value={l.cost} onChange={(e) => setInvLines(invLines.map((x, j) => j === i ? { ...x, cost: e.target.value } : x))} type="number" min={0} placeholder="بها فاکتور" className="h-9 w-28 rounded-lg border border-line bg-surface px-2 text-center text-xs" />
                 </div>
               ))}
               <div className="mb-3 flex gap-2">
-                <label className="text-xs">حمل: <input value={invShipping} onChange={(e) => setInvShipping(e.target.value)} type="number" min={0} className="w-28 rounded-lg border border-line bg-white px-2 py-1 text-center text-xs" /></label>
-                <label className="text-xs">مالیات: <input value={invTax} onChange={(e) => setInvTax(e.target.value)} type="number" min={0} className="w-28 rounded-lg border border-line bg-white px-2 py-1 text-center text-xs" /></label>
+                <label className="text-xs">حمل: <input value={invShipping} onChange={(e) => setInvShipping(e.target.value)} type="number" min={0} className="w-28 rounded-lg border border-line bg-surface px-2 py-1 text-center text-xs" /></label>
+                <label className="text-xs">مالیات: <input value={invTax} onChange={(e) => setInvTax(e.target.value)} type="number" min={0} className="w-28 rounded-lg border border-line bg-surface px-2 py-1 text-center text-xs" /></label>
               </div>
-              <button onClick={() => void createInvoice()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-white">ثبت فاکتور</button>
+              <button onClick={() => void createInvoice()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-on-accent">ثبت فاکتور</button>
               <p className="mt-2 text-[10px] text-muted">تعداد هر ردیف باید دقیقاً با سند دریافت یکی باشد؛ بهای متفاوت از PO به‌عنوان مغایرت قیمت (PPV) رویداد ثبت می‌کند.</p>
             </div>
           )}
@@ -305,7 +305,7 @@ export default function PurchaseClient() {
                       {canPay && iv.state !== "PAID" ? (
                         <div className="flex items-center gap-1">
                           <input value={payAmount[iv.id] ?? ""} onChange={(e) => setPayAmount({ ...payAmount, [iv.id]: e.target.value })} type="number" min={1} placeholder="مبلغ" className="w-24 rounded border border-line px-2 py-1 text-center text-xs" />
-                          <button onClick={() => void pay(iv.id)} className="rounded-full bg-ink px-3 py-1 text-xs font-bold text-white">پرداخت</button>
+                          <button onClick={() => void pay(iv.id)} className="rounded-full bg-ink px-3 py-1 text-xs font-bold text-on-accent">پرداخت</button>
                         </div>
                       ) : <span className="text-xs text-muted">{fa(iv._count.payments)} پرداخت</span>}
                     </td>

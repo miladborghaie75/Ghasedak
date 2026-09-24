@@ -47,7 +47,7 @@ export function Price({
       </strong>
       <span className={cn("font-medium text-muted", unitSize)}>تومان</span>
       {hasDiscount && (
-        <span className="rounded-full bg-plum px-2 py-0.5 text-[11px] font-bold text-white">
+        <span className="rounded-full bg-plum px-2 py-0.5 text-[11px] font-bold text-on-accent">
           {faNum(percent)}٪
         </span>
       )}

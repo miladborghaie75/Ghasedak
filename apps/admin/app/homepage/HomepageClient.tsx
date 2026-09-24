@@ -89,14 +89,14 @@ export default function HomepageClient() {
                 <button onClick={() => void move(idx, 1)} className="rounded border border-line px-2 py-0.5 text-xs" title="پایین">↓</button>
               </div>
               <button onClick={() => void update(s.id, { enabled: !s.enabled })}
-                className={`rounded-full px-3 py-1 text-[11px] font-bold ${s.enabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                className={`rounded-full px-3 py-1 text-[11px] font-bold ${s.enabled ? "bg-app-primary-soft text-app-ink" : "bg-app-line text-app-muted"}`}>
                 {s.enabled ? "فعال" : "خاموش"}
               </button>
               <button onClick={() => void update(s.id, { publishStatus: s.publishStatus === "PUBLISHED" ? "DRAFT" : "PUBLISHED" })}
-                className={`rounded-full px-3 py-1 text-[11px] font-bold ${s.publishStatus === "PUBLISHED" ? "bg-primary-tint text-primary-strong" : "bg-amber-100 text-amber-700"}`}>
+                className={`rounded-full px-3 py-1 text-[11px] font-bold ${s.publishStatus === "PUBLISHED" ? "bg-primary-tint text-primary-strong" : "bg-app-primary-soft text-app-warning"}`}>
                 {s.publishStatus === "PUBLISHED" ? "منتشر شده" : "پیش‌نویس"}
               </button>
-              <button onClick={() => void remove(s.id)} className="ms-auto text-[11px] font-bold text-red-500">حذف</button>
+              <button onClick={() => void remove(s.id)} className="ms-auto text-[11px] font-bold text-app-err">حذف</button>
             </div>
 
             {/* ویرایش فیلدهای config */}
@@ -129,7 +129,7 @@ export default function HomepageClient() {
                   void update(s.id, { config });
                 }}
                 disabled={loading}
-                className="self-end rounded-full bg-primary px-4 py-2 text-[11px] font-bold text-white"
+                className="self-end rounded-full bg-primary px-4 py-2 text-[11px] font-bold text-on-accent"
               >
                 ذخیره محتوا
               </button>
@@ -148,7 +148,7 @@ export default function HomepageClient() {
           <select value={newType} onChange={(e) => setNewType(e.target.value)} className="rounded-lg border border-line bg-bg px-3 py-2 text-sm">
             {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
-          <button onClick={() => void add()} disabled={loading} className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-white">افزودن</button>
+          <button onClick={() => void add()} disabled={loading} className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-accent">افزودن</button>
           <button onClick={() => setAdding(false)} className="text-xs text-muted">انصراف</button>
         </div>
       )}

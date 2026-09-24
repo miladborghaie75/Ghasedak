@@ -60,19 +60,19 @@ export default function UsersClient() {
       <form onSubmit={submit} className="rounded-card border border-line bg-surface p-5">
         <h2 className="text-sm font-black text-ink">کاربر ادمین جدید</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <label className="text-xs font-bold text-ink/70">نام<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
-          <label className="text-xs font-bold text-ink/70">ایمیل *<input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required dir="ltr" className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
-          <label className="text-xs font-bold text-ink/70">رمز عبور * (≥۸)<input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={8} dir="ltr" className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
+          <label className="text-xs font-bold text-ink/70">نام<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+          <label className="text-xs font-bold text-ink/70">ایمیل *<input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required dir="ltr" className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+          <label className="text-xs font-bold text-ink/70">رمز عبور * (≥۸)<input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={8} dir="ltr" className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
           <label className="text-xs font-bold text-ink/70">نقش / سطح دسترسی *
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm">
+            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm">
               {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </label>
-          <label className="text-xs font-bold text-ink/70">موبایل<input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} dir="ltr" placeholder="09…" className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
+          <label className="text-xs font-bold text-ink/70">موبایل<input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} dir="ltr" placeholder="09…" className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
         </div>
-        <button type="submit" disabled={loading} className="mt-4 h-10 rounded-full bg-primary px-5 text-sm font-black text-white disabled:opacity-60">ایجاد کاربر</button>
-        {msg ? <p className="mt-3 text-xs font-bold text-green-700">{msg}</p> : null}
-        {error ? <p className="mt-3 text-xs font-bold text-red-600">{error}</p> : null}
+        <button type="submit" disabled={loading} className="mt-4 h-10 rounded-full bg-primary px-5 text-sm font-black text-on-accent disabled:opacity-60">ایجاد کاربر</button>
+        {msg ? <p className="mt-3 text-xs font-bold text-app-ok">{msg}</p> : null}
+        {error ? <p className="mt-3 text-xs font-bold text-app-err">{error}</p> : null}
       </form>
 
       <div className="overflow-x-auto rounded-card border border-line bg-surface">
@@ -90,7 +90,7 @@ export default function UsersClient() {
                 <td className="px-4 py-3 text-xs" dir="ltr">{u.email ?? "—"}</td>
                 <td className="px-4 py-3">{ROLE_FA[u.role] ?? u.role}</td>
                 <td className="px-4 py-3">
-                  <span className={u.status === "ACTIVE" ? "font-bold text-green-700" : "font-bold text-red-600"}>
+                  <span className={u.status === "ACTIVE" ? "font-bold text-app-ok" : "font-bold text-app-err"}>
                     {u.status === "ACTIVE" ? "فعال" : "معلق"}
                   </span>
                 </td>

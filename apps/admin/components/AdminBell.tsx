@@ -34,7 +34,7 @@ export function AdminBell() {
       >
         🔔
         {count > 0 && (
-          <span className="absolute -end-1 -top-1 flex size-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+          <span className="absolute -end-1 -top-1 flex size-4 items-center justify-center rounded-full bg-app-primary-soft0 text-[9px] font-bold text-on-accent">
             {count > 9 ? "۹+" : count}
           </span>
         )}

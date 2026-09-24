@@ -116,7 +116,7 @@ export function ProductCard({ product }: CardProps) {
 
           {/* بج فقط وقتی معنادار (بند ۱۱/۲۵) */}
           {sale != null && (
-            <span className="rounded-full bg-plum px-2 py-0.5 text-[10px] font-bold text-white">
+            <span className="rounded-full bg-plum px-2 py-0.5 text-[10px] font-bold text-on-accent">
               تخفیف
             </span>
           )}
@@ -200,8 +200,8 @@ export function ProductCard({ product }: CardProps) {
             !inStock
               ? "cursor-not-allowed bg-primary-light/50 text-muted"
               : added
-                ? "bg-success text-white"
-                : "bg-primary text-white hover:bg-primary-hover",
+                ? "bg-success text-on-accent"
+                : "bg-primary text-on-accent hover:bg-primary-hover",
           )}
           aria-live="polite"
         >

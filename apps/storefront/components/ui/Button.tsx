@@ -16,13 +16,13 @@ const base =
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-primary text-white shadow-clay-1 hover:shadow-clay-2 hover:bg-primary-press",
+    "bg-primary text-on-accent shadow-clay-1 hover:shadow-clay-2 hover:bg-primary-press",
   secondary:
     "bg-surface text-primary-strong border border-line shadow-clay-1 hover:shadow-clay-2 hover:bg-primary-tint",
   ghost: "text-primary-strong hover:bg-primary-tint",
   icon: "text-muted hover:bg-primary-tint hover:text-primary-strong",
   sticky:
-    "bg-plum text-white shadow-clay-2 hover:bg-plum/90 active:scale-[0.98]",
+    "bg-plum text-on-accent shadow-clay-2 hover:bg-plum/90 active:scale-[0.98]",
 };
 
 const sizes: Record<Size, string> = {

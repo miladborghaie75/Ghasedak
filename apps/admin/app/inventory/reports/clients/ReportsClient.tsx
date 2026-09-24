@@ -68,12 +68,12 @@ export default function ReportsClient() {
       <div className="flex flex-wrap gap-2">
         {TABS.map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`rounded-full px-4 py-2 text-xs font-bold ${tab === k ? "bg-primary text-white" : "border border-line bg-surface text-muted"}`}>
+            className={`rounded-full px-4 py-2 text-xs font-bold ${tab === k ? "bg-primary text-on-accent" : "border border-line bg-surface text-muted"}`}>
             {label}
           </button>
         ))}
       </div>
-      {error ? <p className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-600">{error}</p> : null}
+      {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
       {loading ? <p className="text-xs text-muted">در حال بارگذاری…</p> : null}
 
       {tab === "valuation" && valuation && (
@@ -146,7 +146,7 @@ export default function ReportsClient() {
                     <td className="p-3 text-center tabular-nums">{fa(r.soldQty)}</td>
                     <td className="p-3 text-center tabular-nums">{fa(r.stockQty)}</td>
                     <td className="p-3 text-center text-xs font-bold">
-                      {r.rank === "FAST" ? <span className="text-green-700">پرفروش</span> : r.rank === "SLOW" ? <span className="text-red-600">کم‌فروش</span> : "معمولی"}
+                      {r.rank === "FAST" ? <span className="text-app-ok">پرفروش</span> : r.rank === "SLOW" ? <span className="text-app-err">کم‌فروش</span> : "معمولی"}
                     </td>
                   </tr>
                 ))}
@@ -186,8 +186,8 @@ export default function ReportsClient() {
                   <td className="p-3 text-xs">{new Date(r.createdAt).toLocaleDateString("fa-IR")}</td>
                   <td className="p-3 text-xs">{r.warehouse.code}</td>
                   <td className="p-3 text-xs">{r.variant.product.name}</td>
-                  <td className="p-3 text-center tabular-nums text-green-700">{r.qtyIn > 0 ? fa(r.qtyIn) : "—"}</td>
-                  <td className="p-3 text-center tabular-nums text-red-600">{r.qtyOut > 0 ? fa(r.qtyOut) : "—"}</td>
+                  <td className="p-3 text-center tabular-nums text-app-ok">{r.qtyIn > 0 ? fa(r.qtyIn) : "—"}</td>
+                  <td className="p-3 text-center tabular-nums text-app-err">{r.qtyOut > 0 ? fa(r.qtyOut) : "—"}</td>
                   <td className="p-3 text-center text-xs">{r.actor?.name ?? "—"}</td>
                   <td className="p-3 text-xs text-muted">{r.note ?? "—"}</td>
                 </tr>
@@ -211,7 +211,7 @@ export default function ReportsClient() {
                   <td className="p-3 text-center text-xs">{fa(r.surplusLines)} ردیف / {fa(r.surplusQty)} عدد</td>
                   <td className="p-3 text-center text-xs">{fa(r.shortageLines)} ردیف / {fa(r.shortageQty)} عدد</td>
                   <td className="p-3 text-center tabular-nums">{fa(r.surplusValue)}</td>
-                  <td className="p-3 text-center tabular-nums text-red-600">{fa(r.shortageValue)}</td>
+                  <td className="p-3 text-center tabular-nums text-app-err">{fa(r.shortageValue)}</td>
                   <td className="p-3 text-center text-xs">{r.closedAt ? new Date(r.closedAt).toLocaleDateString("fa-IR") : "—"}</td>
                 </tr>
               ))}

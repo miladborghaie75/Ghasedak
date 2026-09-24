@@ -99,17 +99,17 @@ export default function AccountingClient() {
   return (
     <div className="flex flex-col gap-5">
       {integrity ? (
-        <div className={`rounded-card border p-4 text-sm font-bold ${integrity.balanced ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-700"}`}>
+        <div className={`rounded-card border p-4 text-sm font-bold ${integrity.balanced ? "border-app-ok bg-app-primary-soft text-app-ok" : "border-app-err bg-app-primary-soft text-app-err"}`}>
           {integrity.balanced ? `توازن اسناد برقرار است ✅ — بدهکار ${fa(integrity.debit)} = بستانکار ${fa(integrity.credit)}` : "⚠️ عدم توازن!"}
         </div>
       ) : null}
-      {msg ? <p className="rounded-xl bg-green-50 px-4 py-2 text-xs font-bold text-green-800">{msg}</p> : null}
-      {error ? <p className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-600">{error}</p> : null}
+      {msg ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">{msg}</p> : null}
+      {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
 
       <div className="flex flex-wrap gap-2">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => switchTab(t.key)}
-            className={`h-9 rounded-full px-4 text-xs font-black ${tab === t.key ? "bg-primary text-white" : "border border-line bg-white text-ink/70"}`}>
+            className={`h-9 rounded-full px-4 text-xs font-black ${tab === t.key ? "bg-primary text-on-accent" : "border border-line bg-surface text-ink/70"}`}>
             {t.label}
           </button>
         ))}
@@ -142,9 +142,9 @@ export default function AccountingClient() {
           {pnl ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">درآمد (فروش)</p><p className="mt-1 text-lg font-black tabular-nums text-ink">{fa(pnl.revenue)}</p></div>
-              <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">سود ناخالص</p><p className="mt-1 text-lg font-black tabular-nums text-green-700">{fa(pnl.grossProfit)}</p><p className="text-[10px] text-ink/50">حاشیه: {pnl.grossMargin ?? "—"}٪</p></div>
-              <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">هزینه‌ها</p><p className="mt-1 text-lg font-black tabular-nums text-amber-600">{fa(pnl.expenses)}</p></div>
-              <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">سود خالص</p><p className={`mt-1 text-lg font-black tabular-nums ${Number(pnl.netProfit) >= 0 ? "text-green-700" : "text-red-600"}`}>{fa(pnl.netProfit)}</p><p className="text-[10px] text-ink/50">حاشیه: {pnl.netMargin ?? "—"}٪</p></div>
+              <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">سود ناخالص</p><p className="mt-1 text-lg font-black tabular-nums text-app-ok">{fa(pnl.grossProfit)}</p><p className="text-[10px] text-ink/50">حاشیه: {pnl.grossMargin ?? "—"}٪</p></div>
+              <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">هزینه‌ها</p><p className="mt-1 text-lg font-black tabular-nums text-app-warning">{fa(pnl.expenses)}</p></div>
+              <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">سود خالص</p><p className={`mt-1 text-lg font-black tabular-nums ${Number(pnl.netProfit) >= 0 ? "text-app-ok" : "text-app-err"}`}>{fa(pnl.netProfit)}</p><p className="text-[10px] text-ink/50">حاشیه: {pnl.netMargin ?? "—"}٪</p></div>
             </div>
           ) : null}
           {/* نمودار درآمد/هزینه ماهانه */}
@@ -155,7 +155,7 @@ export default function AccountingClient() {
                 <div key={m.month} className="flex flex-1 flex-col items-center gap-1">
                   <div className="flex h-32 w-full items-end justify-center gap-0.5">
                     <div className="w-1/2 rounded-t bg-primary" style={{ height: `${(Number(m.revenue) / maxVal) * 100}%` }} title={`درآمد: ${fa(m.revenue)}`} />
-                    <div className="w-1/2 rounded-t bg-amber-400" style={{ height: `${(Number(m.expense) / maxVal) * 100}%` }} title={`هزینه: ${fa(m.expense)}`} />
+                    <div className="w-1/2 rounded-t bg-app-warning" style={{ height: `${(Number(m.expense) / maxVal) * 100}%` }} title={`هزینه: ${fa(m.expense)}`} />
                   </div>
                   <span className="text-[9px] text-ink/50">{MONTHS_FA[m.month - 1]?.slice(0, 4)}</span>
                 </div>
@@ -163,7 +163,7 @@ export default function AccountingClient() {
             </div>
             <div className="mt-2 flex gap-4 text-[10px] text-ink/60">
               <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded bg-primary" /> درآمد</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded bg-amber-400" /> هزینه</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded bg-app-warning" /> هزینه</span>
             </div>
           </div>
         </div>
@@ -233,11 +233,11 @@ export default function AccountingClient() {
           <h3 className="text-sm font-black text-ink">ثبت حقوق و دستمزد</h3>
           <p className="mt-1 text-xs text-ink/50">سند اتوماتیک: Dr هزینه عملیاتی / Cr حساب‌های پرداختنی.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <label className="text-xs font-bold text-ink/70">نام کارمند<input value={payroll.employeeName} onChange={(e) => setPayroll({ ...payroll, employeeName: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
-            <label className="text-xs font-bold text-ink/70">عنوان<input value={payroll.title} onChange={(e) => setPayroll({ ...payroll, title: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
-            <label className="text-xs font-bold text-ink/70">مبلغ (تومان)<input type="number" value={payroll.amount} onChange={(e) => setPayroll({ ...payroll, amount: e.target.value })} required min={1} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70">نام کارمند<input value={payroll.employeeName} onChange={(e) => setPayroll({ ...payroll, employeeName: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70">عنوان<input value={payroll.title} onChange={(e) => setPayroll({ ...payroll, title: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+            <label className="text-xs font-bold text-ink/70">مبلغ (تومان)<input type="number" value={payroll.amount} onChange={(e) => setPayroll({ ...payroll, amount: e.target.value })} required min={1} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
           </div>
-          <button type="submit" className="mt-4 h-10 rounded-full bg-primary px-6 text-sm font-black text-white">ثبت سند حقوق</button>
+          <button type="submit" className="mt-4 h-10 rounded-full bg-primary px-6 text-sm font-black text-on-accent">ثبت سند حقوق</button>
         </form>
       ) : null}
 

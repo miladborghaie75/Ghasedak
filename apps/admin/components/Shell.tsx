@@ -2,6 +2,7 @@ import Link from "next/link";
 import { MENU } from "@/lib/menu";
 import { can, type AdminMe } from "@/lib/session";
 import { AdminBell } from "@/components/AdminBell";
+import { AdminThemeToggle } from "@/components/ThemeToggle";
 
 export function Shell({ me, children }: { me: AdminMe; children: React.ReactNode }) {
   return (
@@ -43,6 +44,7 @@ export function Shell({ me, children }: { me: AdminMe; children: React.ReactNode
             {me.name ?? me.email} · نقش: <span className="font-medium text-ink">{roleFa(me.role)}</span>
           </div>
           <div className="flex items-center gap-2">
+            <AdminThemeToggle />
             <AdminBell />
             <a
               href="/"

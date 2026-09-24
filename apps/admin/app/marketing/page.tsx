@@ -68,7 +68,7 @@ export default function MarketingClient() {
       <div className="flex gap-2">
         {([["coupons", "کدهای تخفیف"], ["sales", "گزارش فروش"]] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`rounded-full px-4 py-2 text-xs font-bold ${tab === k ? "bg-primary text-white" : "border border-line bg-surface text-muted"}`}>
+            className={`rounded-full px-4 py-2 text-xs font-bold ${tab === k ? "bg-primary text-on-accent" : "border border-line bg-surface text-muted"}`}>
             {label}
           </button>
         ))}
@@ -95,7 +95,7 @@ export default function MarketingClient() {
                 placeholder="سقف تخفیف" className="w-28 rounded-lg border border-line bg-bg px-3 py-2 text-sm" />
               <input type="date" value={form.endsAt} onChange={(e) => setForm({ ...form, endsAt: e.target.value })}
                 className="rounded-lg border border-line bg-bg px-3 py-2 text-sm" />
-              <button onClick={() => void create()} disabled={loading} className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-white">ایجاد</button>
+              <button onClick={() => void create()} disabled={loading} className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-accent">ایجاد</button>
             </div>
           </section>
 
@@ -115,12 +115,12 @@ export default function MarketingClient() {
                     <td className="p-3 text-center">{c.usageLimit ? fa(c.usageLimit) : "∞"}</td>
                     <td className="p-3 text-center">
                       <button onClick={() => void toggle(c.id)}
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${c.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${c.active ? "bg-app-primary-soft text-app-ink" : "bg-app-line text-app-muted"}`}>
                         {c.active ? "فعال" : "غیرفعال"}
                       </button>
                     </td>
                     <td className="p-3 text-center">
-                      <button onClick={() => void remove(c.id)} className="text-[11px] font-bold text-red-500">حذف</button>
+                      <button onClick={() => void remove(c.id)} className="text-[11px] font-bold text-app-err">حذف</button>
                     </td>
                   </tr>
                 ))}

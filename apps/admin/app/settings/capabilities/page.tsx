@@ -40,11 +40,11 @@ export default function CapabilitiesSettings() {
 
   const credBadge = (s: string) =>
     s === "CONFIGURED" ? (
-      <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-bold text-green-700">پیکربندی شده</span>
+      <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-ok">پیکربندی شده</span>
     ) : s === "ACTIVE_DEV_ONLY" ? (
-      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">فقط توسعه</span>
+      <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-warning">فقط توسعه</span>
     ) : (
-      <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700">نیازمند credential</span>
+      <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-err">نیازمند credential</span>
     );
 
   return (
@@ -77,7 +77,7 @@ export default function CapabilitiesSettings() {
           <button
             onClick={() => void save("sms", { sender: (document.getElementById("sms-sender") as HTMLInputElement)?.value, orderNotify: (document.getElementById("sms-notify") as HTMLInputElement)?.checked })}
             disabled={loading}
-            className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-white"
+            className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-accent"
           >
             ذخیره
           </button>
@@ -131,7 +131,7 @@ export default function CapabilitiesSettings() {
               consentRequired: (document.getElementById("crm-consent") as HTMLInputElement)?.checked,
             })}
             disabled={loading}
-            className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-white"
+            className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-accent"
           >
             ذخیره
           </button>
@@ -163,7 +163,7 @@ export default function CapabilitiesSettings() {
               freeOver: Number((document.getElementById("ship-free") as HTMLInputElement)?.value || 0),
             })}
             disabled={loading}
-            className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-white"
+            className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-accent"
           >
             ذخیره
           </button>
@@ -189,7 +189,7 @@ export default function CapabilitiesSettings() {
               enabled: (document.getElementById("tax-enabled") as HTMLInputElement)?.checked,
             })}
             disabled={loading}
-            className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-white"
+            className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-accent"
           >
             ذخیره
           </button>

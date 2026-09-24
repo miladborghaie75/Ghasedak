@@ -76,7 +76,7 @@ export default async function HomePage() {
             <div className="mt-5 text-center">
               <Link
                 href="/need"
-                className="inline-flex h-12 items-center rounded-full bg-primary px-7 text-sm font-bold text-white shadow-clay-1 transition-all hover:bg-primary-press hover:shadow-clay-2 active:scale-[0.98]"
+                className="inline-flex h-12 items-center rounded-full bg-primary px-7 text-sm font-bold text-on-accent shadow-clay-1 transition-all hover:bg-primary-press hover:shadow-clay-2 active:scale-[0.98]"
               >
                 شروع راهنما
               </Link>

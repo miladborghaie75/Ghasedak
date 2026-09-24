@@ -210,22 +210,22 @@ export default function PosClient() {
       <div className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-surface p-4">
         {shift ? (
           <>
-            <span className="text-sm font-bold text-green-700">● شیفت باز — از {new Date(shift.openedAt).toLocaleTimeString("fa-IR")}</span>
+            <span className="text-sm font-bold text-app-ok">● شیفت باز — از {new Date(shift.openedAt).toLocaleTimeString("fa-IR")}</span>
             <button onClick={closeShift} className="ms-auto h-9 rounded-full border border-line px-4 text-xs font-bold">بستن شیفت</button>
           </>
         ) : (
           <>
             <span className="text-sm font-bold text-ink/60">شیفت بازی نیست</span>
             <input value={openingCash} onChange={(e) => setOpeningCash(e.target.value)} type="number" placeholder="نقد اولیه" className="h-9 w-36 rounded-full border border-line px-3 text-xs" />
-            <button onClick={openShift} className="ms-auto h-9 rounded-full bg-primary px-5 text-xs font-black text-white">باز کردن شیفت</button>
+            <button onClick={openShift} className="ms-auto h-9 rounded-full bg-primary px-5 text-xs font-black text-on-accent">باز کردن شیفت</button>
           </>
         )}
       </div>
 
-      {msg ? <p className="rounded-xl bg-green-50 px-4 py-2 text-xs font-bold text-green-800">{msg}</p> : null}
-      {error ? <p className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-600">{error}</p> : null}
+      {msg ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">{msg}</p> : null}
+      {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
       {lastInvoice ? (
-        <p className="rounded-xl bg-green-50 px-4 py-3 text-sm font-black text-green-800">
+        <p className="rounded-xl bg-app-primary-soft px-4 py-3 text-sm font-black text-app-ok">
           ✅ فاکتور {lastInvoice.number} ثبت شد — {fa(lastInvoice.total)} تومان
         </p>
       ) : null}
@@ -239,9 +239,9 @@ export default function PosClient() {
           placeholder="بارکد را اسکن یا SKU بنویسید و Enter بزنید…"
           autoFocus
           dir="ltr"
-          className="h-11 flex-1 rounded-full border-2 border-dashed border-primary/40 bg-white px-5 text-sm focus:border-primary focus:outline-none"
+          className="h-11 flex-1 rounded-full border-2 border-dashed border-primary/40 bg-surface px-5 text-sm focus:border-primary focus:outline-none"
         />
-        <button onClick={() => scanBarcode()} disabled={loading} className="h-11 rounded-full bg-ink px-5 text-sm font-black text-white">افزودن</button>
+        <button onClick={() => scanBarcode()} disabled={loading} className="h-11 rounded-full bg-ink px-5 text-sm font-black text-on-accent">افزودن</button>
       </div>
 
       {/* جستجوی زنده نام محصول — نتایج مثل سرچ سایت */}
@@ -250,21 +250,21 @@ export default function PosClient() {
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="جستجو با نام محصول، برند، SKU یا بارکد…"
-          className="h-11 w-full rounded-full border border-line bg-white px-5 text-sm focus:border-primary focus:outline-none"
+          className="h-11 w-full rounded-full border border-line bg-surface px-5 text-sm focus:border-primary focus:outline-none"
         />
         {searching ? (
           <span className="absolute left-4 top-3.5 text-xs text-ink/40">…</span>
         ) : null}
 
         {search.trim() && results.length > 0 ? (
-          <div className="absolute inset-x-0 top-full z-20 mt-2 max-h-96 overflow-y-auto rounded-card border border-line bg-white p-3 shadow-clay-2">
+          <div className="absolute inset-x-0 top-full z-20 mt-2 max-h-96 overflow-y-auto rounded-card border border-line bg-surface p-3 shadow-clay-2">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {results.map(resultCard)}
             </div>
           </div>
         ) : null}
         {search.trim() && results.length === 0 && !searching ? (
-          <p className="absolute inset-x-0 top-full z-20 mt-2 rounded-card border border-line bg-white px-4 py-6 text-center text-sm text-ink/50 shadow-clay-2">
+          <p className="absolute inset-x-0 top-full z-20 mt-2 rounded-card border border-line bg-surface px-4 py-6 text-center text-sm text-ink/50 shadow-clay-2">
             محصولی یافت نشد.
           </p>
         ) : null}
@@ -278,7 +278,7 @@ export default function PosClient() {
         {showList ? "بستن لیست محصولات" : "📋 انتخاب از لیست محصولات"}
       </button>
       {showList ? (
-        <div className="max-h-96 overflow-y-auto rounded-card border border-line bg-white p-3">
+        <div className="max-h-96 overflow-y-auto rounded-card border border-line bg-surface p-3">
           {searching ? (
             <p className="py-6 text-center text-sm text-ink/50">در حال بارگذاری…</p>
           ) : listItems.length === 0 ? (
@@ -313,7 +313,7 @@ export default function PosClient() {
                     </div>
                   </td>
                   <td className="px-4 py-2 tabular-nums">{fa(l.price * l.qty)}</td>
-                  <td className="px-4 py-2"><button onClick={() => setCart(cart.filter((x) => x.sku !== l.sku))} className="text-xs font-bold text-red-600">حذف</button></td>
+                  <td className="px-4 py-2"><button onClick={() => setCart(cart.filter((x) => x.sku !== l.sku))} className="text-xs font-bold text-app-err">حذف</button></td>
                 </tr>
               ))}
             </tbody>
@@ -326,18 +326,18 @@ export default function PosClient() {
         <div className="flex flex-col gap-3">
           <label className="text-xs font-bold text-ink/70">
             موبایل مشتری (اختیاری — مشتری جدید خودکار ثبت می‌شود)
-            <input value={customerMobile} onChange={(e) => setCustomerMobile(e.target.value)} placeholder="09…" dir="ltr" className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" />
+            <input value={customerMobile} onChange={(e) => setCustomerMobile(e.target.value)} placeholder="09…" dir="ltr" className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" />
           </label>
           <label className="text-xs font-bold text-ink/70">
             تخفیف کل (تومان)
-            <input value={discountTotal} onChange={(e) => setDiscountTotal(e.target.value)} type="number" min={0} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" />
+            <input value={discountTotal} onChange={(e) => setDiscountTotal(e.target.value)} type="number" min={0} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" />
           </label>
         </div>
         <div className="flex flex-col justify-end gap-2 lg:border-r lg:border-line lg:pe-5">
           <div className="flex justify-between text-sm"><span className="text-ink/60">جمع</span><span className="tabular-nums font-bold">{fa(subtotal)}</span></div>
-          <div className="flex justify-between text-sm"><span className="text-ink/60">تخفیف</span><span className="tabular-nums font-bold text-amber-600">{fa(discount)}</span></div>
+          <div className="flex justify-between text-sm"><span className="text-ink/60">تخفیف</span><span className="tabular-nums font-bold text-app-warning">{fa(discount)}</span></div>
           <div className="flex justify-between border-t border-line pt-2 text-base font-black"><span>قابل پرداخت</span><span className="tabular-nums">{fa(total)}</span></div>
-          <button onClick={submitSale} disabled={loading || !shift || cart.length === 0} className="h-12 rounded-full bg-primary text-sm font-black text-white disabled:opacity-50">
+          <button onClick={submitSale} disabled={loading || !shift || cart.length === 0} className="h-12 rounded-full bg-primary text-sm font-black text-on-accent disabled:opacity-50">
             ثبت فاکتور نقدی — {fa(total)} تومان
           </button>
           <button onClick={printReceipt} disabled={!lastInvoice} className="h-10 rounded-full border border-line text-xs font-bold disabled:opacity-40">

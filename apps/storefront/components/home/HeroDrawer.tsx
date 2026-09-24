@@ -60,7 +60,7 @@ export function HeroDrawer() {
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
               <Link
                 href="/need"
-                className="inline-flex h-12 items-center rounded-full bg-primary px-6 text-sm font-bold text-white shadow-clay-1 transition-all hover:bg-primary-press hover:shadow-clay-2 active:scale-[0.98]"
+                className="inline-flex h-12 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent shadow-clay-1 transition-all hover:bg-primary-press hover:shadow-clay-2 active:scale-[0.98]"
               >
                 پیشنهاد بگیر
               </Link>
@@ -118,7 +118,7 @@ function CategoryPin({ pin }: { pin: Pin }) {
         )}
         aria-hidden
       >
-        <span className="size-2 rounded-full bg-white" />
+        <span className="size-2 rounded-full bg-on-accent" />
       </span>
 
       {/* تولتیپ — left فیزیکی ۵۰٪ + translateX؛ هرگز از start/end منطقی استفاده نمی‌شود */}
@@ -126,7 +126,7 @@ function CategoryPin({ pin }: { pin: Pin }) {
         role="presentation"
         style={{ left: "50%", transform: "translateX(-50%)" }}
         className={cn(
-          "pointer-events-none absolute z-20 w-max max-w-[220px] rounded-2xl bg-plum px-3 py-1.5 text-center text-[12px] leading-5 text-white opacity-0 shadow-clay-2 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100",
+          "pointer-events-none absolute z-20 w-max max-w-[220px] rounded-2xl bg-plum px-3 py-1.5 text-center text-[12px] leading-5 text-on-accent opacity-0 shadow-clay-2 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100",
           pin.side === "above" ? "bottom-full mb-2" : "top-full mt-2",
         )}
       >

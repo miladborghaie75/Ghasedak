@@ -142,8 +142,8 @@ export function VariantMatrix({ product, axes, showHeader = false }: Props) {
             "inline-flex h-12 min-w-44 items-center justify-center rounded-full text-sm font-bold transition-all active:scale-[0.98]",
             variant
               ? added
-                ? "bg-success text-white"
-                : "bg-primary text-white shadow-clay-1 hover:bg-primary-hover"
+                ? "bg-success text-on-accent"
+                : "bg-primary text-on-accent shadow-clay-1 hover:bg-primary-hover"
               : "cursor-not-allowed bg-primary-tint text-muted",
           )}
           aria-live="polite"

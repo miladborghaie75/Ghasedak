@@ -236,7 +236,7 @@ export function CategoryFiltersBar({ category, filters, sort }: BarProps) {
           </svg>
           فیلترها
           {activeCount > 0 && (
-            <span className="flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-white tnum">
+            <span className="flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-on-accent tnum">
               {faNum(activeCount)}
             </span>
           )}
@@ -301,7 +301,7 @@ export function CategoryFiltersBar({ category, filters, sort }: BarProps) {
           <button
             type="button"
             onClick={() => setDrawerOpen(false)}
-            className="h-12 w-full rounded-full bg-primary font-bold text-white shadow-clay-1"
+            className="h-12 w-full rounded-full bg-primary font-bold text-on-accent shadow-clay-1"
           >
             اعمال فیلتر
           </button>

@@ -23,16 +23,15 @@ export function StockStatus({
   }
   if (stock <= lowThreshold) {
     return (
-      <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium text-[#C98A2D]", className)}>
-        <span aria-hidden className="size-2 rounded-full bg-[#C98A2D]" />
+      <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium text-app-warning", className)}>
+        <span aria-hidden className="size-2 rounded-full bg-app-warning" />
         تنها {faNum(stock)} عدد باقی مانده
       </span>
     );
   }
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium text-[#2E9E6B]", className)}>
-      <span aria-hidden className="size-2 rounded-full bg-[#2E9E6B]" />
-      موجود
-    </span>
+  return (      <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium text-app-success", className)}>
+        <span aria-hidden className="size-2 rounded-full bg-app-success" />
+        موجود
+      </span>
   );
 }

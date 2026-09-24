@@ -12,7 +12,7 @@ export function Badge({
   className?: string;
 }) {
   const styles: Record<BadgeKind, string> = {
-    discount: "bg-plum text-white",
+    discount: "bg-plum text-on-accent",
     new: "bg-primary-soft text-primary-strong",
     soldout: "bg-surface text-muted border border-line",
   };

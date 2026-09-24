@@ -18,7 +18,7 @@ export default async function MockGatewayPage({
   return (
     <div className="mx-auto max-w-md px-4 py-16">
       <div className="rounded-card border border-line bg-surface p-6 text-center">
-        <p className="text-xs font-bold text-amber-600">درگاه آزمایشی — فقط محیط توسعه</p>
+        <p className="text-xs font-bold text-app-warning">درگاه آزمایشی — فقط محیط توسعه</p>
         <h1 className="mt-2 text-lg font-black text-ink">پرداخت آزمایشی</h1>
         <p className="mt-3 text-sm text-ink/70">
           مبلغ: <span className="tabular-nums font-black">{fa(amount ?? "0")} تومان</span>
@@ -26,7 +26,7 @@ export default async function MockGatewayPage({
         <div className="mt-6 flex flex-col gap-3">
           <Link
             href={`${cb}&Status=OK`}
-            className="inline-flex h-12 items-center justify-center rounded-full bg-green-600 text-sm font-black text-white"
+            className="inline-flex h-12 items-center justify-center rounded-full bg-app-ok text-sm font-black text-on-accent"
           >
             پرداخت موفق (تست)
           </Link>

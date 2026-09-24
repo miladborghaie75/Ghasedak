@@ -3,6 +3,8 @@
 /*
  * ادمین — سیستم عملیاتی: خوانایی اول، برند قاصدک ثابت.
  * (بند ۷۲: اغراق طراحی ممنوع؛ بند ۱۰۶: پالت برند)
+ * Theme System (بند ۴۹–۵۷): توکن‌های معنایی دوباره‌نگاشت‌پذیر در حالت شب؛
+ * کامپوننت‌ها فقط توکن مصرف می‌کنند — هیچ رنگ هاردکد تم-آگاه مجاز نیست.
  */
 @theme {
   --font-sans: "Vazirmatn Variable", "Vazirmatn", "Segoe UI", Tahoma, sans-serif;
@@ -20,6 +22,88 @@
   --color-err: #c94a5a;
 }
 
+/*
+ * توکن‌های معنایی — تم-آگاه (بند ۴۹): کامپوننت‌ها به این‌ها وصل‌اند.
+ * حالت روشن = همان مقادیر @theme؛ حالت شب بازتعریف می‌شود (پایین).
+ */
+:root {
+  --app-bg: var(--color-bg);
+  --app-surface: var(--color-surface);
+  --app-elevated: var(--color-surface);
+  --app-ink: var(--color-ink);
+  --app-muted: var(--color-muted);
+  --app-line: var(--color-line);
+  --app-primary: var(--color-primary);
+  --app-primary-strong: var(--color-primary-strong);
+  --app-primary-soft: var(--color-primary-soft);
+  --app-deep: var(--color-deep);
+  --app-ok: var(--color-ok);
+  --app-err: var(--color-err);
+  --app-on-accent: #ffffff;
+  --app-warning: #b97a1e;
+  --app-info: #4a6fa5;
+  --app-overlay: rgba(41, 35, 47, 0.45);
+  --app-focus-ring: var(--color-primary-strong);
+}
+
+/* تم شب — بازتعریف معنایی: خوانایی عملیاتی اول؛ هویت بنفش حفظ، بدون نئون */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --app-bg: #201a29;
+  --app-surface: #292233;
+  --app-elevated: #322a3f;
+  --app-ink: #efe9f5;
+  --app-muted: #a498ba;
+  --app-line: #423550;
+  --app-primary: #c3a4f2;
+  --app-primary-strong: #d0b7f5;
+  --app-primary-soft: #3a2f4a;
+  --app-deep: #d9c8f2;
+  --app-ok: #6fbf96;
+  --app-err: #e58494;
+  --app-on-accent: #241a33;
+  --app-warning: #d9a557;
+  --app-info: #8aa8d8;
+  --app-overlay: rgba(12, 8, 18, 0.65);
+  --app-focus-ring: #c3a4f2;
+}
+
+@theme inline {
+  --color-app-bg: var(--app-bg);
+  --color-app-surface: var(--app-surface);
+  --color-app-elevated: var(--app-elevated);
+  --color-app-ink: var(--app-ink);
+  --color-app-muted: var(--app-muted);
+  --color-app-line: var(--app-line);
+  --color-app-primary: var(--app-primary);
+  --color-app-primary-strong: var(--app-primary-strong);
+  --color-app-primary-soft: var(--app-primary-soft);
+  --color-app-deep: var(--app-deep);
+  --color-app-ok: var(--app-ok);
+  --color-app-err: var(--app-err);
+  --color-app-on-accent: var(--app-on-accent);
+  --color-app-warning: var(--app-warning);
+  --color-app-info: var(--app-info);
+  --color-app-overlay: var(--app-overlay);
+  --color-app-focus-ring: var(--app-focus-ring);
+}
+
+/* سوییچ تم در بدنه <html> — کلاس‌های پایه (@theme) هم در شب بازنگری می‌شوند
+   تا همه کامپوننت‌های موجود (bg-surface و…) بدون تغییر کد درست بمانند. */
+html[data-theme="dark"] {
+  --color-bg: #201a29;
+  --color-surface: #292233;
+  --color-ink: #efe9f5;
+  --color-muted: #a498ba;
+  --color-line: #423550;
+  --color-primary: #c3a4f2;
+  --color-primary-strong: #d0b7f5;
+  --color-primary-soft: #3a2f4a;
+  --color-deep: #d9c8f2;
+  --color-ok: #6fbf96;
+  --color-err: #e58494;
+}
+
 body {
   background: var(--color-bg);
   color: var(--color-ink);
@@ -27,7 +111,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-primary-strong);
+  outline: 2px solid var(--app-focus-ring);
   outline-offset: 2px;
   border-radius: 6px;
 }

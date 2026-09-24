@@ -25,7 +25,7 @@ export default function OrdersClient() {
 
   return (
     <div className="flex flex-col gap-4">
-      {error ? <p className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-600">{error}</p> : null}
+      {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
       <div className="overflow-x-auto rounded-card border border-line bg-surface">
         <table className="w-full text-sm">
           <thead>
@@ -44,7 +44,7 @@ export default function OrdersClient() {
                 <td className="px-4 py-3 tabular-nums" dir="ltr">{o.guestMobile}</td>
                 <td className="px-4 py-3">{o.status}</td>
                 <td className="px-4 py-3">
-                  <span className={o.paymentStatus === "PAID" ? "font-bold text-green-700" : "font-bold text-amber-600"}>
+                  <span className={o.paymentStatus === "PAID" ? "font-bold text-app-ok" : "font-bold text-app-warning"}>
                     {o.paymentStatus === "PAID" ? "پرداخت‌شده" : o.paymentStatus === "PENDING" ? "در انتظار" : o.paymentStatus}
                   </span>
                 </td>

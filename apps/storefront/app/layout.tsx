@@ -6,6 +6,7 @@ import { AppProviders } from "@/components/providers/AppProviders";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { QuickAddHost } from "@/components/commerce/QuickAddHost";
+import { ThemeInit } from "@/components/providers/theme-init";
 import { MotionReveal } from "@/components/MotionReveal";
 import { site } from "@/lib/site";
 
@@ -59,13 +60,14 @@ export default async function RootLayout({
     // API در دسترس نیست — تم پیش‌فرض
   }
   return (
-    <html lang="fa" dir="rtl" data-motion-enabled="on" data-motion-intensity="subtle">
+    <html lang="fa" dir="rtl" data-motion-enabled="on" data-motion-intensity="subtle" suppressHydrationWarning>
       <body className="min-h-dvh antialiased">
         {themeCss ? <style dangerouslySetInnerHTML={{ __html: themeCss }} /> : null}
+        <ThemeInit />
         <AppProviders>
           <a
             href="#main"
-            className="sr-only focus:not-sr-only focus:absolute focus:start-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-plum focus:px-4 focus:py-2 focus:text-sm focus:text-white"
+            className="sr-only focus:not-sr-only focus:absolute focus:start-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-plum focus:px-4 focus:py-2 focus:text-sm focus:text-on-accent"
           >
             پرش به محتوای اصلی
           </a>

@@ -44,22 +44,22 @@ export default function WarehousesClient() {
 
   return (
     <div className="flex flex-col gap-5">
-      {msg ? <p className="rounded-xl bg-green-50 px-4 py-2 text-xs font-bold text-green-800">{msg}</p> : null}
-      {error ? <p className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-600">{error}</p> : null}
+      {msg ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">{msg}</p> : null}
+      {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
 
       {canManage && (
         <div className="rounded-card border border-line bg-surface p-4">
           <h3 className="mb-3 text-sm font-black">انبار جدید</h3>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="کد (نظیر WH2)" dir="ltr" className="h-9 rounded-lg border border-line bg-white px-2 text-xs" />
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="نام انبار" className="h-9 rounded-lg border border-line bg-white px-2 text-xs" />
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="h-9 rounded-lg border border-line bg-white px-2 text-xs">
+            <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="کد (نظیر WH2)" dir="ltr" className="h-9 rounded-lg border border-line bg-surface px-2 text-xs" />
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="نام انبار" className="h-9 rounded-lg border border-line bg-surface px-2 text-xs" />
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="h-9 rounded-lg border border-line bg-surface px-2 text-xs">
               {TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
-            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="تلفن" dir="ltr" className="h-9 rounded-lg border border-line bg-white px-2 text-xs" />
-            <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="آدرس" className="col-span-2 h-9 rounded-lg border border-line bg-white px-2 text-xs" />
-            <input value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} placeholder="مسئول" className="h-9 rounded-lg border border-line bg-white px-2 text-xs" />
-            <button onClick={() => void create()} disabled={loading || !form.code || !form.name} className="h-9 rounded-full bg-primary px-4 text-xs font-bold text-white disabled:opacity-50">ایجاد انبار</button>
+            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="تلفن" dir="ltr" className="h-9 rounded-lg border border-line bg-surface px-2 text-xs" />
+            <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="آدرس" className="col-span-2 h-9 rounded-lg border border-line bg-surface px-2 text-xs" />
+            <input value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} placeholder="مسئول" className="h-9 rounded-lg border border-line bg-surface px-2 text-xs" />
+            <button onClick={() => void create()} disabled={loading || !form.code || !form.name} className="h-9 rounded-full bg-primary px-4 text-xs font-bold text-on-accent disabled:opacity-50">ایجاد انبار</button>
           </div>
         </div>
       )}
@@ -79,7 +79,7 @@ export default function WarehousesClient() {
                 <td className="px-4 py-3 text-xs">{w.contact ?? "—"}</td>
                 <td className="px-4 py-3 text-center">{w.isDefault ? "★" : ""}</td>
                 <td className="px-4 py-3 text-center text-xs">
-                  {w.active ? <span className="font-bold text-green-700">فعال</span> : <span className="text-red-600">غیرفعال</span>}
+                  {w.active ? <span className="font-bold text-app-ok">فعال</span> : <span className="text-app-err">غیرفعال</span>}
                 </td>
                 <td className="px-4 py-3">
                   {canManage && (

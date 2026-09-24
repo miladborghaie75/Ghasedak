@@ -16,7 +16,7 @@ export default function NotFound() {
           </Link>
         ))}
       </div>
-      <Link href="/" className="mt-5 inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-white shadow-clay-1 hover:bg-primary-press">
+      <Link href="/" className="mt-5 inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent shadow-clay-1 hover:bg-primary-press">
         صفحه اصلی
       </Link>
     </div>

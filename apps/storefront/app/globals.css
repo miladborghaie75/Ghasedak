@@ -3,7 +3,8 @@
 /*
  * توکن‌های «لباس زیر قاصدک» — رنگ‌ها از بریف پین شده‌اند.
  * Claymorphism کنترل‌شده: فقط ۳ سطح سایه تعریف می‌شود.
- * ASSUMPTION: تک‌تم روشن (dark mode خارج از اسکوپ این مرحله).
+ * Theme System (بند ۴۹–۵۷): توکن‌های معنایی دوباره‌نگاشت‌پذیر در حالت شب؛
+ * کامپوننت‌ها فقط توکن مصرف می‌کنند — هیچ رنگ هاردکد تم-آگاه مجاز نیست.
  */
 @theme {
   --font-sans: "Vazirmatn Variable", Vazirmatn, "Segoe UI", Tahoma, sans-serif;
@@ -37,6 +38,82 @@
   --shadow-clay-3: 0 4px 10px rgba(41, 35, 47, 0.12),
     0 24px 56px -14px rgba(59, 41, 72, 0.3);
   --shadow-inset-top: inset 0 1.5px 0 rgba(255, 255, 255, 0.85);
+}
+
+/*
+ * توکن‌های معنایی — تم-آگاه (بند ۴۹): کامپوننت‌ها به این‌ها وصل‌اند.
+ * حالت روشن = همان مقادیر @theme؛ حالت شب بازتعریف می‌شود (پایین).
+ */
+:root {
+  --app-bg: var(--color-bg);
+  --app-surface: var(--color-surface);
+  --app-elevated: var(--color-surface);
+  --app-ink: var(--color-ink);
+  --app-muted: var(--color-muted);
+  --app-line: var(--color-line);
+  --app-primary: var(--color-primary);
+  --app-primary-hover: var(--color-primary-hover);
+  --app-primary-active: var(--color-primary-press);
+  --app-primary-tint: var(--color-primary-tint);
+  --app-primary-soft: var(--color-primary-soft);
+  --app-on-accent: #ffffff;
+  --app-success: var(--color-success);
+  --app-error: var(--color-error);
+  --app-warning: #b97a1e;
+  --app-info: #4a6fa5;
+  --app-overlay: rgba(41, 35, 47, 0.4);
+  --app-focus-ring: var(--color-primary-strong);
+  --app-shadow-1: var(--shadow-clay-1);
+  --app-shadow-2: var(--shadow-clay-2);
+  --app-shadow-3: var(--shadow-clay-3);
+}
+
+/* تم شب — بازتعریف معنایی (بند ۴۹/۵۰): هویت بنفش حفظ، کنتراست WCAG.
+   هیچ filter/inversion نیست — همه توکن‌ها عمدی و دست‌چین‌اند. */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --app-bg: #221b2c;
+  --app-surface: #2c2338;
+  --app-elevated: #362b45;
+  --app-ink: #f0eaf6;
+  --app-muted: #a99ec0;
+  --app-line: #453855;
+  --app-primary: #c3a4f2;
+  --app-primary-hover: #d0b7f5;
+  --app-primary-active: #b592ec;
+  --app-primary-tint: #38304a;
+  --app-primary-soft: #443757;
+  --app-on-accent: #241a33;
+  --app-success: #6fbf96;
+  --app-error: #e58494;
+  --app-warning: #d9a557;
+  --app-info: #8aa8d8;
+  --app-overlay: rgba(12, 8, 18, 0.65);
+  --app-focus-ring: #c3a4f2;
+  --app-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 24px -8px rgba(0, 0, 0, 0.45);
+  --app-shadow-2: 0 2px 4px rgba(0, 0, 0, 0.35), 0 18px 44px -12px rgba(0, 0, 0, 0.5);
+  --app-shadow-3: 0 4px 10px rgba(0, 0, 0, 0.4), 0 24px 56px -14px rgba(0, 0, 0, 0.55);
+}
+
+@theme inline {
+  --color-app-bg: var(--app-bg);
+  --color-app-surface: var(--app-surface);
+  --color-app-elevated: var(--app-elevated);
+  --color-app-ink: var(--app-ink);
+  --color-app-muted: var(--app-muted);
+  --color-app-line: var(--app-line);
+  --color-app-primary: var(--app-primary);
+  --color-app-primary-hover: var(--app-primary-hover);
+  --color-app-primary-active: var(--app-primary-active);
+  --color-app-primary-tint: var(--app-primary-tint);
+  --color-app-primary-soft: var(--app-primary-soft);
+  --color-app-on-accent: var(--app-on-accent);
+  --color-app-success: var(--app-success);
+  --color-app-error: var(--app-error);
+  --color-app-warning: var(--app-warning);
+  --color-app-info: var(--app-info);
+  --color-app-overlay: var(--app-overlay);
+  --color-app-focus-ring: var(--app-focus-ring);
 }
 
 /* اعداد فارسی جدولی برای قیمت‌ها */
@@ -135,6 +212,30 @@
 
 html {
   scroll-behavior: smooth;
+}
+
+/* سوییچ تم در بدنه <html> — همه ابعاد صفحه در حالت شب بازنگری می‌شوند (بند ۴۹) */
+html[data-theme="dark"] {
+  --color-bg: #221b2c;
+  --color-surface: #2c2338;
+  --color-ink: #f0eaf6;
+  --color-muted: #a99ec0;
+  --color-line: #453855;
+  --color-plum: #d9c8f2;
+  --color-primary-hover: #d0b7f5;
+  --color-primary-strong: #c3a4f2;
+  --color-primary-light: #443757;
+  --color-primary-tint: #38304a;
+  --color-primary-soft: #443757;
+  --color-primary-press: #b592ec;
+  --color-sage: #a3bfae;
+  --color-dusty-rose: #dfa3b8;
+  --color-success: #6fbf96;
+  --color-error: #e58494;
+  --shadow-clay-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 24px -8px rgba(0, 0, 0, 0.45);
+  --shadow-clay-2: 0 2px 4px rgba(0, 0, 0, 0.35), 0 18px 44px -12px rgba(0, 0, 0, 0.5);
+  --shadow-clay-3: 0 4px 10px rgba(0, 0, 0, 0.4), 0 24px 56px -14px rgba(0, 0, 0, 0.55);
+  --shadow-inset-top: inset 0 1.5px 0 rgba(255, 255, 255, 0.08);
 }
 
 body {

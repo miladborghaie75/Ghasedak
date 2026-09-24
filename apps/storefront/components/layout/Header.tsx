@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCart } from "@/components/providers/CartProvider";
 import { SearchBox } from "./SearchBox";
+import { ThemeToggle } from "@/components/providers/ThemeToggle";
 import { Sheet } from "@/components/ui/Sheet";
 import { cn } from "@/lib/cn";
 import { faNum } from "@/lib/format";
@@ -32,7 +33,7 @@ export function Header() {
       >
         <HeartIcon />
         {ready && wishlist.length > 0 && (
-          <span className="absolute -top-0.5 start-0.5 flex min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-white tnum">
+          <span className="absolute -top-0.5 start-0.5 flex min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-on-accent tnum">
             {faNum(wishlist.length)}
           </span>
         )}
@@ -47,7 +48,7 @@ export function Header() {
       >
         <CartIcon />
         {ready && count > 0 && (
-          <span className="absolute -top-0.5 start-0.5 flex min-w-5 items-center justify-center rounded-full bg-primary-strong px-1 text-[10px] font-bold text-white tnum">
+          <span className="absolute -top-0.5 start-0.5 flex min-w-5 items-center justify-center rounded-full bg-primary-strong px-1 text-[10px] font-bold text-on-accent tnum">
             {faNum(count)}
           </span>
         )}
@@ -58,7 +59,7 @@ export function Header() {
   return (
     <>
       {/* نوار اطلاع Demo — صادقانه و همیشه بالای صفحه */}
-      <div className="bg-plum px-4 py-2 text-center text-[11px] font-medium text-white/90">
+      <div className="bg-plum px-4 py-2 text-center text-[11px] font-medium text-on-accent/90">
         {site.demoNotice}
       </div>
 
@@ -93,6 +94,7 @@ export function Header() {
 
           {/* ── دسکتاپ: ردیف ۱ — لوگو، سرچ، اکشن‌ها ── */}
           <div className="hidden h-16 items-center gap-4 md:flex">
+            <ThemeToggle />
             <Link
               href="/"
               className="flex shrink-0 items-center gap-2 rounded-full px-1 py-1"
@@ -173,6 +175,10 @@ function MobileMenu({
         </Link>
       ))}
       <p className="mb-1 mt-4 text-xs font-bold text-muted">کمک خرید</p>
+      {/* کنترل تم — فقط در منوی موبایل (بند ۵۳: بدون شلوغی مسیر خرید، ولی کشف‌پذیر) */}
+      <div className="mt-3 rounded-2xl border border-line p-2">
+        <ThemeToggle />
+      </div>
       <Link href="/guides/size" onClick={onNavigate} className="flex h-12 items-center rounded-xl px-3 text-sm font-medium text-ink hover:bg-primary-tint">
         راهنمای سایز
       </Link>

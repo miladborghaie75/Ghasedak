@@ -60,7 +60,7 @@ export function CartClient() {
         </p>
         <Link
           href="/"
-          className="inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-white shadow-clay-1 hover:bg-primary-press"
+          className="inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent shadow-clay-1 hover:bg-primary-press"
         >
           رفتن به فروشگاه
         </Link>
@@ -163,7 +163,7 @@ export function CartClient() {
         </div>
         <Link
           href="/checkout"
-          className="mt-4 flex h-12 items-center justify-center rounded-full bg-primary text-sm font-bold text-white shadow-clay-1 transition-all hover:bg-primary-press hover:shadow-clay-2 active:scale-[0.98]"
+          className="mt-4 flex h-12 items-center justify-center rounded-full bg-primary text-sm font-bold text-on-accent shadow-clay-1 transition-all hover:bg-primary-press hover:shadow-clay-2 active:scale-[0.98]"
         >
           ادامه خرید و پرداخت
         </Link>

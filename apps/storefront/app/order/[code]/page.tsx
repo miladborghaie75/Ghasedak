@@ -36,7 +36,7 @@ export default async function OrderPage({
           و دیتابیس به این صفحه متصل می‌شود.
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-          <Link href="/" className="inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-white shadow-clay-1 hover:bg-primary-press">
+          <Link href="/" className="inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent shadow-clay-1 hover:bg-primary-press">
             بازگشت به فروشگاه
           </Link>
           <Link href="/search" className="inline-flex h-11 items-center rounded-full border border-line bg-surface px-6 text-sm font-bold text-primary-strong hover:bg-primary-tint">

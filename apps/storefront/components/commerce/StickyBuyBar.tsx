@@ -68,8 +68,8 @@ export function StickyBuyBar({ product }: { product: ProductV2 }) {
             !anyStock
               ? "cursor-not-allowed bg-primary-tint text-muted"
               : added
-                ? "bg-success text-white"
-                : "bg-plum text-white shadow-clay-2",
+                ? "bg-success text-on-accent"
+                : "bg-plum text-on-accent shadow-clay-2",
           )}
         >
           {!anyStock

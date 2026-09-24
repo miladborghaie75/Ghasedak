@@ -54,7 +54,7 @@ export function CheckoutClient() {
     return (
       <div className="rounded-card border border-dashed border-line bg-surface px-6 py-14 text-center">
         <p className="text-sm font-bold text-ink">سبد شما خالی است</p>
-        <Link href="/" className="mt-3 inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-white">
+        <Link href="/" className="mt-3 inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent">
           رفتن به فروشگاه
         </Link>
       </div>

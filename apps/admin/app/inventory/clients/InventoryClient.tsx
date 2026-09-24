@@ -225,31 +225,31 @@ export default function InventoryClient() {
       <div className="flex flex-wrap gap-2">
         {TABS.map(([k, label, perm]) => has(perm) ? (
           <button key={k} onClick={() => setTab(k)}
-            className={`rounded-full px-4 py-2 text-xs font-bold ${tab === k ? "bg-primary text-white" : "border border-line bg-surface text-muted"}`}>
+            className={`rounded-full px-4 py-2 text-xs font-bold ${tab === k ? "bg-primary text-on-accent" : "border border-line bg-surface text-muted"}`}>
             {label}
           </button>
         ) : null)}
       </div>
 
-      {msg ? <p className="rounded-xl bg-green-50 px-4 py-2 text-xs font-bold text-green-800">{msg}</p> : null}
-      {error ? <p className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-600">{error}</p> : null}
+      {msg ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">{msg}</p> : null}
+      {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
 
       {tab === "stock" && (
         <>
           <div className="flex gap-2">
-            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load(q)} placeholder="جستجو: نام محصول / SKU / بارکد…" className="h-10 w-72 rounded-full border border-line bg-white px-4 text-sm" />
-            <button onClick={() => load(q)} disabled={loading} className="h-10 rounded-full bg-ink px-5 text-sm font-black text-white disabled:opacity-60">جستجو</button>
+            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load(q)} placeholder="جستجو: نام محصول / SKU / بارکد…" className="h-10 w-72 rounded-full border border-line bg-surface px-4 text-sm" />
+            <button onClick={() => load(q)} disabled={loading} className="h-10 rounded-full bg-ink px-5 text-sm font-black text-on-accent disabled:opacity-60">جستجو</button>
           </div>
 
           {selected.size > 0 && (
             <div className="flex flex-wrap items-center gap-2 rounded-card border border-primary/30 bg-primary-tint/40 p-3">
               <span className="text-xs font-bold text-ink">{fa(selected.size)} کالا انتخاب شده:</span>
-              <select value={bulkMode} onChange={(e) => setBulkMode(e.target.value as "percent" | "fixed")} className="rounded-lg border border-line bg-white px-2 py-1.5 text-xs">
+              <select value={bulkMode} onChange={(e) => setBulkMode(e.target.value as "percent" | "fixed")} className="rounded-lg border border-line bg-surface px-2 py-1.5 text-xs">
                 <option value="percent">تغییر درصدی</option>
                 <option value="fixed">تغییر مبلغی (تومان)</option>
               </select>
-              <input value={bulkAmount} onChange={(e) => setBulkAmount(e.target.value)} type="number" placeholder="مثلاً 10 یا -5" className="w-32 rounded-lg border border-line bg-white px-2 py-1.5 text-xs" />
-              <button onClick={() => void bulkPrice()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-white">اعمال قیمت</button>
+              <input value={bulkAmount} onChange={(e) => setBulkAmount(e.target.value)} type="number" placeholder="مثلاً 10 یا -5" className="w-32 rounded-lg border border-line bg-surface px-2 py-1.5 text-xs" />
+              <button onClick={() => void bulkPrice()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-on-accent">اعمال قیمت</button>
               <button onClick={() => void bulkStatus("PUBLISHED")} disabled={loading} className="rounded-full border border-line px-3 py-1.5 text-xs font-bold">فعال‌سازی</button>
               <button onClick={() => void bulkStatus("DRAFT")} disabled={loading} className="rounded-full border border-line px-3 py-1.5 text-xs font-bold">غیرفعال‌سازی</button>
             </div>
@@ -272,14 +272,14 @@ export default function InventoryClient() {
                   const available = r.stockQty - r.reservedQty;
                   const low = r.stockQty <= r.lowStockThreshold;
                   return (
-                    <tr key={r.sku} className={`border-b border-line/60 last:border-0 ${low ? "bg-amber-50/50" : ""}`}>
+                    <tr key={r.sku} className={`border-b border-line/60 last:border-0 ${low ? "bg-app-primary-soft/50" : ""}`}>
                       <td className="px-4 py-3"><input type="checkbox" checked={selected.has(r.sku)} onChange={() => toggleSelect(r.sku)} /></td>
                       <td className="px-4 py-3 font-bold">{r.product.name}</td>
                       <td className="px-4 py-3 text-xs" dir="ltr">{r.sku}</td>
                       <td className="px-4 py-3 text-xs" dir="ltr">{r.barcode ?? "—"}</td>
                       <td className="px-4 py-3 tabular-nums">{fa(r.stockQty)}</td>
                       <td className="px-4 py-3 tabular-nums text-ink/60">{fa(r.reservedQty)}</td>
-                      <td className={`px-4 py-3 tabular-nums font-black ${low ? "text-amber-600" : "text-green-700"}`}>{fa(available)}</td>
+                      <td className={`px-4 py-3 tabular-nums font-black ${low ? "text-app-warning" : "text-app-ok"}`}>{fa(available)}</td>
                       <td className="px-4 py-3 tabular-nums">{fa(r.price)}</td>
                       <td className="px-4 py-3">{low ? "کم 🔶" : "—"}</td>
                     </tr>
@@ -294,7 +294,7 @@ export default function InventoryClient() {
       {tab === "stocktake" && (
         <>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => void startStocktake()} disabled={loading} className="h-10 rounded-full bg-primary px-5 text-sm font-black text-white disabled:opacity-60">شروع انبارگردانی جدید</button>
+            <button onClick={() => void startStocktake()} disabled={loading} className="h-10 rounded-full bg-primary px-5 text-sm font-black text-on-accent disabled:opacity-60">شروع انبارگردانی جدید</button>
             {stDetail && <button onClick={() => void requestApproval()} disabled={loading} className="h-10 rounded-full border border-ink px-4 text-sm font-bold">درخواست تایید اختلاف‌های بزرگ</button>}
           </div>
 
@@ -303,7 +303,7 @@ export default function InventoryClient() {
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-sm font-black text-ink">انبارگردانی {stDetail.number}</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => void closeStocktake()} disabled={loading} className="rounded-full bg-ink px-4 py-1.5 text-xs font-bold text-white">بستن و ثبت تعدیل‌ها</button>
+                  <button onClick={() => void closeStocktake()} disabled={loading} className="rounded-full bg-ink px-4 py-1.5 text-xs font-bold text-on-accent">بستن و ثبت تعدیل‌ها</button>
                   <button onClick={() => setStDetail(null)} className="rounded-full border border-line px-4 py-1.5 text-xs font-bold">بستن نمایش</button>
                 </div>
               </div>
@@ -323,7 +323,7 @@ export default function InventoryClient() {
                             onChange={(e) => setCounts({ ...counts, [it.id]: e.target.value })}
                             type="number" min={0} className="w-20 rounded border border-line px-2 py-1 text-center" />
                         </td>
-                        <td className={`p-2 text-center tabular-nums font-bold ${(() => { const d = counts[it.id] != null ? Number(counts[it.id]) - it.systemQty : it.difference; return d != null && d > 0 ? "text-green-700" : d != null && d < 0 ? "text-red-600" : ""; })()}`}>
+                        <td className={`p-2 text-center tabular-nums font-bold ${(() => { const d = counts[it.id] != null ? Number(counts[it.id]) - it.systemQty : it.difference; return d != null && d > 0 ? "text-app-ok" : d != null && d < 0 ? "text-app-err" : ""; })()}`}>
                           {counts[it.id] != null ? fa(Number(counts[it.id]) - it.systemQty) : it.difference != null ? fa(it.difference) : "—"}
                         </td>
                         <td className="p-2 text-center">
@@ -367,25 +367,25 @@ export default function InventoryClient() {
           <div className="rounded-card border border-line bg-surface p-4">
             <h3 className="mb-3 text-sm font-black">انتقال جدید</h3>
             <div className="mb-3 flex flex-wrap gap-2">
-              <select value={trFrom} onChange={(e) => setTrFrom(e.target.value)} className="h-9 rounded-lg border border-line bg-white px-2 text-xs">
+              <select value={trFrom} onChange={(e) => setTrFrom(e.target.value)} className="h-9 rounded-lg border border-line bg-surface px-2 text-xs">
                 <option value="">مبدأ…</option>
                 {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
               <span className="self-center text-xs text-muted">→</span>
-              <select value={trTo} onChange={(e) => setTrTo(e.target.value)} className="h-9 rounded-lg border border-line bg-white px-2 text-xs">
+              <select value={trTo} onChange={(e) => setTrTo(e.target.value)} className="h-9 rounded-lg border border-line bg-surface px-2 text-xs">
                 <option value="">مقصد…</option>
                 {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             </div>
             {transferLines.map((l, i) => (
               <div key={i} className="mb-2 flex gap-2">
-                <input value={l.sku} onChange={(e) => setTransferLines(transferLines.map((x, j) => j === i ? { ...x, sku: e.target.value } : x))} placeholder="SKU" dir="ltr" className="h-9 w-48 rounded-lg border border-line bg-white px-2 text-xs" />
-                <input value={l.qty} onChange={(e) => setTransferLines(transferLines.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} type="number" min={1} placeholder="تعداد" className="h-9 w-24 rounded-lg border border-line bg-white px-2 text-center text-xs" />
+                <input value={l.sku} onChange={(e) => setTransferLines(transferLines.map((x, j) => j === i ? { ...x, sku: e.target.value } : x))} placeholder="SKU" dir="ltr" className="h-9 w-48 rounded-lg border border-line bg-surface px-2 text-xs" />
+                <input value={l.qty} onChange={(e) => setTransferLines(transferLines.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} type="number" min={1} placeholder="تعداد" className="h-9 w-24 rounded-lg border border-line bg-surface px-2 text-center text-xs" />
               </div>
             ))}
             <div className="flex gap-2">
               <button onClick={() => setTransferLines([...transferLines, { sku: "", qty: "" }])} className="rounded-full border border-line px-3 py-1.5 text-xs font-bold">+ ردیف</button>
-              <button onClick={() => void createTransfer()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-white">ایجاد انتقال</button>
+              <button onClick={() => void createTransfer()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-on-accent">ایجاد انتقال</button>
             </div>
           </div>
           <div className="overflow-hidden rounded-card border border-line bg-surface">
@@ -403,8 +403,8 @@ export default function InventoryClient() {
                     <td className="p-3 text-center">{fa(t._count.items)}</td>
                     <td className="p-3 text-center text-xs">{stateFa[t.state] ?? t.state}</td>
                     <td className="p-3 text-center">
-                      {t.state === "DRAFT" && <button onClick={() => void transferAction(t.id, "confirm")} className="ml-1 rounded-full bg-ink px-3 py-1 text-xs font-bold text-white">ارسال</button>}
-                      {t.state === "IN_TRANSIT" && <button onClick={() => void transferAction(t.id, "receive")} className="ml-1 rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">دریافت</button>}
+                      {t.state === "DRAFT" && <button onClick={() => void transferAction(t.id, "confirm")} className="ml-1 rounded-full bg-ink px-3 py-1 text-xs font-bold text-on-accent">ارسال</button>}
+                      {t.state === "IN_TRANSIT" && <button onClick={() => void transferAction(t.id, "receive")} className="ml-1 rounded-full bg-primary px-3 py-1 text-xs font-bold text-on-accent">دریافت</button>}
                       {t.state === "DRAFT" && <button onClick={() => void transferAction(t.id, "cancel")} className="rounded-full border border-line px-3 py-1 text-xs font-bold">لغو</button>}
                     </td>
                   </tr>
@@ -418,10 +418,10 @@ export default function InventoryClient() {
       {tab === "quarantine" && (
         <>
           <div className="flex flex-wrap items-end gap-2 rounded-card border border-line bg-surface p-4">
-            <div><label className="mb-1 block text-[10px] text-muted">SKU</label><input value={qSku} onChange={(e) => setQSku(e.target.value)} dir="ltr" className="h-9 w-40 rounded-lg border border-line bg-white px-2 text-xs" /></div>
-            <div><label className="mb-1 block text-[10px] text-muted">تعداد</label><input value={qQty} onChange={(e) => setQQty(e.target.value)} type="number" min={1} className="h-9 w-20 rounded-lg border border-line bg-white px-2 text-center text-xs" /></div>
-            <div className="flex-1"><label className="mb-1 block text-[10px] text-muted">دلیل</label><input value={qReason} onChange={(e) => setQReason(e.target.value)} className="h-9 w-full rounded-lg border border-line bg-white px-2 text-xs" /></div>
-            <button onClick={() => void holdQuarantine()} disabled={loading} className="h-9 rounded-full bg-primary px-4 text-xs font-bold text-white">جداسازی</button>
+            <div><label className="mb-1 block text-[10px] text-muted">SKU</label><input value={qSku} onChange={(e) => setQSku(e.target.value)} dir="ltr" className="h-9 w-40 rounded-lg border border-line bg-surface px-2 text-xs" /></div>
+            <div><label className="mb-1 block text-[10px] text-muted">تعداد</label><input value={qQty} onChange={(e) => setQQty(e.target.value)} type="number" min={1} className="h-9 w-20 rounded-lg border border-line bg-surface px-2 text-center text-xs" /></div>
+            <div className="flex-1"><label className="mb-1 block text-[10px] text-muted">دلیل</label><input value={qReason} onChange={(e) => setQReason(e.target.value)} className="h-9 w-full rounded-lg border border-line bg-surface px-2 text-xs" /></div>
+            <button onClick={() => void holdQuarantine()} disabled={loading} className="h-9 rounded-full bg-primary px-4 text-xs font-bold text-on-accent">جداسازی</button>
           </div>
           <div className="overflow-hidden rounded-card border border-line bg-surface">
             <table className="w-full text-sm">
@@ -440,8 +440,8 @@ export default function InventoryClient() {
                     <td className="p-3 text-center text-xs">{stateFa[r.state] ?? r.state}</td>
                     <td className="p-3 text-center">
                       {r.state === "HELD" && <>
-                        <button onClick={() => void quarantineAction(r.id, "release")} className="ml-1 rounded-full bg-green-600 px-3 py-1 text-xs font-bold text-white">بازگشت</button>
-                        <button onClick={() => void quarantineAction(r.id, "destroy")} className="rounded-full bg-red-600 px-3 py-1 text-xs font-bold text-white">انهدام</button>
+                        <button onClick={() => void quarantineAction(r.id, "release")} className="ml-1 rounded-full bg-app-ok px-3 py-1 text-xs font-bold text-on-accent">بازگشت</button>
+                        <button onClick={() => void quarantineAction(r.id, "destroy")} className="rounded-full bg-app-err px-3 py-1 text-xs font-bold text-on-accent">انهدام</button>
                       </>}
                     </td>
                   </tr>
@@ -455,16 +455,16 @@ export default function InventoryClient() {
       {tab === "damage" && (
         <>
           <div className="flex flex-wrap items-end gap-2 rounded-card border border-line bg-surface p-4">
-            <div><label className="mb-1 block text-[10px] text-muted">SKU</label><input value={dSku} onChange={(e) => setDSku(e.target.value)} dir="ltr" className="h-9 w-40 rounded-lg border border-line bg-white px-2 text-xs" /></div>
-            <div><label className="mb-1 block text-[10px] text-muted">تعداد</label><input value={dQty} onChange={(e) => setDQty(e.target.value)} type="number" min={1} className="h-9 w-20 rounded-lg border border-line bg-white px-2 text-center text-xs" /></div>
+            <div><label className="mb-1 block text-[10px] text-muted">SKU</label><input value={dSku} onChange={(e) => setDSku(e.target.value)} dir="ltr" className="h-9 w-40 rounded-lg border border-line bg-surface px-2 text-xs" /></div>
+            <div><label className="mb-1 block text-[10px] text-muted">تعداد</label><input value={dQty} onChange={(e) => setDQty(e.target.value)} type="number" min={1} className="h-9 w-20 rounded-lg border border-line bg-surface px-2 text-center text-xs" /></div>
             <div><label className="mb-1 block text-[10px] text-muted">نوع</label>
-              <select value={dKind} onChange={(e) => setDKind(e.target.value as "damage" | "loss")} className="h-9 rounded-lg border border-line bg-white px-2 text-xs">
+              <select value={dKind} onChange={(e) => setDKind(e.target.value as "damage" | "loss")} className="h-9 rounded-lg border border-line bg-surface px-2 text-xs">
                 <option value="damage">خرابی</option><option value="loss">مفقودی</option>
               </select>
             </div>
-            <div className="flex-1"><label className="mb-1 block text-[10px] text-muted">دلیل</label><input value={dReason} onChange={(e) => setDReason(e.target.value)} className="h-9 w-full rounded-lg border border-line bg-white px-2 text-xs" /></div>
+            <div className="flex-1"><label className="mb-1 block text-[10px] text-muted">دلیل</label><input value={dReason} onChange={(e) => setDReason(e.target.value)} className="h-9 w-full rounded-lg border border-line bg-surface px-2 text-xs" /></div>
             <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={dHold} onChange={(e) => setDHold(e.target.checked)} /> معلق (نیازمند تایید)</label>
-            <button onClick={() => void reportDamage()} disabled={loading} className="h-9 rounded-full bg-primary px-4 text-xs font-bold text-white">ثبت</button>
+            <button onClick={() => void reportDamage()} disabled={loading} className="h-9 rounded-full bg-primary px-4 text-xs font-bold text-on-accent">ثبت</button>
           </div>
           <div className="overflow-hidden rounded-card border border-line bg-surface">
             <table className="w-full text-sm">
@@ -484,7 +484,7 @@ export default function InventoryClient() {
                     <td className="p-3 text-center text-xs">{stateFa[r.state] ?? r.state}</td>
                     <td className="p-3 text-center">
                       {r.state === "DRAFT" && <>
-                        <button onClick={() => void damageAction(r.id, "post")} className="ml-1 rounded-full bg-ink px-3 py-1 text-xs font-bold text-white">ثبت نهایی</button>
+                        <button onClick={() => void damageAction(r.id, "post")} className="ml-1 rounded-full bg-ink px-3 py-1 text-xs font-bold text-on-accent">ثبت نهایی</button>
                         <button onClick={() => void damageAction(r.id, "cancel")} className="rounded-full border border-line px-3 py-1 text-xs font-bold">لغو</button>
                       </>}
                     </td>
@@ -511,7 +511,7 @@ export default function InventoryClient() {
                   <td className="p-3 text-center">{fa(a.payload.lines?.length ?? 0)}</td>
                   <td className="p-3 text-center text-xs">{new Date(a.createdAt).toLocaleDateString("fa-IR")}</td>
                   <td className="p-3 text-center">
-                    <button onClick={() => void decideApproval(a.id, true)} className="ml-1 rounded-full bg-green-600 px-3 py-1 text-xs font-bold text-white">تایید</button>
+                    <button onClick={() => void decideApproval(a.id, true)} className="ml-1 rounded-full bg-app-ok px-3 py-1 text-xs font-bold text-on-accent">تایید</button>
                     <button onClick={() => void decideApproval(a.id, false)} className="rounded-full border border-line px-3 py-1 text-xs font-bold">رد</button>
                   </td>
                 </tr>
@@ -533,16 +533,16 @@ export default function InventoryClient() {
                   <td className="p-3 font-bold text-xs" dir="ltr">{s.key}</td>
                   <td className="p-3">
                     {s.type === "boolean" ? (
-                      <select defaultValue={String(s.value)} onChange={(e) => setSettingDraft({ ...settingDraft, [s.key]: e.target.value })} className="rounded-lg border border-line bg-white px-2 py-1 text-xs">
+                      <select defaultValue={String(s.value)} onChange={(e) => setSettingDraft({ ...settingDraft, [s.key]: e.target.value })} className="rounded-lg border border-line bg-surface px-2 py-1 text-xs">
                         <option value="true">فعال</option><option value="false">غیرفعال</option>
                       </select>
                     ) : (
-                      <input defaultValue={String(s.value ?? "")} onChange={(e) => setSettingDraft({ ...settingDraft, [s.key]: e.target.value })} type={s.type === "number" ? "number" : "text"} className="w-28 rounded-lg border border-line bg-white px-2 py-1 text-xs" />
+                      <input defaultValue={String(s.value ?? "")} onChange={(e) => setSettingDraft({ ...settingDraft, [s.key]: e.target.value })} type={s.type === "number" ? "number" : "text"} className="w-28 rounded-lg border border-line bg-surface px-2 py-1 text-xs" />
                     )}
                   </td>
                   <td className="p-3 text-xs text-muted">{s.description}</td>
                   <td className="p-3 text-center">
-                    {settingDraft[s.key] !== undefined && <button onClick={() => void saveSetting(s.key)} className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">ذخیره</button>}
+                    {settingDraft[s.key] !== undefined && <button onClick={() => void saveSetting(s.key)} className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-on-accent">ذخیره</button>}
                   </td>
                 </tr>
               ))}

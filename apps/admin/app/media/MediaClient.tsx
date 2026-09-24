@@ -76,7 +76,7 @@ export default function MediaLibrary() {
               )}
               <button
                 onClick={() => void remove(m.id)}
-                className="absolute end-1 top-1 hidden rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white group-hover:block"
+                className="absolute end-1 top-1 hidden rounded-full bg-app-primary-soft0 px-2 py-0.5 text-[10px] font-bold text-on-accent group-hover:block"
               >
                 حذف
               </button>

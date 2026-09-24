@@ -75,7 +75,7 @@ export default async function LoginPage({
         />
         <button
           type="submit"
-          className="h-11 w-full rounded-xl bg-primary text-white transition-colors hover:bg-primary-strong"
+          className="h-11 w-full rounded-xl bg-primary text-on-accent transition-colors hover:bg-primary-strong"
         >
           ورود
         </button>

@@ -78,8 +78,8 @@ export default function SettingsClient() {
 
   return (
     <div className="flex flex-col gap-6">
-      {msg ? <p className="rounded-xl bg-green-50 px-4 py-2 text-xs font-bold text-green-800">{msg}</p> : null}
-      {error ? <p className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-600">{error}</p> : null}
+      {msg ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">{msg}</p> : null}
+      {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
 
       {/* تم ظاهری */}
       <div className="rounded-card border border-line bg-surface p-5">
@@ -89,7 +89,7 @@ export default function SettingsClient() {
         <div className="mt-4 flex flex-wrap gap-2">
           {presets.map((p) => (
             <button key={p.name} onClick={() => setTheme({ ...theme, primary: p.primary, ink: p.ink, bg: p.bg })}
-              className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5 text-xs font-bold hover:border-primary">
+              className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-bold hover:border-primary">
               <span className="h-4 w-4 rounded-full" style={{ background: p.primary }} />
               {p.name}
             </button>
@@ -100,43 +100,43 @@ export default function SettingsClient() {
           <label className="text-xs font-bold text-ink/70">رنگ اصلی
             <div className="mt-1 flex items-center gap-2">
               <input type="color" value={theme.primary} onChange={(e) => setTheme({ ...theme, primary: e.target.value })} className="h-10 w-12 cursor-pointer rounded-lg border border-line" />
-              <input value={theme.primary} onChange={(e) => setTheme({ ...theme, primary: e.target.value })} dir="ltr" className="w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" />
+              <input value={theme.primary} onChange={(e) => setTheme({ ...theme, primary: e.target.value })} dir="ltr" className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" />
             </div>
           </label>
           <label className="text-xs font-bold text-ink/70">رنگ متن
             <div className="mt-1 flex items-center gap-2">
               <input type="color" value={theme.ink} onChange={(e) => setTheme({ ...theme, ink: e.target.value })} className="h-10 w-12 cursor-pointer rounded-lg border border-line" />
-              <input value={theme.ink} onChange={(e) => setTheme({ ...theme, ink: e.target.value })} dir="ltr" className="w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" />
+              <input value={theme.ink} onChange={(e) => setTheme({ ...theme, ink: e.target.value })} dir="ltr" className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" />
             </div>
           </label>
           <label className="text-xs font-bold text-ink/70">رنگ پس‌زمینه
             <div className="mt-1 flex items-center gap-2">
               <input type="color" value={theme.bg} onChange={(e) => setTheme({ ...theme, bg: e.target.value })} className="h-10 w-12 cursor-pointer rounded-lg border border-line" />
-              <input value={theme.bg} onChange={(e) => setTheme({ ...theme, bg: e.target.value })} dir="ltr" className="w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" />
+              <input value={theme.bg} onChange={(e) => setTheme({ ...theme, bg: e.target.value })} dir="ltr" className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" />
             </div>
           </label>
           <label className="text-xs font-bold text-ink/70">فونت تیترها
-            <select value={theme.fontHeading} onChange={(e) => setTheme({ ...theme, fontHeading: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm">
+            <select value={theme.fontHeading} onChange={(e) => setTheme({ ...theme, fontHeading: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm">
               {FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
             </select>
           </label>
           <label className="text-xs font-bold text-ink/70">فونت متن
-            <select value={theme.fontBody} onChange={(e) => setTheme({ ...theme, fontBody: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm">
+            <select value={theme.fontBody} onChange={(e) => setTheme({ ...theme, fontBody: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm">
               {FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
             </select>
           </label>
           <label className="text-xs font-bold text-ink/70">نام فروشگاه
-            <input value={theme.storeName} onChange={(e) => setTheme({ ...theme, storeName: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm" />
+            <input value={theme.storeName} onChange={(e) => setTheme({ ...theme, storeName: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" />
           </label>
         </div>
 
         {/* پیش‌نمایش زنده */}
         <div className="mt-4 rounded-xl p-4" style={{ background: theme.bg, color: theme.ink, fontFamily: theme.fontBody }}>
           <p className="text-lg font-black" style={{ fontFamily: theme.fontHeading, color: theme.primary }}>{theme.storeName}</p>
-          <button className="mt-2 rounded-full px-4 py-1.5 text-xs font-black text-white" style={{ background: theme.primary }}>دکمه نمونه</button>
+          <button className="mt-2 rounded-full px-4 py-1.5 text-xs font-black text-on-accent" style={{ background: theme.primary }}>دکمه نمونه</button>
         </div>
 
-        <button onClick={saveTheme} disabled={loading} className="mt-4 h-10 rounded-full bg-primary px-6 text-sm font-black text-white disabled:opacity-60">ذخیره تم</button>
+        <button onClick={saveTheme} disabled={loading} className="mt-4 h-10 rounded-full bg-primary px-6 text-sm font-black text-on-accent disabled:opacity-60">ذخیره تم</button>
       </div>
 
       {/* موشن لندینگ */}
@@ -149,12 +149,12 @@ export default function SettingsClient() {
             موشن فعال باشد
           </label>
           <label className="text-xs font-bold text-ink/70">شدت
-            <select value={motion.intensity} onChange={(e) => setMotion({ ...motion, intensity: e.target.value })} className="ms-2 rounded-xl border border-line bg-white px-3 py-2 text-sm">
+            <select value={motion.intensity} onChange={(e) => setMotion({ ...motion, intensity: e.target.value })} className="ms-2 rounded-xl border border-line bg-surface px-3 py-2 text-sm">
               <option value="subtle">ملایم (پیشنهادی)</option>
               <option value="playful">برجسته</option>
             </select>
           </label>
-          <button onClick={saveMotion} disabled={loading} className="h-10 rounded-full bg-primary px-6 text-sm font-black text-white disabled:opacity-60">ذخیره موشن</button>
+          <button onClick={saveMotion} disabled={loading} className="h-10 rounded-full bg-primary px-6 text-sm font-black text-on-accent disabled:opacity-60">ذخیره موشن</button>
         </div>
       </div>
 

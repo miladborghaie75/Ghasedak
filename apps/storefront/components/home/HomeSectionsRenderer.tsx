@@ -42,7 +42,7 @@ export function SectionBlock({ section }: { section: HomeSectionRow }) {
             <h2 className="font-display text-2xl text-plum sm:text-3xl">{str(cfg.title, "پیشنهاد ویژه")}</h2>
             {cfg.subtitle ? <p className="mt-2 text-sm text-muted">{str(cfg.subtitle)}</p> : null}
             {cfg.ctaLabel ? (
-              <span className="mt-4 inline-flex h-10 items-center rounded-full bg-primary px-5 text-sm font-bold text-white">
+              <span className="mt-4 inline-flex h-10 items-center rounded-full bg-primary px-5 text-sm font-bold text-on-accent">
                 {str(cfg.ctaLabel, "مشاهده")}
               </span>
             ) : null}
@@ -70,7 +70,7 @@ export function SectionBlock({ section }: { section: HomeSectionRow }) {
               {cfg.title ? <h2 className="font-display text-xl text-plum sm:text-2xl">{str(cfg.title)}</h2> : null}
               <p className="mt-3 whitespace-pre-line text-sm leading-8 text-muted">{str(cfg.text)}</p>
               {cfg.ctaLabel ? (
-                <Link href={str(cfg.ctaHref, "#")} className="mt-4 inline-flex h-10 items-center rounded-full bg-primary px-5 text-sm font-bold text-white">
+                <Link href={str(cfg.ctaHref, "#")} className="mt-4 inline-flex h-10 items-center rounded-full bg-primary px-5 text-sm font-bold text-on-accent">
                   {str(cfg.ctaLabel, "بیشتر")}
                 </Link>
               ) : null}
