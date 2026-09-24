@@ -40,6 +40,7 @@ export const MENU: MenuGroup[] = [
     items: [
       { title: "سفارش‌ها", href: "/orders", permission: "orders.view" },
       { title: "پرداخت‌ها", href: "/payments", permission: "payments.view" },
+      { title: "مشتریان و سبد رهاشده", href: "/customers", permission: "customers.view" },
     ],
   },
   {
