@@ -2,6 +2,13 @@
 
 > آخرین ممیزی: ۱۴۰۵/۰۷/۰۳ — بر اساس runtime واقعی (تست ۱۹/۱۹، تایپ‌چک صفر خطا، سه سرور زنده).
 > این سند «نقشهٔ ماندگار معماری» است؛ با هر تغییر معماری به‌روزرسانی شود (بند ۵ Master).
+>
+> **به‌روزرسانی ۴ فاز (۱۴۰۵/۰۷/۰۳):**
+> - Phase 1 (commit 41144f6): git baseline + بکاپ منطقی واقعی (COPY CSV) + restore-test تأییدشده + Task Scheduler روزانه 02:00 — بند ۹۳ از MISSING به **DONE (پایه)** رسید.
+> - Phase 2 (commit 9863afe): Theme System واقعی Day/Night/System توکن‌محور در هر دو اپ + ۲۲۸ رنگ هاردکد → توکن معنایی + audit کنتراست AA — بند ۴۹–۵۷ از MISSING به **DONE** رسید.
+> - Phase 3 (commit 79b9abc): Size System لایه‌مند (سایزچارت + قواعد برند/مدل + sister size) + Size Finder سه‌گامی تعاملی متصل به VariantMatrix + ۸/۸ تست — بند ۴۲/۴۳ از PARTIAL به **DONE (پایه)** رسید.
+> - Phase 4 (commit 87c0718): CRM (پروفایل + sync آمار از Orders) + Abandoned Cart زنده از Cart + تنظیمات با audit + Consent عمومی — بند ۳۱/۴۰ از PARTIAL/MISSING به **DONE (پایه)** رسید.
+> - ریسک باقی‌مانده: نگهداشت بکاپ فقط محلی است (نسخه خارج از دیسک توصیه شده در README بکاپ).
 
 ## ۱) Architecture / Monorepo Map
 
@@ -60,18 +67,18 @@ helmet + CORS allowlist + rate-limit (login 10/min، checkout 20/min) + httpOnly
 | Multi-warehouse/Transfer/Quarantine/Damage/Reports انبار/Settings انبار/Approval انبارگردانی | **DONE** | تسک انبار |
 | Search | **PARTIAL** — جستجوی SQL + نرمال‌سازی؛ فاز W: Meilisearch/pg_trgm | چک‌لیست ردیف ۱۴ |
 | Price History / Channel Publishing کامل | **PARTIAL** — VariantPrice سطح کانال فعال؛ PriceHistory مدل دارد ولی UI تاریخچه ندارد | بند ۱۵ |
-| Dark Mode (بند ۴۹–۵۷) | **MISSING** — تک‌تم روشن؛ مستند در globals.css | بزرگ‌ترین شکاف UX |
-| Size Finder تعاملی (بند ۴۳) | **PARTIAL** — SizeGuide + NeedFinder هست؛ سنجش زیر‌سینه/سینه گام‌به‌گام نیست | بند ۴۳ |
+| Dark Mode (بند ۴۹–۵۷) | **DONE** — توکن‌محور، سه حالت، persistence، contrast AA (audit ۲۵ نمونه) | Phase 2 |
+| Size Finder تعاملی (بند ۴۳) | **DONE (پایه)** — سه گام + سایزچارت + قواعد برند/مدل + sister size + اتصال به انتخابگر | Phase 3 |
 | Reviews | **PARTIAL** — مدل Review/ReviewStatus؛ UI عمومی حجیم نشده (طبق بند ۱۰۷ درست) | بند ۱۰۷ |
-| CRM/Loyalty | **PARTIAL** — CustomerAccount + CreditTransaction مدل؛ UI CRM نیست | چک‌لیست ۱۶/۲۱ |
-| Abandoned Cart (بند ۴۰) | **MISSING** — Cart مدل دارد؛ تشخیص رهاشدگی/کمپین نیست | بند ۴۰ |
+| CRM/Loyalty | **DONE (پایه CRM)** — پروفایل/تاریخچه/مسدودسازی + sync آمار؛ Loyalty ledger همچنان آینده | Phase 4 |
+| Abandoned Cart (بند ۴۰) | **DONE (پایه)** — تشخیص زنده از Cart + تنظیمات + consent؛ پیام‌رسانی = NOT CONFIGURED بدون credential SMS | Phase 4 |
 | Page Builder | **PARTIAL** — HomeSection (صفحه‌ساز اصلی) فعال؛ بیلدر عمومی صفحه (CmsPage) نیست | بند ۷۶ |
 | AI Gateway/Tool Registry (بند ۵۸–۶۵) | **MISSING** — فقط seo-suggest داخلی؛ فلگ ai خاموش | فاز AI |
 | Integrations/Social/Divar/Torob (بند ۶۶–۷۱) | **MISSING** — SalesChannel/WebhookEvent مدل؛ آداپتور نیست | فاز Z |
 | SEO | **DONE (پایه)** — sitemap/robots/OG/SeoMeta/SlugRedirect + seo-suggest؛ schema.org/Product = PARTIAL | بند ۷۲ |
 | Offline POS (بند ۲۸) | **MISSING** | بند ۲۸ |
 | 2FA/Security Events (بند ۸۸) | **MISSING** | فاز AC |
-| Backup/DR (بند ۹۳) | **MISSING** — pg_dump خودکار/تست بازآوری نیست | ریسک بالا (ریپو هم git نیست) |
+| Backup/DR (بند ۹۳) | **DONE (پایه)** — بکاپ منطقی واقعی (COPY CSV + manifest/sha256) + restore-test تأییدشده (۱۳۱/۱۳۱ + FK canary) + cron روزانه؛ نگهداشت خارج از دیسک = توصیه باز | Phase 1 |
 | Observability (بند ۸۰) | **PARTIAL** — requestId/error log؛ metrics/trace نیست | فاز AC |
 | Redis/Storage در Health | **NOT CONFIGURED** — صادقانه degraded (بند ۱۱۱) | سرویس خارجی |
 | SMS/پرداخت واقعی | **NOT CONFIGURED** — آداپتور واقعی، بدون credential فعال نمی‌شود | بند ۱۱۱ رعایت شده |
@@ -90,7 +97,8 @@ helmet + CORS allowlist + rate-limit (login 10/min، checkout 20/min) + httpOnly
 ۱۰. **سخت‌سازی امنیت** (2FA، CSRF، Security Events — فاز AC)
 
 ## ۹) ریسک‌های فعال
-1. **بدون git** — هر خرابی دیسک = از دست رفتن کل پلتفرم.
-2. **بدون بکاپ خودکار DB** (بند ۹۳ MISSING).
-3. Shadow-replay migrationها به‌خاطر drift قدیمی `pos_shift_link` شکست می‌خورد — migration جدید فقط با الگوی diff زنده (مستند در `.freebuff/run.md`).
+1. ~~بدون git~~ → **حل شد** (baseline 46ca8e5 + ۴ commit فازها؛ remote هنوز ندارد — push به remote توصیه می‌شود).
+2. ~~بدون بکاپ خودکار DB~~ → **حل شد** (cron روزانه 02:00 + restore-test). نگهداشت نسخه خارج از دیسک هنوز دستی است.
+3. Shadow-replay migrationها به‌خاطر drift قدیمی `pos_shift_link` شکست می‌خورد — migration جدید فقط با الگوی diff زنده (مستند در `.freebuff/run.md` و اسکریپت restore از `migrate diff --from-empty` استفاده می‌کند).
 4. Health همیشه degraded گزارش می‌دهد (redis/storage) — صادقانه ولی برای مانیتورینگ production نیاز به تفکیک has:redis دارد.
+5. اسکرین‌شات پریویو در برخی حالت‌های تم شب آرتیفکت capture دارد — audit DOM/کنتراست جایگزین شده (مستند در commit فاز ۲).
