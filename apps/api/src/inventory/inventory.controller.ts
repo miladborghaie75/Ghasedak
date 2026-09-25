@@ -128,7 +128,7 @@ export class InventoryController {
   async quarantineDestroy(@Req() req: Request, @Param("id") id: string, @Body() body: { note?: string }) {
     const result = await this.ops.quarantineDestroy(id, this.actor(req), body.note);
     if (result.value > 0) {
-      await this.journal.post({
+      await this.journal.postOrNotify({
         description: "انهدام کالای قرنطینه — خسارت",
         sourceType: "damage",
         sourceId: result.damageRecordId,
@@ -137,7 +137,7 @@ export class InventoryController {
           { accountCode: "6000", debit: result.value },
           { accountCode: "1200", credit: result.value },
         ],
-      }).catch(() => undefined); // سند هرگز عملیات انبار را برگردان نمی‌کند
+      });
     }
     return result;
   }
@@ -155,7 +155,7 @@ export class InventoryController {
   async reportDamage(@Req() req: Request, @Body() body: { warehouseId: string; variantSku: string; qty: number; kind: "damage" | "loss"; reason?: string; holdForApproval?: boolean; note?: string }) {
     const rec = await this.ops.reportDamage({ ...body, actorId: this.actor(req) });
     if (rec.state === "POSTED" && rec.unitCost > 0n) {
-      await this.journal.post({
+      await this.journal.postOrNotify({
         description: `${rec.kind === "loss" ? "مفقودی" : "خرابی"} ${rec.number}`,
         sourceType: "damage",
         sourceId: rec.id,
@@ -164,7 +164,7 @@ export class InventoryController {
           { accountCode: "6000", debit: Number(rec.unitCost * BigInt(rec.qty)) },
           { accountCode: "1200", credit: Number(rec.unitCost * BigInt(rec.qty)) },
         ],
-      }).catch(() => undefined);
+      });
     }
     return rec;
   }
@@ -175,7 +175,7 @@ export class InventoryController {
     const rec = await this.ops.postDamage(id, this.actor(req));
     const after = await this.prisma.damageRecord.findUniqueOrThrow({ where: { id } });
     if (after.unitCost > 0n) {
-      await this.journal.post({
+      await this.journal.postOrNotify({
         description: `${after.kind === "loss" ? "مفقودی" : "خرابی"} ${after.number}`,
         sourceType: "damage",
         sourceId: after.id,
@@ -184,7 +184,7 @@ export class InventoryController {
           { accountCode: "6000", debit: Number(after.unitCost * BigInt(after.qty)) },
           { accountCode: "1200", credit: Number(after.unitCost * BigInt(after.qty)) },
         ],
-      }).catch(() => undefined);
+      });
     }
     return rec;
   }
@@ -216,7 +216,7 @@ export class InventoryController {
         entityId: body.key,
         newValues: { value: body.value } as object,
       },
-    }).catch(() => undefined);
+    }).catch(() => undefined); // audit — شکستش حیاتی نیست (خود سند تنظیمات ذخیره شده)
     return { ok: true };
   }
 
@@ -326,7 +326,7 @@ export class InventoryController {
         entityId: id,
         newValues: { state, note: body.note } as object,
       },
-    }).catch(() => undefined);
+    }).catch(() => undefined); // audit — شکستش حیاتی نیست (تصمیم تایید ثبت شده)
     return { ok: true, state };
   }
 

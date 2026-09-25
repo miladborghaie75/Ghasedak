@@ -247,7 +247,7 @@ export class PosService {
     const itemLines = priced
       .map((l) => `${l.qty}× ${l.title} [${l.sku}${l.barcode ? ` | بارکد ${l.barcode}` : ""}]`)
       .join(" ، ");
-    await this.journal.post({
+    await this.journal.postOrNotify({
       description: `فروش POS ${created.number} — ${itemLines}`,
       sourceType: "pos_invoice",
       sourceId: created.id,

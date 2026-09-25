@@ -27,6 +27,67 @@ export interface PostEntryInput {
 export class JournalService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * درس ریسک ۶ (audit معماری): شکست سند هرگز بی‌صدا swallow نمی‌شود.
+   * عملیات اصلی (GRN/فاکتور/پرداخت/…) سرِ جایش می‌ماند (سند اثر ثانویه است)، اما:
+   * 1) Notification(ADMIN) با جزئیات کامل (sourceType/sourceId/کد خطا/شرح) — در زنگ ادمین
+   * 2) AuditLog با action accounting.post.failure — دنبال‌پذیر دائمی
+   * 3) خروجی { posted: false, error } تا caller اگر خواست صریحاً تصمیم بگیرد
+   * idempotent key: sourceType+sourceId+errorCode+ساعت — طوفان نوتیف نمی‌سازد (بند ۱۱۶).
+   */
+  async postOrNotify(input: PostEntryInput): Promise<{ posted: boolean; id?: string; number?: string; error?: { code?: string; message: string } }> {
+    try {
+      const r = await this.post(input);
+      return { posted: true, id: r.id, number: r.number };
+    } catch (e) {
+      const errBody = (e as { response?: { code?: string; message?: string } }).response ?? null;
+      const code = errBody?.code ?? (e instanceof Error ? e.constructor.name : "UNKNOWN");
+      const message = errBody?.message ?? (e instanceof Error ? e.message : String(e));
+      const sourceKey = `${input.sourceType ?? "manual"}:${input.sourceId ?? "-"}`;
+      const hourBucket = new Date().toISOString().slice(0, 13); // نوتیف ساعتی — idempotent
+      // JSON-safe payload (JournalLineInput[] → plain object[])
+      const safeLines = JSON.parse(JSON.stringify(input.lines ?? [])) as object[];
+      try {
+        const dup = await this.prisma.notification.findFirst({
+          where: { channel: "ADMIN", templateKey: `journal-fail:${sourceKey}:${code}:${hourBucket}` },
+        });
+        if (!dup) {
+          await this.prisma.notification.create({
+            data: {
+              channel: "ADMIN",
+              templateKey: `journal-fail:${sourceKey}:${code}:${hourBucket}`,
+              to: "admin-dashboard",
+              payload: {
+                title: `⚠️ شکست سند حسابداری — ${sourceKey}`,
+                code,
+                message,
+                sourceType: input.sourceType ?? null,
+                sourceId: input.sourceId ?? null,
+                description: input.description ?? null,
+                lines: safeLines,
+              },
+            },
+          });
+        }
+        await this.prisma.auditLog.create({
+          data: {
+            actorId: input.actorId ?? null,
+            action: "accounting.post.failure",
+            entity: "JournalEntry",
+            entityId: input.sourceId ?? sourceKey,
+            oldValues: {},
+            newValues: { code, message, sourceType: input.sourceType ?? null, description: input.description ?? null, lines: safeLines },
+          },
+        });
+      } catch {
+        // حتی ثبت شکستِ ثبت‌شکست نباید درخواست اصلی را بشکند — اما لاگ ساختاری خروج هم می‌رود
+      }
+      // eslint-disable-next-line no-console
+      console.error(`[journal.postOrNotify] FAILED ${sourceKey} ${code}: ${message}`, JSON.stringify(input.lines ?? []));
+      return { posted: false, error: { code, message } };
+    }
+  }
+
   async post(input: PostEntryInput): Promise<{ id: string; number: string }> {
     if (!input.lines || input.lines.length < 2) {
       throw new BadRequestException({ code: "JOURNAL_INVALID", message: "سند حداقل دو ردیف لازم دارد." });

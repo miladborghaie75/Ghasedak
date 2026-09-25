@@ -10,6 +10,8 @@ interface Monthly { month: number; revenue: string; expense: string; }
 interface EntryRow { id: string; number: string; date: string; description: string | null; lines: Array<{ account: { code: string; name: string }; debit: string; credit: string }>; }
 interface SaleRow { number: string; total: string; party: string; channel: string; kind: string; createdAt: string; }
 interface AccountRow { code: string; name: string; type: string; }
+/** درس ریسک ۶ — شکست ثبت سند از postOrNotify (Notification journal-fail:*) */
+interface PostFailure { id: string; key: string; code: string; message: string; sourceType: string | null; sourceId: string | null; description: string | null; lines: Array<{ accountCode?: string; debit?: number; credit?: number }>; at: string; }
 
 const TABS = [
   { key: "balance", label: "تراز آزمایشی" },
@@ -38,15 +40,20 @@ export default function AccountingClient() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [payroll, setPayroll] = useState({ employeeName: "", title: "حقوق مرداد", amount: "" });
+  const [postFailures, setPostFailures] = useState<PostFailure[]>([]);
+  const [failureCount, setFailureCount] = useState(0);
+  const [showFailures, setShowFailures] = useState(false);
 
   useEffect(() => {
     void (async () => {
-      const [tbR, intR] = await Promise.all([
+      const [tbR, intR, failR] = await Promise.all([
         call<{ items?: TBRow[] } | TBRow[]>("/admin/accounting/trial-balance"),
         call<Integrity>("/admin/accounting/integrity"),
+        call<{ items: PostFailure[]; failureCount7d: number }>("/admin/accounting/post-failures"),
       ]);
       if (tbR.ok && tbR.data) setTb(Array.isArray(tbR.data) ? tbR.data : (tbR.data.items ?? []));
       if (intR.ok && intR.data) setIntegrity(intR.data);
+      if (failR.ok && failR.data) { setPostFailures(failR.data.items); setFailureCount(failR.data.failureCount7d); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -98,6 +105,38 @@ export default function AccountingClient() {
 
   return (
     <div className="flex flex-col gap-5">
+      {/* درس ریسک ۶ — شکست‌های posting هرگز بی‌صدا نمی‌مانند؛ بنر هشدار تا رفع باقی است */}
+      {failureCount > 0 ? (
+        <div className="rounded-card border border-app-err bg-app-primary-soft p-4">
+          <button onClick={() => setShowFailures((s) => !s)} className="flex w-full items-center justify-between text-start">
+            <span className="text-sm font-black text-app-err">
+              ⚠️ {fa(failureCount)} شکست ثبت سند حسابداری در ۷ روز اخیر — اسناد ثانویه ثبت نشده‌اند (عملیات اصلی سالم است)
+            </span>
+            <span className="text-xs font-bold text-app-err">{showFailures ? "بستن ▲" : "مشاهده جزئیات ▼"}</span>
+          </button>
+          {showFailures ? (
+            <ul className="mt-3 flex flex-col gap-2">
+              {postFailures.map((f) => (
+                <li key={f.id} className="rounded-xl border border-app-err/40 bg-surface p-3 text-xs">
+                  <p className="font-black text-app-err" dir="ltr">{f.code}</p>
+                  <p className="mt-0.5 text-ink">{f.message}</p>
+                  <p className="mt-0.5 text-muted">
+                    منبع: <span dir="ltr">{f.sourceType ?? "—"}{f.sourceId ? ` · ${f.sourceId.slice(0, 12)}` : ""}</span>
+                    {f.description ? ` · ${f.description}` : ""} · {new Date(f.at).toLocaleString("fa-IR")}
+                  </p>
+                  {f.lines.length > 0 ? (
+                    <p className="mt-0.5 text-muted" dir="ltr">
+                      {f.lines.map((l) => `${l.accountCode ?? "?"}:${(l.debit ?? 0) > 0 ? `Dr${l.debit}` : `Cr${l.credit}`}`).join(" | ")}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+              {postFailures.length === 0 ? <li className="text-xs text-muted">جزئیاتی در ۷ روز اخیر نیست.</li> : null}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
       {integrity ? (
         <div className={`rounded-card border p-4 text-sm font-bold ${integrity.balanced ? "border-app-ok bg-app-primary-soft text-app-ok" : "border-app-err bg-app-primary-soft text-app-err"}`}>
           {integrity.balanced ? `توازن اسناد برقرار است ✅ — بدهکار ${fa(integrity.debit)} = بستانکار ${fa(integrity.credit)}` : "⚠️ عدم توازن!"}

@@ -312,7 +312,7 @@ export class PaymentsService implements OnModuleInit {
     const itemLines = order.items
       .map((it) => `${it.qty}× ${it.titleSnapshot} [${it.variant?.sku ?? ""}${it.variant?.barcode ? ` | بارکد ${it.variant.barcode}` : ""}]`)
       .join(" ، ");
-    await this.journal.post({
+    await this.journal.postOrNotify({
       description: `فروش سفارش ${order.code} — ${itemLines}`,
       sourceType: "order",
       sourceId: orderId,

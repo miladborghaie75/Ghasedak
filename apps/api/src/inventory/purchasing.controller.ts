@@ -98,7 +98,7 @@ export class PurchasingController {
     // این ساختار از دوبارشماری انبار/AP جلوگیری می‌کند و 1200 = ارزش واقعی موجودی می‌ماند.
     const total = grn.items.reduce((acc, i) => acc + Number(i.unitCost) * i.qty + Number(i.landedCost), 0);
     if (total > 0) {
-      await this.journal.post({
+      await this.journal.postOrNotify({
         description: `دریافت کالا ${grn.number}`,
         sourceType: "purchase",
         sourceId: grn.id,
@@ -107,7 +107,7 @@ export class PurchasingController {
           { accountCode: "1200", debit: total },
           { accountCode: "2150", credit: total },
         ],
-      }).catch(() => undefined);
+      });
     }
     return grn;
   }
@@ -142,13 +142,13 @@ export class PurchasingController {
       if (diff > 0) lines.push({ accountCode: "1200", debit: diff });
       if (diff < 0) lines.push({ accountCode: "1200", credit: -diff });
       if (grand > 0) lines.push({ accountCode: "2100", credit: grand });
-      await this.journal.post({
+      await this.journal.postOrNotify({
         description: `فاکتور خرید ${invoice.number}`,
         sourceType: "purchase_invoice",
         sourceId: invoice.id,
         actorId: this.actor(req),
         lines,
-      }).catch(() => undefined);
+      });
     }
     // ارسال خودکار فاکتور به تامین‌کننده — بند ۲۷/۱۱۱: تنظیم per-scope؛ ردیف تحویل با state QUEUED/SENT/FAILED؛
     // بدون credential فقط صف + لاگ — هیچ جعل «ارسال شد» (handled در VendorNotifyService)
@@ -211,7 +211,7 @@ export class PurchasingController {
     const result = await this.purchasing.payInvoice({ invoiceId: id, amount: body.amount, method: body.method, actorId: this.actor(req) });
     // سند حسابداری پرداخت — بند ۲۹: Dr AP / Cr نقد-بانک (روش تعیین‌کننده حساب است)
     const cashAccount = body.method === "cash" ? "1000" : "1100";
-    await this.journal.post({
+    await this.journal.postOrNotify({
       description: `پرداخت فاکتور خرید — ${result.invoiceNumber}`,
       sourceType: "purchase_payment",
       sourceId: id,
@@ -220,7 +220,7 @@ export class PurchasingController {
         { accountCode: "2100", debit: body.amount },
         { accountCode: cashAccount, credit: body.amount },
       ],
-    }).catch(() => undefined);
+    });
     return result;
   }
 }

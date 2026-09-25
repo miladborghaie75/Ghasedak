@@ -43,7 +43,7 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
         await this.handle(ev.name, ev.payload as Record<string, unknown>);
         await this.prisma.domainEventOutbox.update({
           where: { id: ev.id },
-          data: { state: "PROCESSED" as never, processedAt: new Date() },
+          data: { state: "DISPATCHED" as never, processedAt: new Date() },
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "unknown";

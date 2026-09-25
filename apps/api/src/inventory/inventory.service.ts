@@ -354,9 +354,16 @@ export class InventoryService {
       if (delta > 0) {
         const minQty = await this.settings.get<number>("minRestockQty");
         if (delta >= minQty) {
-          await tx.domainEventOutbox.create({
-            data: { name: "StockRestocked", payload: { warehouseId, variantSku, qty: delta, actorId } as never },
-          }).catch(() => undefined); // تکراری — idempotent
+          // درس ریسک ۶: catch خالی روی create داخل tx کافی نیست — P2002 تراکنش را در سطح DB
+          // abort می‌کند و ادامه‌ی tx با 25P02 می‌میرد. اول findFirst idempotent، بعد create:
+          const dupRestock = await tx.domainEventOutbox.findFirst({
+            where: { name: "StockRestocked", payload: { path: ["variantSku"], equals: variantSku }, createdAt: { gte: new Date(Date.now() - 6 * 3600_000) } },
+          });
+          if (!dupRestock) {
+            await tx.domainEventOutbox.create({
+              data: { name: "StockRestocked", payload: { warehouseId, variantSku, qty: delta, actorId } as never },
+            });
+          }
         }
       }
     } catch {

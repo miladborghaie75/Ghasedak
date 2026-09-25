@@ -329,7 +329,7 @@ export class AdminPanelController {
       adjusted.push({ sku: item.variantSku, diff });
     }
     if (lossValue > 0n) {
-      await this.journal.post({
+      await this.journal.postOrNotify({
         description: `کسری انبارگردانی ${st.number}`,
         sourceType: "stocktake",
         sourceId: st.id,
@@ -369,6 +369,45 @@ export class AdminPanelController {
       take: 20,
     });
     return { items, serverNow: new Date().toISOString() };
+  }
+
+  /**
+   * درس ریسک ۶ — شکست‌های ثبت سند حسابداری (۷ روز اخیر):
+   * منبع حقیقت = Notification(ADMIN) با templateKey `journal-fail:*` که postOrNotify می‌سازد +
+   * AuditLog accounting.post.failure برای count دائمی. برای بنر هشدار در UI حسابداری.
+   */
+  @Get("accounting/post-failures")
+  @RequirePermission("accounting.view")
+  async postFailures() {
+    const since = new Date(Date.now() - 7 * 24 * 3600_000);
+    const [notifs, auditCount] = await Promise.all([
+      this.prisma.notification.findMany({
+        where: { channel: "ADMIN", templateKey: { startsWith: "journal-fail:" }, createdAt: { gte: since } },
+        orderBy: { createdAt: "desc" },
+        take: 25,
+      }),
+      this.prisma.auditLog.count({ where: { action: "accounting.post.failure", createdAt: { gte: since } } }),
+    ]);
+    return {
+      items: notifs.map((n) => {
+        const p = (n.payload ?? {}) as {
+          code?: string; message?: string; sourceType?: string | null; sourceId?: string | null;
+          description?: string | null; lines?: Array<{ accountCode?: string; debit?: number; credit?: number }>;
+        };
+        return {
+          id: n.id,
+          key: n.templateKey,
+          code: p.code ?? "UNKNOWN",
+          message: p.message ?? "",
+          sourceType: p.sourceType ?? null,
+          sourceId: p.sourceId ?? null,
+          description: p.description ?? null,
+          lines: p.lines ?? [],
+          at: n.createdAt,
+        };
+      }),
+      failureCount7d: auditCount,
+    };
   }
 }
 
