@@ -1,6 +1,6 @@
 # Architecture Audit — قاصدک (ممیزی کامل مخزن، بند ۱۵۴ Master Prompt)
 
-> آخرین ممیزی: ۱۴۰۵/۰۷/۰۳ — بر اساس runtime واقعی (تست ۱۹/۱۹، تایپ‌چک صفر خطا، سه سرور زنده).
+> آخرین ممیزی: ۱۴۰۵/۰۷/۰۳ — بر اساس runtime واقعی (تست ۳۸/۳۸ در ۶ suite، تایپ‌چک صفر خطا، سرورهای API/Admin زنده).
 > این سند «نقشهٔ ماندگار معماری» است؛ با هر تغییر معماری به‌روزرسانی شود (بند ۵ Master).
 >
 > **به‌روزرسانی ۴ فاز (۱۴۰۵/۰۷/۰۳):**
@@ -10,6 +10,7 @@
 > - Phase 4 (commit 87c0718): CRM (پروفایل + sync آمار از Orders) + Abandoned Cart زنده از Cart + تنظیمات با audit + Consent عمومی — بند ۳۱/۴۰ از PARTIAL/MISSING به **DONE (پایه)** رسید.
 > - Phase 5 (پیش از این): Git remote (github.com/miladborghaie75/Ghasedak) + push snapshot + **Price History/Channel-aware Pricing** (PricingService واحد + PriceHistory ledger + public quote/feed) — بند ۱۵ به **DONE (پایه)** رسید.
 > - Phase 6 — Purchase Invoice Professional (بند ۲۷/۳۳/۳۴): میزکار فاکتور خرید اختصاصی + ProductPicker مشترک + QuickCreate + جزئیات حرفه‌ای + GRNI؛ Procurement UI از PARTIAL به **DONE (پایه)** رسید.
+> - Phase 6 closure (commit فعلی): (۱) آپلود پیوست مستقیم در میزکار و صفحه جزئیات فاکتور — همان endpoint رسانه `POST /admin/capabilities/media` (mime/magic/10MB) + attach با audit؛ رفع باگ URL پیوست (`mediaId` ≠ `storageKey` → detail حالا `mediaKey` می‌دهد و لینک `/api/media/:storageKey` واقعاً سرو می‌شود). (۲) چاپ حرفه‌ای A4 (`@media print` در globals.css: پالت روشن اجباری، حذف سایدبار/فرم‌ها، جدول بدون شکست، سربرگ اختصاصی سند + امضا) + بارکد وکتور بدون وابستگی (`components/print/Barcode.tsx`: Code39 شماره سند، EAN-13 هر ردیف). (۳) یکسان‌سازی کامل مسیر قیمت: `admin/inventory/bulk-price` حالا از `PricingService.changePrice` می‌گذرد (PriceHistory + رویداد PriceChanged همیشه)، بدون levelId → سطح صریح **BASE** (seed شد) با آینه `productVariant.price`، mode `fixed` → `delta`، مجوز `inventory.adjust|pricing.manage` + reason — ریسک ۷ بسته شد. (۴) RBAC پیوست‌ها با مجوز جایگزین `media.manage`.
 > - ریسک باقی‌مانده: نگهداشت بکاپ فقط محلی است (نسخه خارج از دیسک توصیه شده در README بکاپ).
 
 ## ۱) Architecture / Monorepo Map
@@ -66,10 +67,10 @@ helmet + CORS allowlist + rate-limit (login 10/min، checkout 20/min) + httpOnly
 | حوزه | وضعیت | توضیح |
 |---|---|---|
 | Storefront/Admin/POS/Cart/Checkout/Orders/Payments/Inventory core/Accounting core/RMA/Shipping/Event/Notifications بنیادی | **DONE** | runtime-تست‌شده، تست ۱۹/۱۹ |
-| Procurement (Supplier/PO/GRN/WAC/AP/Three-Way/PPV) | **DONE (پایه حرفه‌ای)** — میزکار فاکتور اختصاصی `/inventory/purchase/invoices/new` + جزئیات `/invoices/[id]` (snapshot/payments/AP/اثر انبار+حسابداری/audit/چاپ) + ProductPicker مشترک + QuickCreate + GRNI 2150 (GRN: Dr 1200/Cr 2150 ← فاکتور: Dr 2150+C1200/Cr AP ← پرداخت: Dr AP/Cr 1000|1100) — سند پرداخت از sourceType `purchase_payment` در detail | Phase 6 |
+| Procurement (Supplier/PO/GRN/WAC/AP/Three-Way/PPV) | **DONE (پایه حرفه‌ای) — Phase 6 بسته شد**: میزکار فاکتور اختصاصی `/inventory/purchase/invoices/new` + جزئیات `/invoices/[id]` (snapshot/payments/AP/اثر انبار+حسابداری/audit/چاپ حرفه‌ای A4 + بارکد) + ProductPicker مشترک + QuickCreate + GRNI 2150 + **پیوست مستقیم در میزکار/جزئیات** (endpoint رسانه مشترک + attach/detach با audit و mediaKey درست) | Phase 6 + closure |
 | Multi-warehouse/Transfer/Quarantine/Damage/Reports انبار/Settings انبار/Approval انبارگردانی | **DONE** | تسک انبار |
 | Search | **PARTIAL** — جستجوی SQL + نرمال‌سازی؛ فاز W: Meilisearch/pg_trgm | چک‌لیست ردیف ۱۴ |
-| Price History / Channel Publishing کامل | **PARTIAL** — VariantPrice سطح کانال فعال؛ PriceHistory مدل دارد ولی UI تاریخچه ندارد | بند ۱۵ |
+| Price History / Channel Publishing کامل | **DONE (پایه)** — VariantPrice سطح کانال + PriceHistory ledger + UI تاریخچه در Pricing + **همه مسیرهای نوشتن قیمت واحد شدند** (bulk-price انبار هم از PricingService.changePrice می‌گذرد — سطح BASE = قیمت پایه، ریسک ۷ بسته) | بند ۱۵ / Phase 5+6 |
 | Dark Mode (بند ۴۹–۵۷) | **DONE** — توکن‌محور، سه حالت، persistence، contrast AA (audit ۲۵ نمونه) | Phase 2 |
 | Size Finder تعاملی (بند ۴۳) | **DONE (پایه)** — سه گام + سایزچارت + قواعد برند/مدل + sister size + اتصال به انتخابگر | Phase 3 |
 | Reviews | **PARTIAL** — مدل Review/ReviewStatus؛ UI عمومی حجیم نشده (طبق بند ۱۰۷ درست) | بند ۱۰۷ |
@@ -106,4 +107,4 @@ helmet + CORS allowlist + rate-limit (login 10/min، checkout 20/min) + httpOnly
 4. Health همیشه degraded گزارش می‌دهد (redis/storage) — صادقانه ولی برای مانیتورینگ production نیاز به تفکیک has:redis دارد.
 5. اسکرین‌شات پریویو در برخی حالت‌های تم شب آرتیفکت capture دارد — audit DOM/کنتراست جایگزین شده (مستند در commit فاز ۲).
 6. **حسابداری خرید قبل از Phase 6 بی‌صدا fail می‌شد**: سند GRN/فاکتور با حساب `1300` پست می‌شد که در COA نیست و `.catch(() => undefined)` خطا را مخفی می‌کرد → یافته دود و اصلاح به GRNI (2150). **درس**: اسناد حسابداری هرگز نباید بی‌صدا swallow شوند — در سخت‌سازی آینده، شکست سند باید رویداد/لاگ خطا داشته باشد.
-7. `admin/inventory/bulk-price` (مسیر قدیمی تغییر گروهی قیمت با مجوز `inventory.adjust`) هنوز PriceHistory را دور می‌زند — باید روی `pricing.change` یکسان‌سازی شود (یادداشت باقی‌مانده Phase 5).
+7. ~~`admin/inventory/bulk-price` PriceHistory را دور می‌زد~~ → **حل شد (Phase 6 closure)**: مسیر روی `PricingService.changePrice` یکسان شد؛ بدون levelId سطح صریح BASE نوشته می‌شود (با آینه variant.price) و هر تغییر PriceHistory + رویداد دارد. برای سطح‌های کانالی بدون ردیف VariantPrice، اولین تعدیل ردیف می‌سازد (fallback قیمت پایه = رفتار قدیمی، حفظ شده).

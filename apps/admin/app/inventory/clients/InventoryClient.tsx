@@ -104,7 +104,7 @@ export default function InventoryClient() {
       method: "POST",
       body: JSON.stringify({ skus: [...selected], mode: bulkMode, amount: Number(bulkAmount) }),
     });
-    flash(r.ok, r.ok ? `قیمت ${fa(r.data?.changed ?? 0)} کالا به‌روزرسانی شد` : r.error?.message ?? "خطا");
+    flash(r.ok, r.ok ? `قیمت ${fa(r.data?.changed ?? 0)} کالا به‌روزرسانی و در تاریخچه قیمت ثبت شد` : r.error?.message ?? "خطا");
     if (r.ok) void load(q);
   };
 

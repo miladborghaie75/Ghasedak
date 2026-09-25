@@ -353,6 +353,8 @@ model Media {
   focalY     Int?
   variants   Json? // thumb/md/lg/webp/avif (بند ۶۱)
   createdAt  DateTime @default(now())
+
+  attachments Attachment[]
 }
 
 // ============================================================
@@ -2302,6 +2304,8 @@ model Attachment {
   ownerId   String
   title     String?
   createdAt DateTime @default(now())
+
+  media Media @relation(fields: [mediaId], references: [id])
 
   @@index([ownerType, ownerId])
 }

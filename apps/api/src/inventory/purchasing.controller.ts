@@ -157,7 +157,7 @@ export class PurchasingController {
   }
 
   @Post("purchase-invoices/:id/attachments")
-  @RequirePermission("purchasing.manage")
+  @RequirePermission("purchasing.manage", "media.manage")
   async addAttachment(@Req() req: Request, @Param("id") id: string, @Body() body: { mediaId: string; title?: string }) {
     if (!body.mediaId?.trim()) {
       throw new BadRequestException({ code: "VALIDATION_ERROR", message: "mediaId الزامی است." });
@@ -166,7 +166,7 @@ export class PurchasingController {
   }
 
   @Delete("purchase-invoices/:id/attachments/:attachmentId")
-  @RequirePermission("purchasing.manage")
+  @RequirePermission("purchasing.manage", "media.manage")
   async removeAttachment(@Req() req: Request, @Param("attachmentId") attachmentId: string) {
     return this.purchasing.removeAttachment(attachmentId, this.actor(req));
   }

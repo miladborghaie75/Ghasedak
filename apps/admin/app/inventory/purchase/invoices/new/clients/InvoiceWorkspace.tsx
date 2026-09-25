@@ -9,12 +9,13 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAdminApi, fa } from "@/components/useAdminApi";
+import { useAdminApi, uploadMedia, fa } from "@/components/useAdminApi";
 import ProductPicker, { type PickedVariant } from "@/components/commerce/ProductPicker";
 
 interface Supplier { id: string; name: string; }
 interface GrnRow { id: string; number: string; supplierId: string; supplier: { name: string }; }
 interface Line { sku: string; productName: string; barcode: string | null; qty: string; unitCost: string; }
+interface PendingAtt { mediaId: string; name: string; }
 
 export default function InvoiceWorkspace() {
   const { call, loading, permissions } = useAdminApi();
@@ -32,6 +33,7 @@ export default function InvoiceWorkspace() {
   const [dueDate, setDueDate] = useState("");
   const [note, setNote] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pendingAtts, setPendingAtts] = useState<PendingAtt[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -62,14 +64,6 @@ export default function InvoiceWorkspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grnId]);
 
-  /** GRN انتخاب شد → ردیف‌هایش (کالا/تعداد/بها) به‌عنوان نقطه شروع فاکتور */
-  const loadGrnLines = async (grnIdValue: string) => {
-    if (!grnIdValue) return;
-    const r = await call<{ items: Array<{ id: string; number: string; supplierId: string; lines: never } | Record<string, unknown>> }>(`/admin/purchasing/goods-receipts`);
-    void r;
-  };
-  void loadGrnLines;
-
   const subtotal = lines.reduce((acc, l) => acc + (Number(l.unitCost) || 0) * (Number(l.qty) || 0), 0);
   const grandTotal = Math.max(0, subtotal - (Number(discount) || 0) + (Number(shipping) || 0) + (Number(tax) || 0));
 
@@ -91,6 +85,17 @@ export default function InvoiceWorkspace() {
         unitCost: v.suggestedCost ?? v.price,
       }];
     });
+  };
+
+  /** آپلود پیوست‌ها از میزکار — همان endpoint کتابخانه رسانه (بند ۳۵، بدون مسیر موازی) */
+  const uploadAtt = async (file: File) => {
+    setError(null);
+    const r = await uploadMedia(file, call);
+    if (r.ok && r.id) {
+      setPendingAtts((prev) => [...prev, { mediaId: r.id!, name: file.name }]);
+    } else {
+      setError(r.error ?? "خطا در آپلود");
+    }
   };
 
   const submit = async () => {
@@ -115,6 +120,13 @@ export default function InvoiceWorkspace() {
     });
     setSaving(false);
     if (r.ok && r.data) {
+      // پیوست‌های آپلودشده در میزکار → به سند immutable وصل می‌شوند (بند ۲۷)
+      for (const a of pendingAtts) {
+        await call(`/admin/purchasing/purchase-invoices/${r.data.invoice.id}/attachments`, {
+          method: "POST",
+          body: JSON.stringify({ mediaId: a.mediaId, title: a.name }),
+        });
+      }
       router.push(`/inventory/purchase/invoices/${r.data.invoice.id}`);
     } else {
       setError(r.error?.message ?? "خطا در ثبت فاکتور");
@@ -218,6 +230,32 @@ export default function InvoiceWorkspace() {
           </button>
           <p className="mt-2 text-[11px] text-muted">تعداد هر ردیف باید دقیقاً با سند دریافت برابر باشد؛ بهای متفاوت از PO به‌عنوان مغایرت قیمت (PPV) رویداد ثبت می‌کند.</p>
         </div>
+      </div>
+
+      {/* پیوست‌ها — آپلود مستقیم از میزکار (endpoint مشترک رسانه) */}
+      <div className="rounded-card border border-line bg-surface p-5">
+        <h3 className="text-sm font-black text-ink">پیوست‌ها ({fa(pendingAtts.length)})</h3>
+        <p className="mt-1 text-[11px] text-muted">تصویر فاکتور تامین‌کننده / بارنامه — JPG یا PDF، حداکثر ۱۰ مگابایت. اعتبارسنجی محتوا سمت سرور انجام می‌شود.</p>
+        <label className="mt-3 inline-flex h-9 cursor-pointer items-center rounded-full border border-line px-4 text-xs font-bold text-ink hover:bg-app-primary-soft">
+          📎 افزودن پیوست
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) { void uploadAtt(f); e.target.value = ""; } }}
+          />
+        </label>
+        {pendingAtts.length > 0 ? (
+          <ul className="mt-3 flex flex-col gap-1 text-xs">
+            {pendingAtts.map((a) => (
+              <li key={a.mediaId} className="flex items-center gap-2">
+                <span className="font-bold text-ink">{a.name}</span>
+                <span className="text-muted">— پس از ثبت فاکتور ضمیمه می‌شود</span>
+                <button onClick={() => setPendingAtts(pendingAtts.filter((x) => x.mediaId !== a.mediaId))} className="text-app-err">حذف</button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
 
       {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}

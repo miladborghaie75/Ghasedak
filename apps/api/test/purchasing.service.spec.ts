@@ -168,4 +168,59 @@ describe("PurchasingService (integration با DB dev)", () => {
   it("فاکتور ناموجود → NOT_FOUND", async () => {
     await expect(service.getInvoiceDetail("nonexistent-id")).rejects.toThrow(NotFoundException);
   });
+
+  it("پیوست — attach/detach با audit و detail شامل mediaKey", async () => {
+    const inv0 = createdInvoices[0];
+    // Media واقعی بساز (PNG کوچک با magic bytes درست) — جدول Attachment به Media اشاره دارد
+    const png = Buffer.from("89504e470d0a1a0a00000000", "hex");
+    const media = await prisma.media.create({
+      data: { kind: "image", storageKey: `test-att-${Date.now()}.png`, mime: "image/png", sizeBytes: BigInt(png.length) },
+    });
+    const att = await service.addAttachment(inv0, media.id, "فاکتور تامین‌کننده", actor);
+    expect(att.ownerType).toBe("purchase_invoice");
+
+    let d = await service.getInvoiceDetail(inv0);
+    expect(d.attachments).toHaveLength(1);
+    expect(d.attachments[0].mediaKey).toBe(media.storageKey);
+
+    await service.removeAttachment(att.id, actor);
+    d = await service.getInvoiceDetail(inv0);
+    expect(d.attachments).toHaveLength(0);
+
+    await prisma.media.delete({ where: { id: media.id } }).catch(() => undefined);
+    // audit attach/detach ثبت شده باشد
+    const audits = await prisma.auditLog.findMany({ where: { entity: "PurchaseInvoice", entityId: inv0, action: { in: ["purchasing.invoice.attach", "purchasing.invoice.detach"] } } });
+    expect(audits.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("تعدیل گروهی قیمت BASE — delegation به PricingService و ثبت PriceHistory", async () => {
+    const { PricingService } = await import("../src/pricing/pricing.service");
+    const pricing = new PricingService(prisma, new EventBusService(prisma));
+    const sku = testSkus[0];
+    const before = await prisma.productVariant.findUnique({ where: { sku }, select: { price: true } });
+    const r = await pricing.changePrice({
+      skus: [sku],
+      levelCode: "BASE",
+      mode: "delta",
+      amount: 1000,
+      reason: "تست: تعدیل گروهی انبار",
+      actorId: actor,
+      source: "inventory-bulk",
+    });
+    expect(r.changed).toBe(1);
+    expect(r.level).toBe("BASE");
+
+    // آینه قیمت پایه هم به‌روز شده باشد
+    const after = await prisma.productVariant.findUnique({ where: { sku }, select: { price: true } });
+    expect(Number(after!.price)).toBe(Number(before!.price) + 1000);
+
+    // رکورد تاریخچه با reason و actor
+    const hist = await prisma.priceHistory.findFirst({
+      where: { variantSku: sku, level: { code: "BASE" } },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(hist).not.toBeNull();
+    expect(Number(hist!.newPrice)).toBe(Number(before!.price) + 1000);
+    expect(hist!.reason).toBe("تست: تعدیل گروهی انبار");
+  });
 });

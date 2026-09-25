@@ -157,6 +157,18 @@ export class PricingService {
           });
         }
 
+        // سطح BASE = قیمت پایه واریانت — آینه productVariant.price حفظ می‌شود
+        // (fallback قدیمی effectivePrice و نمایش موجودی) — نوشتن فقط از همین‌جا.
+        if (level.code === "BASE") {
+          const mirror: Record<string, unknown> = { price: BigInt(newPrice) };
+          if (input.clearSale) {
+            mirror.salePrice = null;
+          } else if (input.salePrice != null) {
+            mirror.salePrice = BigInt(input.salePrice);
+          }
+          await tx.productVariant.update({ where: { sku }, data: mirror });
+        }
+
         if (newPrice !== oldPrice) {
           await tx.priceHistory.create({
             data: {

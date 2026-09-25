@@ -129,6 +129,7 @@ async function main(): Promise<void> {
   }
 
   const levels: Array<{ code: string; name: string; sortOrder: number }> = [
+    { code: "BASE", name: "قیمت پایه کالا", sortOrder: 0 },
     { code: "POS", name: "فروش حضوری", sortOrder: 1 },
     { code: "WEB", name: "فروشگاه اینترنتی", sortOrder: 2 },
     { code: "TOROB", name: "ترب", sortOrder: 3 },

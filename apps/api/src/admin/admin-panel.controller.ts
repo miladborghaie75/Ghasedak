@@ -1,9 +1,11 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req } from "@nestjs/common";
+import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
 import { InventoryService } from "../inventory/inventory.service";
 import { InventorySettingsService } from "../inventory/inventory-settings.service";
 import { JournalService } from "../accounting/journal.service";
+import { PricingService } from "../pricing/pricing.service";
 import { nextNumber } from "../common/number-series";
 import * as crypto from "crypto";
 
@@ -23,6 +25,7 @@ export class AdminPanelController {
     private readonly inv: InventoryService,
     private readonly settings: InventorySettingsService,
     private readonly journal: JournalService,
+    private readonly pricing: PricingService,
   ) {}
 
   // ---------- کاربران ----------
@@ -138,10 +141,21 @@ export class AdminPanelController {
 
   // ---------- عملیات گروهی موجودی/قیمت (بند ۱۳۵: انبارگردانی) ----------
 
-  /** تعدیل گروهی قیمت — درصدی یا مبلغی روی واریانت‌های انتخابی؛ فقط با مجوز */
+  /**
+   * تعدیل گروهی قیمت — بند ۱۳: یکسان‌سازی با Pricing Domain (یادداشت باقی‌مانده Phase 5 / ریسک ۷).
+   * هیچ مسیر مستقیمی دیگر VariantPrice/productVariant.price را نمی‌نویسد — همه چیز از
+   * PricingService.changePrice می‌گذرد تا PriceHistory + رویداد PriceChanged همیشه ثبت شوند.
+   * - با levelId → همان سطح؛ بدون levelId → سطح صریح «BASE» (قیمت پایه واریانت).
+   * - mode «fixed» قدیم → «delta» جدید (تغییر مبلغی روی قیمت فعلی).
+   * - مجوز: inventory.adjust یا pricing.manage (بجای مجوز درست عملیات قیمت).
+   * - reason اختیاری برای ثبت در PriceHistory.
+   */
   @Post("inventory/bulk-price")
-  @RequirePermission("inventory.adjust")
-  async bulkPrice(@Body() body: { skus: string[]; mode: "percent" | "fixed"; amount: number; levelId?: string }) {
+  @RequirePermission("inventory.adjust", "pricing.manage")
+  async bulkPrice(
+    @Req() req: Request,
+    @Body() body: { skus: string[]; mode: "percent" | "fixed"; amount: number; levelId?: string; reason?: string },
+  ) {
     if (!Array.isArray(body.skus) || body.skus.length === 0) {
       throw new BadRequestException({ code: "VALIDATION_ERROR", message: "حداقل یک کالا انتخاب کنید." });
     }
@@ -155,27 +169,37 @@ export class AdminPanelController {
         throw new BadRequestException({ code: "VALIDATION_ERROR", message: "مبلغ تغییر باید عدد صحیح غیرصفر باشد." });
       }
     }
-    const result = await this.prisma.$transaction(async (tx) => {
-      let changed = 0;
-      for (const sku of body.skus) {
-        if (body.levelId) {
-          const vp = await tx.variantPrice.findUnique({ where: { variantSku_priceLevelId: { variantSku: sku, priceLevelId: body.levelId } } });
-          if (!vp) continue;
-          const old = Number(vp.price);
-          const next = Math.max(0, body.mode === "percent" ? Math.round((old * (100 + n)) / 100) : old + n);
-          await tx.variantPrice.update({ where: { variantSku_priceLevelId: { variantSku: sku, priceLevelId: body.levelId } }, data: { price: BigInt(next) } });
-        } else {
-          const v = await tx.productVariant.findUnique({ where: { sku } });
-          if (!v) continue;
-          const old = Number(v.price);
-          const next = Math.max(0, body.mode === "percent" ? Math.round((old * (100 + n)) / 100) : old + n);
-          await tx.productVariant.update({ where: { sku }, data: { price: BigInt(next) } });
-        }
-        changed += 1;
+
+    // سطح قیمت: levelId مستقیم → همان سطح؛ بدون levelId → سطح صریح BASE
+    let levelCode: string;
+    if (body.levelId) {
+      const level = await this.prisma.priceLevel.findUnique({ where: { id: body.levelId }, select: { code: true } });
+      if (!level) {
+        throw new BadRequestException({ code: "LEVEL_INVALID", message: "سطح قیمت نامعتبر است." });
       }
-      return changed;
+      levelCode = level.code;
+    } else {
+      const base = await this.prisma.priceLevel.findUnique({ where: { code: "BASE" }, select: { code: true } });
+      if (!base) {
+        throw new BadRequestException({
+          code: "LEVEL_INVALID",
+          message: "سطح قیمت «BASE» یافت نشد — ابتدا seed را اجرا کنید.",
+        });
+      }
+      levelCode = "BASE";
+    }
+
+    const actor = (req as unknown as Record<string, unknown>).adminIdentity as { userId?: string } | undefined;
+    const result = await this.pricing.changePrice({
+      skus: body.skus,
+      levelCode,
+      mode: body.mode === "fixed" ? "delta" : "percent",
+      amount: n,
+      reason: body.reason || "تعدیل گروهی از انبار",
+      actorId: actor?.userId,
+      source: "inventory-bulk",
     });
-    return { changed: result };
+    return { changed: result.changed, level: result.level };
   }
 
   /** شروع انبارگردانی — snapshot همه واریانت‌های فعال انبار */

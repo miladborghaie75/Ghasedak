@@ -115,3 +115,131 @@ body {
   outline-offset: 2px;
   border-radius: 6px;
 }
+
+/*
+ * چاپ حرفه‌ای اسناد (بند ۲۷) — فاکتور خرید و اسناد مشابه:
+ * A4، پالت اجباری روشن (مستقل از تم شب)، بدون سایدبار/هدر،
+ * جدول بدون شکستگی ردیف، بارکدها وکتور. PDF = همان خروجی چاپ مرورگر.
+ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 10mm;
+  }
+
+  /* پالت روشن اجباری — مستقل از data-theme */
+  :root,
+  html[data-theme="dark"] {
+    --color-bg: #ffffff;
+    --color-surface: #ffffff;
+    --color-ink: #000000;
+    --color-muted: #444444;
+    --color-line: #b9b9c2;
+    --color-primary: #5b21b6;
+    --color-primary-strong: #4c1d95;
+    --color-primary-soft: #f3f0fa;
+    --color-deep: #000000;
+    --color-ok: #1a6b46;
+    --color-err: #a02033;
+    --app-bg: #ffffff;
+    --app-surface: #ffffff;
+    --app-ink: #000000;
+    --app-muted: #444444;
+    --app-line: #b9b9c2;
+    --app-on-accent: #ffffff;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11.5pt;
+  }
+
+  /* پوسته پنل — سایدبار و هدر ادمین در چاپ معنا ندارند */
+  aside,
+  body > div > div > header {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+
+  /* تیتر/زیرتیتر پوسته صفحه — سند سربرگ چاپی خودش را دارد */
+  main > h1,
+  main > p {
+    display: none !important;
+  }
+
+  /* نسخه مطمئن کلاس tailwind print:hidden — اگر purge شد */
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* دکمه‌ها/فرم‌ها در چاپ معنا ندارند */
+  button,
+  input,
+  select {
+    display: none !important;
+  }
+  label:has(> input),
+  label:has(> select),
+  label:has(> button) {
+    display: none !important;
+  }
+
+  /* کارت‌های سند — حاشیه پرینت‌پسند، بدون سایه */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  section {
+    border: 1px solid var(--app-line) !important;
+    background: #fff !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  h2,
+  h3 {
+    color: #000 !important;
+    break-after: avoid;
+  }
+
+  /* جدول — خطوط واضح، ردیف نشکند */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+  th,
+  td {
+    border-bottom: 1px solid #c9c9d2 !important;
+    color: #000 !important;
+    padding: 4px 6px !important;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tr,
+  figure {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  a {
+    color: #000 !important;
+    text-decoration: none !important;
+  }
+
+  /* سربرگ چاپ اختصاصی سند — فقط در چاپ دیده می‌شود */
+  .print-only {
+    display: block !important;
+  }
+  .print-barcode svg {
+    max-width: 100%;
+  }
+}
+
+/* روی صفحه مخفی — در چاپ توسط قاعده بالا نمایش داده می‌شود */
+.print-only {
+  display: none;
+}

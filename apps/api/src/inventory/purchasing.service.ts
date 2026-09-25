@@ -271,7 +271,7 @@ export class PurchasingService {
         orderBy: { date: "asc" },
         select: { id: true, number: true, date: true, description: true, lines: { select: { debit: true, credit: true, account: { select: { code: true, name: true } } } } },
       }),
-      this.prisma.attachment.findMany({ where: { ownerType: "purchase_invoice", ownerId: invoice.id }, orderBy: { createdAt: "asc" } }),
+      this.prisma.attachment.findMany({ where: { ownerType: "purchase_invoice", ownerId: invoice.id }, orderBy: { createdAt: "asc" }, include: { media: { select: { storageKey: true, kind: true } } } }),
       this.prisma.auditLog.findMany({
         where: { entity: { in: ["PurchaseInvoice"] }, OR: [{ entityId: invoice.id }, { entityId: invoice.number }] },
         orderBy: { createdAt: "desc" },
@@ -332,7 +332,15 @@ export class PurchasingService {
         id: j.id, number: j.number, date: j.date, description: j.description,
         lines: j.lines.map((l) => ({ code: l.account.code, name: l.account.name, debit: l.debit, credit: l.credit })),
       })),
-      attachments: attachments.map((a) => ({ id: a.id, mediaId: a.mediaId, title: a.title, createdAt: a.createdAt })),
+      // media برای URL سرو فایل (/api/media/:storageKey) — نه id رکورد Media
+      attachments: attachments.map((a) => ({
+        id: a.id,
+        mediaId: a.mediaId,
+        mediaKey: a.media?.storageKey ?? null,
+        mediaKind: a.media?.kind ?? null,
+        title: a.title,
+        createdAt: a.createdAt,
+      })),
       audit: audits.map((a) => ({ id: a.id, action: a.action, actorId: a.actorId, at: a.createdAt, meta: a.newValues })),
     };
   }

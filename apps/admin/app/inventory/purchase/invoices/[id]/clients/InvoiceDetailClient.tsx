@@ -4,13 +4,16 @@
  * جزئیات فاکتور خرید — بند ۲۷ Master (صفحه حرفه‌ای):
  * - snapshot تامین‌کننده، متادیتا، ردیف‌ها با مغایرت بها (فاکتور vs GRN)
  * - پرداخت‌ها + مانده + وضعیت AP، اثر انبار (GRN)، اسناد حسابداری
- * - audit trail، پیوست‌ها، چاپ (print-friendly)، لینک بازگشت
+ * - audit trail، پیوست‌ها (آپلود/حذف مستقیم با مجوز درست)، چاپ حرفه‌ای
+ * - چاپ: سربرگ اختصاصی سند + بارکد Code39 شماره فاکتور + EAN-13 هر ردیف؛
+ *   PDF = خروجی چاپ مرورگر روی استایل @media print در globals.css.
  * همه از منابع حقیقت: /admin/purchasing/purchase-invoices/:id/detail
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useAdminApi, fa } from "@/components/useAdminApi";
+import { useAdminApi, uploadMedia, fa } from "@/components/useAdminApi";
+import { Code39Barcode, Ean13Barcode } from "@/components/print/Barcode";
 
 interface Detail {
   invoice: { id: string; number: string; state: string; dueDate: string | null; note: string | null; createdAt: string; subtotal: string; discountTotal: string; shippingTotal: string; taxTotal: string; grandTotal: string };
@@ -21,7 +24,7 @@ interface Detail {
   totals: { paidTotal: number; balance: number; apAmount: number | null; apState: string | null; apPaid: number | null };
   inventoryImpact: Array<{ sku: string; qty: number; unitCost: string; landedCost: string }>;
   accounting: Array<{ id: string; number: string; date: string; description: string | null; lines: Array<{ code: string; name: string; debit: string; credit: string }> }>;
-  attachments: Array<{ id: string; mediaId: string; title: string | null; createdAt: string }>;
+  attachments: Array<{ id: string; mediaId: string; mediaKey: string | null; mediaKind: string | null; title: string | null; createdAt: string }>;
   audit: Array<{ id: string; action: string; actorId: string | null; at: string; meta: Record<string, unknown> }>;
 }
 
@@ -40,8 +43,10 @@ export default function InvoiceDetailClient() {
   const [msg, setMsg] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState("transfer");
+  const [uploading, setUploading] = useState(false);
   const canPay = (permissions ?? []).includes("purchasing.pay");
   const canManage = (permissions ?? []).includes("purchasing.manage");
+  const canManageMedia = canManage || (permissions ?? []).includes("media.manage");
 
   const load = async () => {
     if (!id) return;
@@ -60,23 +65,75 @@ export default function InvoiceDetailClient() {
     else setError(r.error?.message ?? "خطا در پرداخت");
   };
 
+  /** آپلود مستقیم در صفحه جزئیات — endpoint مشترک رسانه + attach سند (بند ۳۵/۲۷) */
+  const uploadAtt = async (file: File) => {
+    setError(null); setMsg(null);
+    setUploading(true);
+    try {
+      const up = await uploadMedia(file, call);
+      if (!up.ok || !up.id) { setError(up.error ?? "خطا در آپلود"); return; }
+      const r = await call(`/admin/purchasing/purchase-invoices/${id}/attachments`, {
+        method: "POST",
+        body: JSON.stringify({ mediaId: up.id, title: file.name }),
+      });
+      if (r.ok) { setMsg("پیوست اضافه شد ✅"); await load(); }
+      else setError(r.error?.message ?? "خطا در ضمیمه‌سازی");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeAtt = async (attachmentId: string) => {
+    setError(null); setMsg(null);
+    const r = await call(`/admin/purchasing/purchase-invoices/${id}/attachments/${attachmentId}`, { method: "DELETE" });
+    if (r.ok) { setMsg("پیوست حذف شد."); await load(); }
+    else setError(r.error?.message ?? "خطا در حذف پیوست");
+  };
+
   if (error && !data) return <p className="rounded-card border border-line bg-surface p-6 text-sm text-app-err">{error}</p>;
   if (!data) return <p className="rounded-card border border-line bg-surface p-6 text-sm text-muted">در حال بارگذاری…</p>;
 
   const { invoice, supplier, receipt, lines, payments, totals, inventoryImpact, accounting, attachments, audit } = data;
+  const today = new Date().toLocaleDateString("fa-IR");
 
   return (
     <div className="flex flex-col gap-5">
+      {/* سربرگ چاپ اختصاصی سند — روی صفحه مخفی، فقط در چاپ */}
+      <div className="print-only" dir="rtl">
+        <table style={{ width: "100%", border: "none", borderBottom: "2px solid #000" }}>
+          <tbody>
+            <tr>
+              <td style={{ border: "none", textAlign: "right" }}>
+                <div style={{ fontSize: "15pt", fontWeight: 900 }}>قاصدک</div>
+                <div style={{ fontSize: "9pt" }}>فاکتور خرید — سند رسمی انبار و حسابداری</div>
+              </td>
+              <td style={{ border: "none", textAlign: "left" }}>
+                <Code39Barcode value={invoice.number} height={34} unit={1.1} />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <table style={{ width: "100%", border: "none", marginTop: "6px", fontSize: "9.5pt" }}>
+          <tbody>
+            <tr>
+              <td style={{ border: "none" }}>شماره سند: <b dir="ltr">{invoice.number}</b></td>
+              <td style={{ border: "none" }}>تاریخ چاپ: {today}</td>
+              <td style={{ border: "none" }}>وضعیت: <b>{STATE_FA[invoice.state] ?? invoice.state}</b></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
       {/* نوار اقدام — در چاپ پنهان */}
       <div className="print:hidden flex flex-wrap items-center gap-2">
         <Link href="/inventory/purchase" className="rounded-full border border-line px-4 py-2 text-xs font-bold">→ بازگشت به خرید</Link>
-        <button onClick={() => window.print()} className="rounded-full bg-ink px-4 py-2 text-xs font-black text-on-accent">🖨️ چاپ فاکتور</button>
+        <button onClick={() => window.print()} className="rounded-full bg-ink px-4 py-2 text-xs font-black text-on-accent">🖨️ چاپ / PDF فاکتور</button>
         {invoice.state === "POSTED" ? <span className="rounded-full bg-app-ok-soft px-3 py-1.5 text-[11px] font-bold text-app-ok">سند immutable — اصلاح فقط با برگشت/اعتبار</span> : null}
       </div>
       {msg ? <p className="print:hidden rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">{msg}</p> : null}
       {error ? <p className="print:hidden rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
 
-      {/* سربرگ سند */}
+      {/* سربرگ سند (نمایش صفحه) */}
       <section className="rounded-card border border-line bg-surface p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -124,7 +181,10 @@ export default function InvoiceDetailClient() {
             {lines.map((l) => (
               <tr key={l.id} className="border-b border-line/60 last:border-0">
                 <td className="px-4 py-2 font-bold">{l.productName}</td>
-                <td className="px-4 py-2 text-[11px]" dir="ltr">{l.variantSku}{l.barcode ? ` · ${l.barcode}` : ""}</td>
+                <td className="px-4 py-2 text-[11px]" dir="ltr">
+                  {l.variantSku}
+                  {l.barcode ? <Ean13Barcode value={l.barcode} height={22} unit={0.9} /> : null}
+                </td>
                 <td className="px-4 py-2 tabular-nums">{fa(l.qty)}</td>
                 <td className="px-4 py-2 tabular-nums">{fa(l.unitCost)}</td>
                 <td className="px-4 py-2 tabular-nums text-ink/60">{l.grnUnitCost != null ? fa(l.grnUnitCost) : "—"}</td>
@@ -146,6 +206,19 @@ export default function InvoiceDetailClient() {
           <div className="flex justify-between text-base"><span className="font-black">مانده</span><span className={`font-black tabular-nums ${totals.balance > 0 ? "text-app-warning" : "text-app-ok"}`}>{fa(totals.balance)}</span></div>
         </div>
       </section>
+
+      {/* امضای طرفین — فقط چاپ */}
+      <div className="print-only" dir="rtl">
+        <table style={{ width: "100%", border: "none", marginTop: "18px" }}>
+          <tbody>
+            <tr>
+              <td style={{ border: "none", textAlign: "center", fontSize: "9.5pt" }}>مهر و امضای تامین‌کننده</td>
+              <td style={{ border: "none", width: "40px" }}></td>
+              <td style={{ border: "none", textAlign: "center", fontSize: "9.5pt" }}>مهر و امضای انبار / حسابداری قاصدک</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       {/* پرداخت‌ها + فرم پرداخت */}
       <section className="rounded-card border border-line bg-surface p-5 print:hidden">
@@ -218,21 +291,36 @@ export default function InvoiceDetailClient() {
         </section>
       </div>
 
-      {/* پیوست‌ها + audit */}
-      <div className="grid gap-4 lg:grid-cols-2 print:hidden">
+      {/* پیوست‌ها + audit — مدیریت در صفحه؛ در چاپ فقط فهرست پیوست‌ها */}
+      <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-card border border-line bg-surface p-5">
           <h3 className="text-sm font-black text-ink">پیوست‌ها ({fa(attachments.length)})</h3>
           <ul className="mt-2 flex flex-col gap-1 text-xs">
-            {attachments.map((a) => (
-              <li key={a.id} className="flex items-center gap-2">
-                <a href={`/api/media/${a.mediaId}`} target="_blank" rel="noopener noreferrer" className="font-bold text-primary hover:underline">{a.title ?? "پیوست"}</a>
-                <span className="text-muted">{new Date(a.createdAt).toLocaleDateString("fa-IR")}</span>
-              </li>
-            ))}
+            {attachments.map((a) => {
+              const href = a.mediaKey ? `/api/media/${a.mediaKey}` : `/api/media/${a.mediaId}`;
+              return (
+                <li key={a.id} className="flex items-center gap-2">
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="font-bold text-primary hover:underline">{a.title ?? "پیوست"}{a.mediaKind === "doc" ? " (PDF)" : ""}</a>
+                  <span className="text-muted">{new Date(a.createdAt).toLocaleDateString("fa-IR")}</span>
+                  {canManageMedia ? <button onClick={() => void removeAtt(a.id)} className="text-app-err hover:underline">حذف</button> : null}
+                </li>
+              );
+            })}
             {attachments.length === 0 ? <li className="text-muted">پیوستی ثبت نشده.</li> : null}
           </ul>
+          {canManageMedia ? (
+            <label className="mt-3 inline-flex h-9 cursor-pointer items-center rounded-full border border-line px-4 text-xs font-bold text-ink hover:bg-app-primary-soft">
+              {uploading ? "در حال آپلود…" : "📎 افزودن پیوست"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) { void uploadAtt(f); e.target.value = ""; } }}
+              />
+            </label>
+          ) : null}
         </section>
-        <section className="rounded-card border border-line bg-surface p-5">
+        <section className="rounded-card border border-line bg-surface p-5 print:hidden">
           <h3 className="text-sm font-black text-ink">ردپای حسابرسی</h3>
           <ul className="mt-2 flex flex-col gap-1.5 text-xs">
             {audit.map((a) => (

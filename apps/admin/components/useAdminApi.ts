@@ -58,3 +58,23 @@ export function fa(n: string | number | null | undefined): string {
   if (n == null) return "—";
   return Number(n).toLocaleString("fa-IR");
 }
+
+/**
+ * آپلود فایل به کتابخانه رسانه — POST /admin/capabilities/media (بند ۳۵).
+ * اعتبارسنجی mime/magic/حجم سمت سرور انجام می‌شود؛ اینجا فقط base64 می‌سازیم.
+ * توسط میزکار فاکتور خرید و کتابخانه رسانه استفاده می‌شود — یک مسیر واحد.
+ */
+export async function uploadMedia(
+  file: File,
+  call: <T,>(path: string, init?: RequestInit) => Promise<{ ok: boolean; status: number; data?: T; error?: { message?: string } }>,
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const buf = await file.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const r = await call<{ id: string; url: string }>("/admin/capabilities/media", {
+    method: "POST",
+    body: JSON.stringify({ filename: file.name, mime: file.type, dataBase64: btoa(binary), alt: file.name }),
+  });
+  return r.ok ? { ok: true, id: r.data?.id } : { ok: false, error: r.error?.message ?? "خطا در آپلود" };
+}
