@@ -26,6 +26,7 @@ const PERMISSIONS = [
   "inventory.approve", "inventory.settings", "inventory.reports",
   "purchasing.view", "purchasing.manage", "purchasing.pay",
   "orders.view", "orders.update",
+  "pricing.view", "pricing.manage",
   "customers.view", "customers.manage",
   "payments.view", "payments.verify",
   "pos.view", "pos.sell",

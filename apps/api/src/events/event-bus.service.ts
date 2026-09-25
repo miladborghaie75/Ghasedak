@@ -152,6 +152,16 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
         );
         return;
       }
+      case "PriceChanged": {
+        // اطلاع ادمین از تغییر قیمت گروهی/تکی — هر تغییر در PriceHistory هم ledger دارد
+        await this.notifyAdmin(
+          `price-changed:${String(payload.level)}:${new Date().toISOString().slice(0, 13)}`, // ساعتی idempotent
+          `تغییر قیمت سطح ${String(payload.level)} — ${String(payload.count)} کالا`,
+          payload,
+        );
+        this.logger.log(`PriceChanged: level=${String(payload.level)} count=${String(payload.count)}`);
+        return;
+      }
       default:
         this.logger.debug(`event ${name} — handler ثبت نشده؛ فقط PROCESSED می‌شود`);
     }

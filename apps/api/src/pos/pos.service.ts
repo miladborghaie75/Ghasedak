@@ -8,6 +8,7 @@ import { randomUUID } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { InventoryService } from "../inventory/inventory.service";
 import { JournalService } from "../accounting/journal.service";
+import { PricingService } from "../pricing/pricing.service";
 import { nextNumber } from "../common/number-series";
 
 export interface PosSaleLine {
@@ -45,6 +46,7 @@ export class PosService {
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
     private readonly journal: JournalService,
+    private readonly pricing: PricingService,
   ) {}
 
   async openShift(input: { userId: string; registerName: string; openingCash: number }) {
@@ -166,10 +168,9 @@ export class PosService {
       if (!v || v.status !== "PUBLISHED") {
         throw new NotFoundException({ code: "VARIANT_NOT_FOUND", message: `کالا «${sku}» یافت نشد.` });
       }
-      const vp = await this.prisma.variantPrice.findUnique({
-        where: { variantSku_priceLevelId: { variantSku: sku, priceLevelId: channel.priceLevelId } },
-      });
-      const unit = BigInt(Math.round(vp?.price != null ? Number(vp.price) : Number(v.price)));
+      // قیمت از Pricing Domain (منبع واحد) — سطح کانال pos (بند ۱۲)
+      const ep = await this.pricing.effectivePrice(sku, "pos");
+      const unit = BigInt(Math.round(ep.salePrice != null ? Number(ep.salePrice) : Number(ep.price)));
       subtotal += unit * BigInt(qty);
       priced.push({ sku, qty, unit, title: v.product.name, barcode: v.barcode });
     }

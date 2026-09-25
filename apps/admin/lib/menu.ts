@@ -27,6 +27,7 @@ export const MENU: MenuGroup[] = [
       { title: "گزارش‌های انبار", href: "/inventory/reports", permission: "inventory.reports" },
       { title: "خرید از تامین‌کننده", href: "/inventory/purchase", permission: "inventory.view" },
       { title: "رسانه", href: "/media", permission: "media.view" },
+      { title: "قیمت‌گذاری کانالی", href: "/pricing", permission: "pricing.view" },
     ],
   },
   {

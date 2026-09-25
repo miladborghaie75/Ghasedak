@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { InventoryService } from "../inventory/inventory.service";
+import { PricingService } from "../pricing/pricing.service";
 import { nextNumber } from "../common/number-series";
 
 /**
@@ -43,32 +44,13 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
+    private readonly pricing: PricingService,
   ) {}
 
-  /** قیمت مؤثر سطح کانال — فقط سرور تعیین می‌کند (بند ۱۲) */
+  /** قیمت مؤثر سطح کانال — فقط سرور تعیین می‌کند (بند ۱۲) — delegate به Pricing Domain */
   async effectivePrice(variantSku: string, channelSlug: string): Promise<{ price: bigint; salePrice: bigint | null }> {
-    const level = await this.prisma.salesChannel.findUnique({
-      where: { slug: channelSlug },
-      select: { priceLevelId: true },
-    });
-    const variant = await this.prisma.productVariant.findUnique({ where: { sku: variantSku } });
-    if (!variant || variant.status !== "PUBLISHED") {
-      throw new NotFoundException({ code: "VARIANT_NOT_FOUND", message: "کالا یافت نشد یا غیرفعال است." });
-    }
-    if (level) {
-      const vp = await this.prisma.variantPrice.findUnique({
-        where: { variantSku_priceLevelId: { variantSku, priceLevelId: level.priceLevelId } },
-      });
-      if (vp) {
-        const now = new Date();
-        const saleActive =
-          vp.salePrice != null &&
-          (!vp.saleStartsAt || vp.saleStartsAt <= now) &&
-          (!vp.saleEndsAt || vp.saleEndsAt >= now);
-        return { price: vp.price, salePrice: saleActive ? vp.salePrice : null };
-      }
-    }
-    return { price: variant.price, salePrice: variant.salePrice };
+    const r = await this.pricing.effectivePrice(variantSku, channelSlug);
+    return { price: r.price, salePrice: r.salePrice };
   }
 
   /** ایجاد سفارش مهمان — اتمیک: رزرو + سفارش + items + snapshot (بند ۹۲) */
