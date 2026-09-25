@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
 import { RequirePermission } from "../auth/permissions.guard";
 import { PurchasingService } from "./purchasing.service";
@@ -89,7 +89,9 @@ export class PurchasingController {
     note?: string;
   }) {
     const grn = await this.purchasing.createGRN({ ...body, actorId: this.actor(req) });
-    // سند حسابداری خرید — بند ۴۴/۱۰۵: Dr موجودی کالا / Cr حساب‌های پرداختنی
+    // سند حسابداری دریافت کالا — زنجیره بند ۴۷: GRN → Inventory → GRNI (کالای دریافتی، صورت‌حساب‌نشده)
+    // Dr موجودی کالا (1200) / Cr GRNI (2150) — بدهی واقعی (AP) فقط با فاکتور باز می‌شود؛
+    // این ساختار از دوبارشماری انبار/AP جلوگیری می‌کند و 1200 = ارزش واقعی موجودی می‌ماند.
     const total = grn.items.reduce((acc, i) => acc + Number(i.unitCost) * i.qty + Number(i.landedCost), 0);
     if (total > 0) {
       await this.journal.post({
@@ -98,8 +100,8 @@ export class PurchasingController {
         sourceId: grn.id,
         actorId: this.actor(req),
         lines: [
-          { accountCode: "1300", debit: total },
-          { accountCode: "2100", credit: total },
+          { accountCode: "1200", debit: total },
+          { accountCode: "2150", credit: total },
         ],
       }).catch(() => undefined);
     }
@@ -119,28 +121,72 @@ export class PurchasingController {
   async createInvoice(@Req() req: Request, @Body() body: {
     supplierId: string; grnId: string; number?: string;
     lines: Array<{ variantSku: string; qty: number; unitCost: number }>;
-    shippingTotal?: number; taxTotal?: number; dueDate?: string;
+    shippingTotal?: number; taxTotal?: number; discountTotal?: number; dueDate?: string; note?: string;
   }) {
     const result = await this.purchasing.createInvoice({ ...body, actorId: this.actor(req) });
     const invoice = result.invoice;
-    if (invoice.grandTotal > 0n) {
+    // سند فاکتور — بند ۴۷/۴۸: بستن GRNI و باز کردن AP واقعی؛ اختلاف (حمل/تخفیف/PPV) به انبار می‌رود:
+    // Dr GRNI (ارزش GRN) + [Dr 1200 اگر فاکتور بیشتر / Cr 1200 اگر کمتر] / Cr AP (جمع فاکتور)
+    // → همیشه متوازن؛ GL AP = مانده AP زیرمجموعه؛ GL انبار = ارزش فاکتوری موجودی.
+    const grnTotal = (await this.purchasing.getInvoiceDetail(invoice.id)).inventoryImpact.reduce((acc, i) => acc + Number(i.unitCost) * i.qty + Number(i.landedCost), 0);
+    const grand = Number(invoice.grandTotal);
+    if (grand > 0 || grnTotal > 0) {
+      const diff = grand - grnTotal;
+      const lines: Array<{ accountCode: string; debit?: number; credit?: number }> = [
+        { accountCode: "2150", debit: grnTotal },
+      ];
+      if (diff > 0) lines.push({ accountCode: "1200", debit: diff });
+      if (diff < 0) lines.push({ accountCode: "1200", credit: -diff });
+      if (grand > 0) lines.push({ accountCode: "2100", credit: grand });
       await this.journal.post({
         description: `فاکتور خرید ${invoice.number}`,
         sourceType: "purchase_invoice",
         sourceId: invoice.id,
         actorId: this.actor(req),
-        lines: [
-          { accountCode: "1300", debit: Number(invoice.grandTotal) },
-          { accountCode: "2100", credit: Number(invoice.grandTotal) },
-        ],
+        lines,
       }).catch(() => undefined);
     }
     return result;
   }
 
+  /** جزئیات کامل فاکتور — صفحه حرفه‌ای بند ۲۷ (snapshot/lines/payments/AP/impact/audit) */
+  @Get("purchase-invoices/:id/detail")
+  @RequirePermission("purchasing.view")
+  async invoiceDetail(@Param("id") id: string) {
+    return this.purchasing.getInvoiceDetail(id);
+  }
+
+  @Post("purchase-invoices/:id/attachments")
+  @RequirePermission("purchasing.manage")
+  async addAttachment(@Req() req: Request, @Param("id") id: string, @Body() body: { mediaId: string; title?: string }) {
+    if (!body.mediaId?.trim()) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "mediaId الزامی است." });
+    }
+    return this.purchasing.addAttachment(id, body.mediaId.trim(), body.title, this.actor(req));
+  }
+
+  @Delete("purchase-invoices/:id/attachments/:attachmentId")
+  @RequirePermission("purchasing.manage")
+  async removeAttachment(@Req() req: Request, @Param("attachmentId") attachmentId: string) {
+    return this.purchasing.removeAttachment(attachmentId, this.actor(req));
+  }
+
   @Post("purchase-invoices/:id/pay")
   @RequirePermission("purchasing.pay")
-  async payInvoice(@Req() req: Request, @Param("id") id: string, @Body() body: { amount: number; method?: string }) {
-    return this.purchasing.payInvoice({ invoiceId: id, amount: body.amount, method: body.method, actorId: this.actor(req) });
+  async payInvoice(@Req() req: Request, @Param("id") id: string, @Body() body: { amount: number; method?: string; cashAccountId?: string }) {
+    const result = await this.purchasing.payInvoice({ invoiceId: id, amount: body.amount, method: body.method, actorId: this.actor(req) });
+    // سند حسابداری پرداخت — بند ۲۹: Dr AP / Cr نقد-بانک (روش تعیین‌کننده حساب است)
+    const cashAccount = body.method === "cash" ? "1000" : "1100";
+    await this.journal.post({
+      description: `پرداخت فاکتور خرید — ${result.invoiceNumber}`,
+      sourceType: "purchase_payment",
+      sourceId: id,
+      actorId: this.actor(req),
+      lines: [
+        { accountCode: "2100", debit: body.amount },
+        { accountCode: cashAccount, credit: body.amount },
+      ],
+    }).catch(() => undefined);
+    return result;
   }
 }

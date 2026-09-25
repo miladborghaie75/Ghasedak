@@ -305,6 +305,7 @@ async function main(): Promise<void> {
       { code: "1100", name: "بانک", type: "ASSET" },
       { code: "1200", name: "موجودی کالا", type: "ASSET" },
       { code: "2100", name: "حساب‌های پرداختنی", type: "LIABILITY" },
+      { code: "2150", name: "کالای دریافتی صورت‌حساب‌نشده (GRNI)", type: "LIABILITY" },
       { code: "3000", name: "سرمایه", type: "EQUITY" },
       { code: "4000", name: "فروش", type: "REVENUE" },
       { code: "5000", name: "بهای تمام‌شده کالای فروش‌رفته", type: "COGS" },

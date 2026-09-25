@@ -224,6 +224,53 @@ export class ProductsService {
     return { items: products };
   }
 
+  /**
+   * کاتالوگ-پیکر فرم‌های ادمین (فاکتور خرید/فروش) — بند ۲۷/۳۳:
+   * جستجوی نام/SKU/بارکد با نرمال‌سازی فارسی؛ واریانت‌های همه وضعیت‌ها (خرید قبل از انتشار).
+   * شامل بهای آخرین خرید (costPrice محصول) برای پیش‌پرکردن فاکتور — فقط ادمین.
+   */
+  async pickerSearch(q: string, limit: number): Promise<unknown> {
+    const norm = (s: string) =>
+      s
+        .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+        .replace(/\u064A/g, "\u06CC")
+        .replace(/\u0643/g, "\u06A9")
+        .replace(/[\u200c\u200f\u200e]/g, " ")
+        .trim();
+    const query = norm(q);
+    let idsFromVariants: string[] = [];
+    if (query) {
+      const variantHit = await this.prisma.productVariant.findMany({
+        where: { OR: [{ sku: { contains: query } }, { barcode: { contains: query } }] },
+        select: { productId: true },
+        take: limit,
+      });
+      idsFromVariants = [...new Set(variantHit.map((v) => v.productId))];
+    }
+    const products = await this.prisma.product.findMany({
+      where: {
+        deletedAt: null,
+        ...(query
+          ? idsFromVariants.length
+            ? { id: { in: idsFromVariants } }
+            : { name: { contains: query } }
+          : {}),
+      },
+      orderBy: { name: "asc" },
+      take: limit,
+      select: {
+        id: true, name: true, slug: true, status: true, basePrice: true, costPrice: true,
+        category: { select: { name: true } },
+        brand: { select: { name: true } },
+        variants: {
+          orderBy: [{ status: "asc" }, { createdAt: "asc" }],
+          select: { id: true, sku: true, barcode: true, price: true, salePrice: true, stockQty: true, status: true },
+        },
+      },
+    });
+    return { items: products };
+  }
+
   /** جستجوی بارکد/SKU — برای POS و فرم‌های ادمین */
   async lookupByCode(code: string): Promise<unknown> {
     if (!code?.trim()) {

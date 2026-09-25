@@ -67,6 +67,17 @@ export class ProductsController {
     return this.products.posSearch(q ?? "");
   }
 
+  /**
+   * کاتالوگ-پیکر فرم‌ها (فاکتور خرید/فروش/سفارش) — بند ۲۷/۳۳ Master:
+   * جستجوی نام/SKU/بارکد با نرمال‌سازی فارسی + واریانت‌ها؛ برای ProductPicker مشترک.
+   * شامل واریانت‌های DRAFT هم (انتخاب در فاکتور خرید قبل از انتشار لازم است).
+   */
+  @Get("picker")
+  @RequirePermission("products.view")
+  async picker(@Query("q") q: string, @Query("limit") limit?: string) {
+    return this.products.pickerSearch(q ?? "", Math.min(25, Math.max(1, Number(limit ?? 12))));
+  }
+
   @Patch(":id")
   @RequirePermission("products.update")
   update(@Param("id") id: string, @Body() body: Parameters<ProductsService["update"]>[1]) {

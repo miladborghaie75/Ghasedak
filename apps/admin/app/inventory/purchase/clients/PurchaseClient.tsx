@@ -1,12 +1,19 @@
 "use client";
 
+/**
+ * خرید از تامین‌کننده — بند ۲۷ Master:
+ * فاکتور خرید به میزکار اختصاصی (/inventory/purchase/invoices/new) و صفحه جزئیات
+ * (/inventory/purchase/invoices/[id]) منتقل شد — انتخاب کالا با ProductPicker و چاپ حرفه‌ای.
+ * این صفحه لیست + PO + GRN + تامین‌کننده را نگه می‌دارد.
+ */
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useAdminApi, fa } from "@/components/useAdminApi";
+import ProductPicker from "@/components/commerce/ProductPicker";
 
 interface Supplier { id: string; name: string; phone: string | null; taxId?: string | null; account: { outstanding: string } | null }
-interface POLine { variantSku: string; qty: number; unitCost: string }
 interface PORow { id: string; number: string; status: string; supplier: { name: string }; _count: { items: number }; createdAt: string }
-interface GRNRow { id: string; number: string; supplier: { name: string }; warehouse: { name: string }; po: { number: string } | null; _count: { items: number }; receivedAt: string }
+interface GRNRow { id: string; number: string; supplierId: string; supplier: { name: string }; warehouse: { name: string }; po: { number: string } | null; _count: { items: number }; receivedAt: string }
 interface InvRow { id: string; number: string; state: string; supplier: { name: string }; receipt: { number: string } | null; grandTotal: string; dueDate: string | null; _count: { payments: number } }
 interface Warehouse { id: string; code: string; name: string }
 
@@ -44,9 +51,8 @@ export default function PurchaseClient() {
   const [poSupplier, setPoSupplier] = useState(""); const [poLines, setPoLines] = useState<Array<{ sku: string; qty: string; cost: string }>>([{ sku: "", qty: "", cost: "" }]);
   const [grnSupplier, setGrnSupplier] = useState(""); const [grnWarehouse, setGrnWarehouse] = useState(""); const [grnPoId, setGrnPoId] = useState("");
   const [grnLines, setGrnLines] = useState<Array<{ sku: string; qty: string; cost: string; landed: string }>>([{ sku: "", qty: "", cost: "", landed: "0" }]);
-  const [invGrn, setInvGrn] = useState(""); const [invLines, setInvLines] = useState<Array<{ sku: string; qty: string; cost: string }>>([{ sku: "", qty: "", cost: "" }]);
-  const [invShipping, setInvShipping] = useState("0"); const [invTax, setInvTax] = useState("0");
   const [payAmount, setPayAmount] = useState<Record<string, string>>({});
+  const [pickerForGrn, setPickerForGrn] = useState(false);
 
   const flash = (ok: boolean, text: string) => { setMsg(ok ? text + " ✅" : null); setError(ok ? null : text); };
 
@@ -60,7 +66,7 @@ export default function PurchaseClient() {
     ]);
     if (s.ok && s.data) { setSuppliers(s.data.items); if (!poSupplier && s.data.items[0]) setPoSupplier(s.data.items[0].id); if (!grnSupplier && s.data.items[0]) setGrnSupplier(s.data.items[0].id); }
     if (p.ok && p.data) setPos(p.data.items);
-    if (g.ok && g.data) { setGrns(g.data.items); if (!invGrn && g.data.items[0]) setInvGrn(g.data.items[0].id); }
+    if (g.ok && g.data) setGrns(g.data.items);
     if (i.ok && i.data) setInvoices(i.data.items);
     if (w.ok && w.data) { setWarehouses(w.data.items); if (!grnWarehouse && w.data.items[0]) setGrnWarehouse(w.data.items[0].id); }
   };
@@ -98,16 +104,8 @@ export default function PurchaseClient() {
     if (r.ok) { setGrnLines([{ sku: "", qty: "", cost: "", landed: "0" }]); setGrnPoId(""); await load(); }
   };
 
-  // ---- Invoice ----
-  const createInvoice = async () => {
-    const lines = invLines.filter((l) => l.sku && Number(l.qty) > 0).map((l) => ({ variantSku: l.sku.trim(), qty: Number(l.qty), unitCost: Number(l.cost) }));
-    if (!invGrn || lines.length === 0) { setError("سند دریافت و حداقل یک ردیف معتبر لازم است."); return; }
-    const r = await call<{ invoice: { number: string }; ppvLines: unknown[] }>("/admin/purchasing/purchase-invoices", {
-      method: "POST", body: JSON.stringify({ supplierId: suppliers[0]?.id ?? "", grnId: invGrn, lines, shippingTotal: Number(invShipping), taxTotal: Number(invTax) }),
-    });
-    flash(r.ok, r.ok ? `فاکتور ${r.data?.invoice?.number} ثبت شد` + (r.data?.ppvLines?.length ? ` — ${fa(r.data.ppvLines.length)} ردیف مغایرت بها (PPV)` : "") : r.error?.message ?? "خطا");
-    if (r.ok) { setInvLines([{ sku: "", qty: "", cost: "" }]); await load(); }
-  };
+  // ---- Invoice → میزکار اختصاصی (بند ۲۷) ----
+  // ثبت فاکتور به /inventory/purchase/invoices/new منتقل شد (صفحه حرفه‌ای با ProductPicker و چاپ)
 
   const pay = async (invoiceId: string) => {
     const amount = Number(payAmount[invoiceId]);
@@ -179,7 +177,8 @@ export default function PurchaseClient() {
                 </div>
               ))}
               <div className="flex gap-2">
-                <button onClick={() => setPoLines([...poLines, { sku: "", qty: "", cost: "" }])} className="rounded-full border border-line px-3 py-1.5 text-xs font-bold">+ ردیف</button>
+                <button onClick={() => setPoLines([...poLines, { sku: "", qty: "", cost: "" }])} className="rounded-full border border-line px-3 py-1.5 text-xs font-bold">+ ردیف دستی</button>
+                <button onClick={() => setPickerForGrn(true)} className="rounded-full border border-line px-3 py-1.5 text-xs font-bold">🔍 انتخاب کالا</button>
                 <button onClick={() => void createPO()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-on-accent">ثبت سفارش</button>
               </div>
             </div>
@@ -238,7 +237,10 @@ export default function PurchaseClient() {
                   <input value={l.landed} onChange={(e) => setGrnLines(grnLines.map((x, j) => j === i ? { ...x, landed: e.target.value } : x))} type="number" min={0} placeholder="هزینه سربه‌دار" className="h-9 w-28 rounded-lg border border-line bg-surface px-2 text-center text-xs" />
                 </div>
               ))}
-              <button onClick={() => void createGRN()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-on-accent">ثبت دریافت</button>
+              <div className="flex gap-2">
+                <button onClick={() => setPickerForGrn(true)} className="rounded-full border border-line px-3 py-1.5 text-xs font-bold">🔍 انتخاب کالا</button>
+                <button onClick={() => void createGRN()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-on-accent">ثبت دریافت</button>
+              </div>
             </div>
           )}
           <div className="overflow-hidden rounded-card border border-line bg-surface">
@@ -267,36 +269,23 @@ export default function PurchaseClient() {
       {tab === "invoice" && (
         <>
           {canManage && (
-            <div className="rounded-card border border-line bg-surface p-4">
-              <h3 className="mb-3 text-sm font-black">ثبت فاکتور خرید (Three-Way Match)</h3>
-              <select value={invGrn} onChange={(e) => setInvGrn(e.target.value)} className="mb-3 h-9 w-56 rounded-lg border border-line bg-surface px-2 text-xs">
-                <option value="">سند دریافت…</option>
-                {grns.map((g) => <option key={g.id} value={g.id}>{g.number} — {g.supplier.name}</option>)}
-              </select>
-              {invLines.map((l, i) => (
-                <div key={i} className="mb-2 flex gap-2">
-                  <input value={l.sku} onChange={(e) => setInvLines(invLines.map((x, j) => j === i ? { ...x, sku: e.target.value } : x))} placeholder="SKU" dir="ltr" className="h-9 w-40 rounded-lg border border-line bg-surface px-2 text-xs" />
-                  <input value={l.qty} onChange={(e) => setInvLines(invLines.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} type="number" min={1} placeholder="تعداد" className="h-9 w-20 rounded-lg border border-line bg-surface px-2 text-center text-xs" />
-                  <input value={l.cost} onChange={(e) => setInvLines(invLines.map((x, j) => j === i ? { ...x, cost: e.target.value } : x))} type="number" min={0} placeholder="بها فاکتور" className="h-9 w-28 rounded-lg border border-line bg-surface px-2 text-center text-xs" />
-                </div>
-              ))}
-              <div className="mb-3 flex gap-2">
-                <label className="text-xs">حمل: <input value={invShipping} onChange={(e) => setInvShipping(e.target.value)} type="number" min={0} className="w-28 rounded-lg border border-line bg-surface px-2 py-1 text-center text-xs" /></label>
-                <label className="text-xs">مالیات: <input value={invTax} onChange={(e) => setInvTax(e.target.value)} type="number" min={0} className="w-28 rounded-lg border border-line bg-surface px-2 py-1 text-center text-xs" /></label>
+            <div className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-surface p-4">
+              <div className="flex-1">
+                <h3 className="text-sm font-black">فاکتور خرید حرفه‌ای (Three-Way Match + AP)</h3>
+                <p className="mt-1 text-[11px] text-muted">انتخاب کالا با جستجوی نام/SKU/بارکد، ایجاد سریع محصول، هزینه‌ها، پرداخت، پیوست و چاپ — در میزکار اختصاصی.</p>
               </div>
-              <button onClick={() => void createInvoice()} disabled={loading} className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-on-accent">ثبت فاکتور</button>
-              <p className="mt-2 text-[10px] text-muted">تعداد هر ردیف باید دقیقاً با سند دریافت یکی باشد؛ بهای متفاوت از PO به‌عنوان مغایرت قیمت (PPV) رویداد ثبت می‌کند.</p>
+              <Link href="/inventory/purchase/invoices/new" className="h-9 rounded-full bg-primary px-4 text-xs font-black leading-9 text-on-accent">+ فاکتور خرید جدید</Link>
             </div>
           )}
           <div className="overflow-hidden rounded-card border border-line bg-surface">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-ink/60">
-                <th className="p-3 text-right">شماره</th><th className="p-3">تامین‌کننده</th><th className="p-3">GRN</th><th className="p-3">مبلغ کل</th><th className="p-3">وضعیت</th><th className="p-3">پرداخت</th>
+                <th className="p-3 text-right">شماره</th><th className="p-3">تامین‌کننده</th><th className="p-3">GRN</th><th className="p-3">مبلغ کل</th><th className="p-3">وضعیت</th><th className="p-3">پرداخت / جزئیات</th>
               </tr></thead>
               <tbody>
                 {invoices.map((iv) => (
                   <tr key={iv.id} className="border-b border-line/60 last:border-0">
-                    <td className="p-3 font-bold" dir="ltr">{iv.number}</td>
+                    <td className="p-3 font-bold" dir="ltr"><Link href={`/inventory/purchase/invoices/${iv.id}`} className="text-primary hover:underline">{iv.number}</Link></td>
                     <td className="p-3 text-xs">{iv.supplier.name}</td>
                     <td className="p-3 text-xs" dir="ltr">{iv.receipt?.number ?? "—"}</td>
                     <td className="p-3 text-center tabular-nums">{fa(iv.grandTotal)}</td>
@@ -308,6 +297,7 @@ export default function PurchaseClient() {
                           <button onClick={() => void pay(iv.id)} className="rounded-full bg-ink px-3 py-1 text-xs font-bold text-on-accent">پرداخت</button>
                         </div>
                       ) : <span className="text-xs text-muted">{fa(iv._count.payments)} پرداخت</span>}
+                      <Link href={`/inventory/purchase/invoices/${iv.id}`} className="ms-2 text-xs font-bold text-primary hover:underline">جزئیات ←</Link>
                     </td>
                   </tr>
                 ))}
@@ -317,6 +307,37 @@ export default function PurchaseClient() {
           </div>
         </>
       )}
+
+      {/* ProductPicker برای ردیف‌های PO/GRN — انتخاب کالا بدون تایپ دستی SKU (بند ۲۷/۳۳) */}
+      <ProductPicker
+        open={pickerForGrn}
+        onClose={() => setPickerForGrn(false)}
+        onPick={(v) => {
+          // بر اساس تب فعال، ردیف را به فرم درست اضافه کن
+          if (tab === "grn") {
+            setGrnLines((prev) => {
+              const existing = prev.findIndex((l) => l.sku === v.sku);
+              if (existing >= 0) {
+                const next = [...prev];
+                next[existing] = { ...next[existing], qty: String((Number(next[existing].qty) || 0) + 1) };
+                return next;
+              }
+              return [...prev, { sku: v.sku, qty: "1", cost: v.suggestedCost ?? v.price, landed: "0" }];
+            });
+          } else {
+            setPoLines((prev) => {
+              const existing = prev.findIndex((l) => l.sku === v.sku);
+              if (existing >= 0) {
+                const next = [...prev];
+                next[existing] = { ...next[existing], qty: String((Number(next[existing].qty) || 0) + 1) };
+                return next;
+              }
+              return [...prev, { sku: v.sku, qty: "1", cost: v.suggestedCost ?? v.price }];
+            });
+          }
+        }}
+        title={tab === "grn" ? "انتخاب کالا برای سند دریافت" : "انتخاب کالا برای سفارش خرید"}
+      />
     </div>
   );
 }

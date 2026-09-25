@@ -238,10 +238,124 @@ export class PurchasingService {
       include: {
         supplier: { select: { name: true } },
         receipt: { select: { number: true } },
-        _count: { select: { payments: true } },
+        _count: { select: { payments: true, items: true } },
       },
     });
     return { items };
+  }
+
+  /**
+   * جزئیات کامل فاکتور خرید — بند ۲۷ Master (صفحه حرفه‌ای):
+   * snapshot تامین‌کننده + ردیف‌ها + پرداخت‌ها + مانده + وضعیت AP + اثر انبار/حسابداری + audit trail.
+   * همه از منابع حقیقت (PurchaseInvoice/AP/JournalEntry/AuditLog) — بدون محاسبه موازی.
+   */
+  async getInvoiceDetail(id: string) {
+    const invoice = await this.prisma.purchaseInvoice.findUnique({
+      where: { id },
+      include: {
+        supplier: true,
+        receipt: { include: { warehouse: { select: { code: true, name: true } }, po: { select: { number: true } } } },
+        items: { include: { variant: { select: { sku: true, barcode: true, product: { select: { name: true, slug: true } } } } } },
+        payments: { orderBy: { paidAt: "asc" } },
+      },
+    });
+    if (!invoice) throw new NotFoundException({ code: "NOT_FOUND", message: "فاکتور یافت نشد." });
+
+    const paidTotal = invoice.payments.reduce((acc, p) => acc + Number(p.amount), 0);
+    const balance = Number(invoice.grandTotal) - paidTotal;
+
+    const [ap, journal, attachments, audits, grn] = await Promise.all([
+      this.prisma.accountsPayable.findFirst({ where: { refType: "purchase_invoice", refId: invoice.id } }),
+      this.prisma.journalEntry.findMany({
+        where: { sourceType: { in: ["purchase_invoice", "purchase", "purchase_payment"] }, OR: [{ sourceId: invoice.id }, ...(invoice.receipt ? [{ sourceId: invoice.receipt.id }] : [])] },
+        orderBy: { date: "asc" },
+        select: { id: true, number: true, date: true, description: true, lines: { select: { debit: true, credit: true, account: { select: { code: true, name: true } } } } },
+      }),
+      this.prisma.attachment.findMany({ where: { ownerType: "purchase_invoice", ownerId: invoice.id }, orderBy: { createdAt: "asc" } }),
+      this.prisma.auditLog.findMany({
+        where: { entity: { in: ["PurchaseInvoice"] }, OR: [{ entityId: invoice.id }, { entityId: invoice.number }] },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      }),
+      invoice.receipt
+        ? this.prisma.goodsReceipt.findUnique({ where: { id: invoice.receipt.id }, include: { items: true } })
+        : Promise.resolve(null),
+    ]);
+
+    // مقایسه بها با GRN (اثر انبار: WAC واقعی ثبت‌شده هنگام دریافت)
+    const grnItems = grn ? new Map(grn.items.map((i) => [i.variantSku, i])) : new Map();
+    const linesWithImpact = invoice.items.map((it) => {
+      const gi = grnItems.get(it.variantSku);
+      return {
+        ...it,
+        productName: it.variant?.product?.name ?? "",
+        productSlug: it.variant?.product?.slug ?? "",
+        barcode: it.variant?.barcode ?? null,
+        lineTotal: Number(it.unitCost) * it.qty,
+        grnUnitCost: gi?.unitCost ?? null,
+        grnLandedCost: gi?.landedCost ?? null,
+        priceVariance: gi ? Number(it.unitCost) - Number(gi.unitCost) : null,
+      };
+    });
+
+    return {
+      invoice: {
+        id: invoice.id,
+        number: invoice.number,
+        state: invoice.state,
+        dueDate: invoice.dueDate,
+        note: invoice.note,
+        createdAt: invoice.createdAt,
+        subtotal: invoice.subtotal,
+        discountTotal: invoice.discountTotal,
+        shippingTotal: invoice.shippingTotal,
+        taxTotal: invoice.taxTotal,
+        grandTotal: invoice.grandTotal,
+      },
+      supplier: {
+        id: invoice.supplier.id,
+        name: invoice.supplier.name,
+        phone: invoice.supplier.phone,
+        taxId: invoice.supplier.taxId,
+        address: invoice.supplier.address,
+      },
+      receipt: invoice.receipt
+        ? { id: invoice.receipt.id, number: invoice.receipt.number, receivedAt: invoice.receipt.receivedAt, warehouse: invoice.receipt.warehouse, poNumber: invoice.receipt.po?.number ?? null }
+        : null,
+      lines: linesWithImpact,
+      payments: invoice.payments.map((p) => ({ id: p.id, method: p.method, amount: p.amount, paidAt: p.paidAt, cashAccountId: p.cashAccountId, checkId: p.checkId })),
+      totals: { paidTotal, balance, apAmount: ap ? Number(ap.amount) : null, apState: ap?.state ?? null, apPaid: ap ? Number(ap.paidAmount) : null },
+      inventoryImpact: grn
+        ? grn.items.map((i) => ({ sku: i.variantSku, qty: i.qty, unitCost: i.unitCost, landedCost: i.landedCost }))
+        : [],
+      accounting: journal.map((j) => ({
+        id: j.id, number: j.number, date: j.date, description: j.description,
+        lines: j.lines.map((l) => ({ code: l.account.code, name: l.account.name, debit: l.debit, credit: l.credit })),
+      })),
+      attachments: attachments.map((a) => ({ id: a.id, mediaId: a.mediaId, title: a.title, createdAt: a.createdAt })),
+      audit: audits.map((a) => ({ id: a.id, action: a.action, actorId: a.actorId, at: a.createdAt, meta: a.newValues })),
+    };
+  }
+
+  /** ضمیمه فاکتور — از کتابخانه رسانه (Attachment مدل موجود، بند ۲۷) */
+  async addAttachment(invoiceId: string, mediaId: string, title: string | undefined, actorId?: string) {
+    const invoice = await this.prisma.purchaseInvoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice) throw new NotFoundException({ code: "NOT_FOUND", message: "فاکتور یافت نشد." });
+    const media = await this.prisma.media.findUnique({ where: { id: mediaId } });
+    if (!media) throw new NotFoundException({ code: "NOT_FOUND", message: "فایل رسانه یافت نشد." });
+    const att = await this.prisma.attachment.create({
+      data: { ownerType: "purchase_invoice", ownerId: invoiceId, mediaId, title: title ?? null },
+    });
+    await this.audit(actorId, "purchasing.invoice.attach", "PurchaseInvoice", invoiceId, { attachmentId: att.id, mediaId });
+    return att;
+  }
+
+  async removeAttachment(attachmentId: string, actorId?: string) {
+    const att = await this.prisma.attachment.findUnique({ where: { id: attachmentId } });
+    if (!att) return { ok: true };
+    await this.prisma.attachment.delete({ where: { id: attachmentId } });
+    await this.audit(actorId, "purchasing.invoice.detach", "PurchaseInvoice", att.ownerId, { attachmentId });
+    return { ok: true };
   }
 
   /**
@@ -251,7 +365,7 @@ export class PurchasingService {
   async createInvoice(input: {
     supplierId: string; grnId: string; number?: string;
     lines: Array<{ variantSku: string; qty: number; unitCost: number }>;
-    shippingTotal?: number; taxTotal?: number; dueDate?: string; actorId?: string;
+    shippingTotal?: number; taxTotal?: number; discountTotal?: number; dueDate?: string; note?: string; actorId?: string;
   }) {
     const grn = await this.prisma.goodsReceipt.findUnique({
       where: { id: input.grnId },
@@ -283,7 +397,8 @@ export class PurchasingService {
     const subtotal = input.lines.reduce((acc, l) => acc + Math.round(Number(l.unitCost)) * Number(l.qty), 0);
     const shipping = Math.max(0, Math.round(Number(input.shippingTotal ?? 0)));
     const tax = Math.max(0, Math.round(Number(input.taxTotal ?? 0)));
-    const grandTotal = subtotal + shipping + tax;
+    const discount = Math.max(0, Math.round(Number(input.discountTotal ?? 0)));
+    const grandTotal = Math.max(0, subtotal - discount + shipping + tax);
 
     const invoice = await this.prisma.$transaction(async (tx) => {
       const number = await nextNumber(tx, "purchase_invoice", "PINV", 5);
@@ -294,10 +409,12 @@ export class PurchasingService {
           grId: grn.id,
           state: "POSTED",
           subtotal: BigInt(subtotal),
+          discountTotal: BigInt(discount),
           shippingTotal: BigInt(shipping),
           taxTotal: BigInt(tax),
           grandTotal: BigInt(grandTotal),
           dueDate: input.dueDate ? new Date(input.dueDate) : null,
+          note: input.note ?? null,
           items: { create: input.lines.map((l) => ({ variantSku: String(l.variantSku).trim(), qty: Number(l.qty), unitCost: BigInt(Math.round(Number(l.unitCost))) })) },
         },
       });
@@ -365,7 +482,7 @@ export class PurchasingService {
       });
       const state = paid >= Number(invoice.grandTotal) ? "PAID" : "PARTIALLY_PAID";
       await tx.purchaseInvoice.update({ where: { id: invoice.id }, data: { state } });
-      return { state, paid };
+      return { state, paid, invoiceNumber: invoice.number };
     });
     await this.audit(input.actorId, "purchasing.invoice.pay", "PurchaseInvoice", invoice.id, { amount, state: result.state });
     return result;

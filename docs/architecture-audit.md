@@ -8,6 +8,8 @@
 > - Phase 2 (commit 9863afe): Theme System واقعی Day/Night/System توکن‌محور در هر دو اپ + ۲۲۸ رنگ هاردکد → توکن معنایی + audit کنتراست AA — بند ۴۹–۵۷ از MISSING به **DONE** رسید.
 > - Phase 3 (commit 79b9abc): Size System لایه‌مند (سایزچارت + قواعد برند/مدل + sister size) + Size Finder سه‌گامی تعاملی متصل به VariantMatrix + ۸/۸ تست — بند ۴۲/۴۳ از PARTIAL به **DONE (پایه)** رسید.
 > - Phase 4 (commit 87c0718): CRM (پروفایل + sync آمار از Orders) + Abandoned Cart زنده از Cart + تنظیمات با audit + Consent عمومی — بند ۳۱/۴۰ از PARTIAL/MISSING به **DONE (پایه)** رسید.
+> - Phase 5 (پیش از این): Git remote (github.com/miladborghaie75/Ghasedak) + push snapshot + **Price History/Channel-aware Pricing** (PricingService واحد + PriceHistory ledger + public quote/feed) — بند ۱۵ به **DONE (پایه)** رسید.
+> - Phase 6 — Purchase Invoice Professional (بند ۲۷/۳۳/۳۴): میزکار فاکتور خرید اختصاصی + ProductPicker مشترک + QuickCreate + جزئیات حرفه‌ای + GRNI؛ Procurement UI از PARTIAL به **DONE (پایه)** رسید.
 > - ریسک باقی‌مانده: نگهداشت بکاپ فقط محلی است (نسخه خارج از دیسک توصیه شده در README بکاپ).
 
 ## ۱) Architecture / Monorepo Map
@@ -34,6 +36,7 @@
 | پرداخت | `PaymentAttempt` state machine (CREATED→REDIRECTED→CALLBACK_RECEIVED→VERIFYING→PAID) | `payments.service` — verify فقط سمت سرور، idempotent | ✅ DONE (ZarinPal = NOT CONFIGURED بدون credential؛ mock فقط غیر-production) |
 | حسابداری | `JournalEntry/JournalLine` + COA ۸ حسابه | `journal.service` — سند متوازن اجباری + reverse | ✅ DONE |
 | خرید | `Supplier/PO/GRN/PurchaseInvoice/AP` | `purchasing.service` — GRN→Ledger+WAC، Three-Way Match، PPV | ✅ DONE |
+| ProductPicker/QuickCreate (بند ۲۷/۳۳/۳۴) | `/admin/products/picker` + کامپوننت مشترک `components/commerce/ProductPicker` | `products.service.pickerSearch` + QuickCreate (محصول/دسته/برند) | ✅ DONE |
 | POS | `PosInvoice/PosPayment/CashierShift` | `pos.service` — شیفت + پرداخت چندگانه + shared stock | ✅ DONE |
 | RMA | `ReturnRequest/Item(condition)/Policy/Refund` | `returns.service` — سیاست بهداشتی، بازشکستن موجودی فقط پس از بازرسی | ✅ DONE |
 | ارسال | `Shipment` | `shipping.service` — LABEL/IN_TRANSIT/DELIVERED + رهگیری عمومی | ✅ DONE |
@@ -63,7 +66,7 @@ helmet + CORS allowlist + rate-limit (login 10/min، checkout 20/min) + httpOnly
 | حوزه | وضعیت | توضیح |
 |---|---|---|
 | Storefront/Admin/POS/Cart/Checkout/Orders/Payments/Inventory core/Accounting core/RMA/Shipping/Event/Notifications بنیادی | **DONE** | runtime-تست‌شده، تست ۱۹/۱۹ |
-| Procurement (Supplier/PO/GRN/WAC/AP/Three-Way/PPV) | **DONE** | تسک انبار؛ UI `/inventory/purchase` |
+| Procurement (Supplier/PO/GRN/WAC/AP/Three-Way/PPV) | **DONE (پایه حرفه‌ای)** — میزکار فاکتور اختصاصی `/inventory/purchase/invoices/new` + جزئیات `/invoices/[id]` (snapshot/payments/AP/اثر انبار+حسابداری/audit/چاپ) + ProductPicker مشترک + QuickCreate + GRNI 2150 (GRN: Dr 1200/Cr 2150 ← فاکتور: Dr 2150+C1200/Cr AP ← پرداخت: Dr AP/Cr 1000|1100) — سند پرداخت از sourceType `purchase_payment` در detail | Phase 6 |
 | Multi-warehouse/Transfer/Quarantine/Damage/Reports انبار/Settings انبار/Approval انبارگردانی | **DONE** | تسک انبار |
 | Search | **PARTIAL** — جستجوی SQL + نرمال‌سازی؛ فاز W: Meilisearch/pg_trgm | چک‌لیست ردیف ۱۴ |
 | Price History / Channel Publishing کامل | **PARTIAL** — VariantPrice سطح کانال فعال؛ PriceHistory مدل دارد ولی UI تاریخچه ندارد | بند ۱۵ |
@@ -102,3 +105,5 @@ helmet + CORS allowlist + rate-limit (login 10/min، checkout 20/min) + httpOnly
 3. Shadow-replay migrationها به‌خاطر drift قدیمی `pos_shift_link` شکست می‌خورد — migration جدید فقط با الگوی diff زنده (مستند در `.freebuff/run.md` و اسکریپت restore از `migrate diff --from-empty` استفاده می‌کند).
 4. Health همیشه degraded گزارش می‌دهد (redis/storage) — صادقانه ولی برای مانیتورینگ production نیاز به تفکیک has:redis دارد.
 5. اسکرین‌شات پریویو در برخی حالت‌های تم شب آرتیفکت capture دارد — audit DOM/کنتراست جایگزین شده (مستند در commit فاز ۲).
+6. **حسابداری خرید قبل از Phase 6 بی‌صدا fail می‌شد**: سند GRN/فاکتور با حساب `1300` پست می‌شد که در COA نیست و `.catch(() => undefined)` خطا را مخفی می‌کرد → یافته دود و اصلاح به GRNI (2150). **درس**: اسناد حسابداری هرگز نباید بی‌صدا swallow شوند — در سخت‌سازی آینده، شکست سند باید رویداد/لاگ خطا داشته باشد.
+7. `admin/inventory/bulk-price` (مسیر قدیمی تغییر گروهی قیمت با مجوز `inventory.adjust`) هنوز PriceHistory را دور می‌زند — باید روی `pricing.change` یکسان‌سازی شود (یادداشت باقی‌مانده Phase 5).
