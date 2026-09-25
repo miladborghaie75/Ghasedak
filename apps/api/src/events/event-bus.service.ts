@@ -152,6 +152,52 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
         );
         return;
       }
+      case "PurchaseInvoiceCreated": {
+        // ارسال خودکار فاکتور خرید به تامین‌کننده — بند ۲۷ + بند ۱۱۱:
+        // ردیف SupplierInvoiceDelivery در state QUEUED ساخته می‌شود؛ ارسال واقعی فقط با credential
+        // (SMTP/Kavenegar). بدون credential ردیف در صف می‌ماند + ADMIN notification — هیچ جعل «ارسال شد».
+        const invId = String(payload.invoiceId ?? "");
+        if (!invId) return;
+        const inv = await this.prisma.purchaseInvoice.findUnique({
+          where: { id: invId },
+          include: { supplier: { select: { id: true, name: true, email: true, phone: true } } },
+        });
+        if (!inv) return;
+        const autoSetting = await this.prisma.setting.findUnique({ where: { key: "purchasing" } });
+        const autoCfg = (autoSetting?.value ?? {}) as { autoSendInvoiceEmail?: boolean; autoSendInvoiceSms?: boolean };
+        const wantEmail = autoCfg.autoSendInvoiceEmail === true && !!inv.supplier.email;
+        const wantSms = autoCfg.autoSendInvoiceSms === true && !!inv.supplier.phone;
+        if (!wantEmail && !wantSms) {
+          this.logger.log(`PurchaseInvoiceCreated: auto-send off یا نشانی تامین‌کننده ثبت نشده — skip (${inv.number})`);
+          return;
+        }
+        for (const channel of [wantEmail ? "EMAIL" : null, wantSms ? "SMS" : null]) {
+          if (!channel) continue;
+          const to = channel === "EMAIL" ? inv.supplier.email! : inv.supplier.phone!;
+          // idempotent per invoice+channel (بند ۱۱۶) — فقط یک ردیف تحویل خودکار
+          const dup = await this.prisma.supplierInvoiceDelivery.findFirst({
+            where: { invoiceId: invId, channel, to },
+          });
+          if (dup) continue;
+          await this.prisma.supplierInvoiceDelivery.create({
+            data: {
+              invoiceId: invId,
+              channel,
+              to,
+              state: "QUEUED",
+              mediaKind: "TEXT",
+              lastError: "AUTO_QUEUED: صف خودکار — worker ارسال واقعی با credential",
+            },
+          });
+        }
+        await this.notifyAdmin(
+          `vendor-invoice-queued:${invId}`,
+          `فاکتور خرید ${inv.number} برای تامین‌کننده ${inv.supplier.name} در صف ارسال قرار گرفت`,
+          { invoiceId: invId, supplierId: inv.supplier.id },
+        );
+        this.logger.log(`PurchaseInvoiceCreated: delivery queued for ${inv.number}`);
+        return;
+      }
       case "PriceChanged": {
         // اطلاع ادمین از تغییر قیمت گروهی/تکی — هر تغییر در PriceHistory هم ledger دارد
         await this.notifyAdmin(

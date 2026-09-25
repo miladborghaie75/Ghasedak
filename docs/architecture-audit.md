@@ -12,6 +12,7 @@
 > - Phase 6 — Purchase Invoice Professional (بند ۲۷/۳۳/۳۴): میزکار فاکتور خرید اختصاصی + ProductPicker مشترک + QuickCreate + جزئیات حرفه‌ای + GRNI؛ Procurement UI از PARTIAL به **DONE (پایه)** رسید.
 > - Phase 6 closure (commit فعلی): (۱) آپلود پیوست مستقیم در میزکار و صفحه جزئیات فاکتور — همان endpoint رسانه `POST /admin/capabilities/media` (mime/magic/10MB) + attach با audit؛ رفع باگ URL پیوست (`mediaId` ≠ `storageKey` → detail حالا `mediaKey` می‌دهد و لینک `/api/media/:storageKey` واقعاً سرو می‌شود). (۲) چاپ حرفه‌ای A4 (`@media print` در globals.css: پالت روشن اجباری، حذف سایدبار/فرم‌ها، جدول بدون شکست، سربرگ اختصاصی سند + امضا) + بارکد وکتور بدون وابستگی (`components/print/Barcode.tsx`: Code39 شماره سند، EAN-13 هر ردیف). (۳) یکسان‌سازی کامل مسیر قیمت: `admin/inventory/bulk-price` حالا از `PricingService.changePrice` می‌گذرد (PriceHistory + رویداد PriceChanged همیشه)، بدون levelId → سطح صریح **BASE** (seed شد) با آینه `productVariant.price`، mode `fixed` → `delta`، مجوز `inventory.adjust|pricing.manage` + reason — ریسک ۷ بسته شد. (۴) RBAC پیوست‌ها با مجوز جایگزین `media.manage`.
 > - چاپ برچسب بارکد (بند ۲۸/۱۱۶): `/inventory/labels` — انتخاب واریانت از picker مشترک، لیبل EAN-13 وکتور (کامپوننت موجود Barcode)، قالب رول حرارتی ۵۰×۳۰مم و A4 آستریک ۳×۸ با @page پویا، تعداد کپی per-variant؛ بدون endpoint جدید.
+> - تحویل فاکتور خرید به تامین‌کننده (بند ۲۷+۱۱۱): مدل `SupplierInvoiceDelivery` (QUEUED/SENT/FAILED + attempts + lastError) + فیلد `Supplier.email` + `VendorNotifyService` — EMAIL با SMTP واقعی fetch-based (env: SMTP_HOST/USER/PASS/PORT/FROM؛ بدون پکیج جدید)، SMS با آداپتور موجود Kavenegar. مسیر خودکار: رویداد `PurchaseInvoiceCreated` + تنظیم per-scope `purchasing.autoSendInvoiceEmail/Sms` (idempotent per invoice+channel)؛ مسیر دستی: دکمه ✉️/📱 در تب فاکتور + `GET deliveries` تاریخچه. بدون credential ردیف QUEUED می‌ماند و پیام صریح — هیچ «ارسال شد» جعل نمی‌شود. تست ۴/۴ vendor-notify (۴۲/۴۲ کل).
 > - ریسک باقی‌مانده: نگهداشت بکاپ فقط محلی است (نسخه خارج از دیسک توصیه شده در README بکاپ).
 
 ## ۱) Architecture / Monorepo Map
@@ -48,6 +49,7 @@
 | RBAC | `Permission/RolePermission` + PermissionsGuard سراسری (APP_GUARD) | ۱۲۲ endpoint با @RequirePermission | ✅ DONE |
 | Media | `Media` (magic-byte validation) | capabilities.controller | ✅ DONE |
 | تنظیمات | `Setting` (JSON) + `InventorySetting` (تایپ‌دار) | capabilities + inventory-settings.service | ✅ DONE |
+| تحویل فاکتور به تامین‌کننده (بند ۲۷+۱۱۱) | `SupplierInvoiceDelivery` + `Supplier.email` | `vendor-notify.service` — EMAIL (SMTP fetch) / SMS (Kavenegar)؛ خودکار با رویداد + دستی از UI؛ بدون credential = QUEUED صریح | ✅ DONE (پایه) |
 
 ## ۳) API Map (۱۶ ماژول، ~۶۵ کنترلر-فایل)
 

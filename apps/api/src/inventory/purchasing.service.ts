@@ -47,13 +47,17 @@ export class PurchasingService {
     });
   }
 
-  async createSupplier(input: { name: string; phone?: string; address?: string; taxId?: string; creditLimit?: number; notes?: string; actorId?: string }) {
+  async createSupplier(input: { name: string; phone?: string; email?: string; address?: string; taxId?: string; creditLimit?: number; notes?: string; actorId?: string }) {
     if (!input.name?.trim()) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نام تامین‌کننده الزامی است." });
+    if (input.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(input.email)) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "ایمیل تامین‌کننده نامعتبر است." });
+    }
     const s = await this.prisma.$transaction(async (tx) => {
       const supplier = await tx.supplier.create({
         data: {
           name: input.name.trim(),
           phone: input.phone,
+          email: input.email ?? null,
           address: input.address,
           taxId: input.taxId,
           creditLimit: input.creditLimit != null ? BigInt(input.creditLimit) : null,
@@ -67,11 +71,15 @@ export class PurchasingService {
     return s;
   }
 
-  async updateSupplier(id: string, input: { name?: string; phone?: string; address?: string; taxId?: string; creditLimit?: number | null; notes?: string; actorId?: string }) {
+  async updateSupplier(id: string, input: { name?: string; phone?: string; email?: string | null; address?: string; taxId?: string; creditLimit?: number | null; notes?: string; actorId?: string }) {
     const s = await this.prisma.supplier.findUnique({ where: { id } });
     if (!s || s.deletedAt) throw new NotFoundException({ code: "NOT_FOUND", message: "تامین‌کننده یافت نشد." });
+    if (input.email !== undefined && input.email !== null && input.email !== "" && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(input.email)) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "ایمیل تامین‌کننده نامعتبر است." });
+    }
     const data: Record<string, unknown> = {};
     for (const k of ["name", "phone", "address", "taxId", "notes"] as const) if (input[k] !== undefined) data[k] = input[k];
+    if (input.email !== undefined) data.email = input.email === "" ? null : input.email;
     if (input.creditLimit !== undefined) data.creditLimit = input.creditLimit != null ? BigInt(input.creditLimit) : null;
     const updated = await this.prisma.supplier.update({ where: { id }, data: data as never });
     await this.audit(input.actorId, "purchasing.supplier.update", "Supplier", id, data);

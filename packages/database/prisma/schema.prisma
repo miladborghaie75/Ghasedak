@@ -1407,23 +1407,23 @@ enum StocktakeState {
 }
 
 model Stocktake {
-  id             String         @id @default(cuid())
-  number         String         @unique
-  warehouseId    String
-  state          StocktakeState @default(OPEN)
-  countMode      String         @default("ALL") // ALL|SELECTED — قانون ۶: قابل تنظیم، نه هاردکد
-  toleranceQty   Int            @default(0) // اختلاف کمتر/مساوی این مقدار بدون نیاز به تایید ثبت می‌شود
-  note           String?
-  actorId        String?
-  approvedById   String? // تاییدکننده تعدیل‌های بالای تحمل (Approval System — بند ۱۰۱)
-  approvedAt     DateTime?
-  createdAt      DateTime       @default(now())
-  closedAt       DateTime?
+  id           String         @id @default(cuid())
+  number       String         @unique
+  warehouseId  String
+  state        StocktakeState @default(OPEN)
+  countMode    String         @default("ALL") // ALL|SELECTED — قانون ۶: قابل تنظیم، نه هاردکد
+  toleranceQty Int            @default(0) // اختلاف کمتر/مساوی این مقدار بدون نیاز به تایید ثبت می‌شود
+  note         String?
+  actorId      String?
+  approvedById String? // تاییدکننده تعدیل‌های بالای تحمل (Approval System — بند ۱۰۱)
+  approvedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  closedAt     DateTime?
 
-  warehouse   Warehouse       @relation(fields: [warehouseId], references: [id])
-  items       StocktakeItem[]
-  actor       User?           @relation(fields: [actorId], references: [id])
-  approvedBy  User?           @relation("StocktakeApprovedBy", fields: [approvedById], references: [id])
+  warehouse  Warehouse       @relation(fields: [warehouseId], references: [id])
+  items      StocktakeItem[]
+  actor      User?           @relation(fields: [actorId], references: [id])
+  approvedBy User?           @relation("StocktakeApprovedBy", fields: [approvedById], references: [id])
 }
 
 model StocktakeItem {
@@ -1511,13 +1511,13 @@ model DamageRecord {
 
 /// تنظیمات انبار — هر کلید: type/default/validation/description + Permission + UI + Audit (قانون ۶)
 model InventorySetting {
-  key         String   @id
-  value       Json
-  valueType   String   @default("number") // number|boolean|string
+  key          String   @id
+  value        Json
+  valueType    String   @default("number") // number|boolean|string
   defaultValue Json
-  description String
-  updatedBy   String?
-  updatedAt   DateTime @updatedAt
+  description  String
+  updatedBy    String?
+  updatedAt    DateTime @updatedAt
 }
 
 // ------------------------------------------------ کانال و قیمت (بند ۲–۷)
@@ -1711,6 +1711,7 @@ model Supplier {
   id          String    @id @default(cuid())
   name        String
   phone       String?
+  email       String? // برای ارسال خودکار/دستی فاکتور خرید (آداپتور واقعی؛ بدون credential فیک)
   address     String?
   taxId       String?
   bankInfo    Json?
@@ -1722,6 +1723,8 @@ model Supplier {
 
   purchaseOrders   PurchaseOrder[]
   goodsReceipts    GoodsReceipt[]
+  // ارسال فاکتور به تامین‌کننده — بدون رکورد در SupplierAccount (بند ۲۹)
+  // فیلد email برای آداپتور EMAIL
   purchaseInvoices PurchaseInvoice[]
   purchaseReturns  PurchaseReturn[]
 }
@@ -1812,10 +1815,11 @@ model PurchaseInvoice {
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
 
-  supplier Supplier              @relation(fields: [supplierId], references: [id])
-  receipt  GoodsReceipt?         @relation(fields: [grId], references: [id])
-  items    PurchaseInvoiceItem[]
-  payments PurchasePayment[]
+  supplier   Supplier                  @relation(fields: [supplierId], references: [id])
+  receipt    GoodsReceipt?             @relation(fields: [grId], references: [id])
+  items      PurchaseInvoiceItem[]
+  payments   PurchasePayment[]
+  deliveries SupplierInvoiceDelivery[]
 }
 
 model PurchaseInvoiceItem {
@@ -2175,6 +2179,27 @@ model SupplierAccount {
   updatedAt   DateTime @updatedAt
 
   payables AccountsPayable[]
+}
+
+/// تحویل فاکتور خرید به تامین‌کننده (بند ۲۷) — ردیف در دامنه؛ ارسال واقعی با آداپتور
+/// (SMTP/Kavenegar) فقط با credential؛ بدون credential صف می‌ماند و جعل «ارسال شد» ممنوع (بند ۱۱۱)
+model SupplierInvoiceDelivery {
+  id        String    @id @default(cuid())
+  invoiceId String
+  channel   String // EMAIL | SMS
+  to        String // ایمیل/موبایل تامین‌کننده در لحظه ارسال
+  state     String    @default("QUEUED") // QUEUED|SENT|FAILED
+  mediaKind String? // PDF | TEXT — PDF فقط با SMTP/ایمیل؛ SMS همیشه متن
+  attempts  Int       @default(0)
+  lastError String?
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  invoice PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([state])
 }
 
 enum ApState {

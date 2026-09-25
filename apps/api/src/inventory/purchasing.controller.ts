@@ -2,7 +2,9 @@ import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query,
 import type { Request } from "express";
 import { RequirePermission } from "../auth/permissions.guard";
 import { PurchasingService } from "./purchasing.service";
+import { VendorNotifyService } from "./vendor-notify.service";
 import { JournalService } from "../accounting/journal.service";
+import { EventBusService } from "../events/event-bus.service";
 
 /**
  * کنترلر خرید — Suppliers/PO/GRN/Invoice/Payments.
@@ -14,6 +16,8 @@ export class PurchasingController {
   constructor(
     private readonly purchasing: PurchasingService,
     private readonly journal: JournalService,
+    private readonly vendorNotify: VendorNotifyService,
+    private readonly bus: EventBusService,
   ) {}
 
   private actor(req: Request): string | undefined {
@@ -31,13 +35,13 @@ export class PurchasingController {
 
   @Post("suppliers")
   @RequirePermission("purchasing.manage")
-  async createSupplier(@Req() req: Request, @Body() body: { name: string; phone?: string; address?: string; taxId?: string; creditLimit?: number; notes?: string }) {
+  async createSupplier(@Req() req: Request, @Body() body: { name: string; phone?: string; email?: string; address?: string; taxId?: string; creditLimit?: number; notes?: string }) {
     return this.purchasing.createSupplier({ ...body, actorId: this.actor(req) });
   }
 
   @Post("suppliers/:id")
   @RequirePermission("purchasing.manage")
-  async updateSupplier(@Req() req: Request, @Param("id") id: string, @Body() body: { name?: string; phone?: string; address?: string; taxId?: string; creditLimit?: number | null; notes?: string }) {
+  async updateSupplier(@Req() req: Request, @Param("id") id: string, @Body() body: { name?: string; phone?: string; email?: string | null; address?: string; taxId?: string; creditLimit?: number | null; notes?: string }) {
     return this.purchasing.updateSupplier(id, { ...body, actorId: this.actor(req) });
   }
 
@@ -146,6 +150,9 @@ export class PurchasingController {
         lines,
       }).catch(() => undefined);
     }
+    // ارسال خودکار فاکتور به تامین‌کننده — بند ۲۷/۱۱۱: تنظیم per-scope؛ ردیف تحویل با state QUEUED/SENT/FAILED؛
+    // بدون credential فقط صف + لاگ — هیچ جعل «ارسال شد» (handled در VendorNotifyService)
+    void this.bus.publish("PurchaseInvoiceCreated", { invoiceId: invoice.id, invoiceNumber: invoice.number, supplierId: invoice.supplierId });
     return result;
   }
 
@@ -154,6 +161,33 @@ export class PurchasingController {
   @RequirePermission("purchasing.view")
   async invoiceDetail(@Param("id") id: string) {
     return this.purchasing.getInvoiceDetail(id);
+  }
+
+  /** ارسال فاکتور به تامین‌کننده (ایمیل/SMS) — آداپتور واقعی، بدون credential فیک (بند ۱۱۱) */
+  @Post("purchase-invoices/:id/send")
+  @RequirePermission("purchasing.manage")
+  async sendInvoice(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: { channel: "EMAIL" | "SMS"; to?: string; force?: boolean },
+  ) {
+    if (body.channel !== "EMAIL" && body.channel !== "SMS") {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "کانال باید EMAIL یا SMS باشد." });
+    }
+    return this.vendorNotify.sendInvoice({
+      invoiceId: id,
+      channel: body.channel,
+      to: body.to,
+      force: body.force === true,
+      actorId: this.actor(req),
+    });
+  }
+
+  /** تاریخچه تحویل‌های فاکتور به تامین‌کننده */
+  @Get("purchase-invoices/:id/deliveries")
+  @RequirePermission("purchasing.view")
+  invoiceDeliveries(@Param("id") id: string) {
+    return this.vendorNotify.listDeliveries(id);
   }
 
   @Post("purchase-invoices/:id/attachments")

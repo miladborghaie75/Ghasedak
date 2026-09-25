@@ -7,13 +7,14 @@ import { InventoryOpsService } from "./inventory-ops.service";
 import { InventoryReportsService } from "./inventory-reports.service";
 import { InventorySettingsService } from "./inventory-settings.service";
 import { PurchasingService } from "./purchasing.service";
+import { VendorNotifyService } from "./vendor-notify.service";
 import { InventoryController } from "./inventory.controller";
 import { PurchasingController } from "./purchasing.controller";
 
 @Module({
   imports: [PrismaModule, AccountingModule, EventsModule],
-  providers: [InventoryService, InventoryOpsService, InventoryReportsService, InventorySettingsService, PurchasingService],
+  providers: [InventoryService, InventoryOpsService, InventoryReportsService, InventorySettingsService, PurchasingService, VendorNotifyService],
   controllers: [InventoryController, PurchasingController],
-  exports: [InventoryService, InventoryOpsService, InventoryReportsService, InventorySettingsService, PurchasingService],
+  exports: [InventoryService, InventoryOpsService, InventoryReportsService, InventorySettingsService, PurchasingService, VendorNotifyService],
 })
 export class InventoryModule {}

@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useAdminApi, fa } from "@/components/useAdminApi";
 import ProductPicker from "@/components/commerce/ProductPicker";
 
-interface Supplier { id: string; name: string; phone: string | null; taxId?: string | null; account: { outstanding: string } | null }
+interface Supplier { id: string; name: string; phone: string | null; email?: string | null; taxId?: string | null; account: { outstanding: string } | null }
 interface PORow { id: string; number: string; status: string; supplier: { name: string }; _count: { items: number }; createdAt: string }
 interface GRNRow { id: string; number: string; supplierId: string; supplier: { name: string }; warehouse: { name: string }; po: { number: string } | null; _count: { items: number }; receivedAt: string }
 interface InvRow { id: string; number: string; state: string; supplier: { name: string }; receipt: { number: string } | null; grandTotal: string; dueDate: string | null; _count: { payments: number } }
@@ -47,7 +47,7 @@ export default function PurchaseClient() {
   const canPay = (permissions ?? []).includes("purchasing.pay");
 
   // فرم‌ها
-  const [supForm, setSupForm] = useState({ name: "", phone: "", taxId: "", notes: "" });
+  const [supForm, setSupForm] = useState({ name: "", phone: "", email: "", taxId: "", notes: "" });
   const [poSupplier, setPoSupplier] = useState(""); const [poLines, setPoLines] = useState<Array<{ sku: string; qty: string; cost: string }>>([{ sku: "", qty: "", cost: "" }]);
   const [grnSupplier, setGrnSupplier] = useState(""); const [grnWarehouse, setGrnWarehouse] = useState(""); const [grnPoId, setGrnPoId] = useState("");
   const [grnLines, setGrnLines] = useState<Array<{ sku: string; qty: string; cost: string; landed: string }>>([{ sku: "", qty: "", cost: "", landed: "0" }]);
@@ -76,7 +76,20 @@ export default function PurchaseClient() {
   const createSupplier = async () => {
     const r = await call("/admin/purchasing/suppliers", { method: "POST", body: JSON.stringify(supForm) });
     flash(r.ok, r.ok ? "تامین‌کننده ثبت شد" : r.error?.message ?? "خطا");
-    if (r.ok) { setSupForm({ name: "", phone: "", taxId: "", notes: "" }); await load(); }
+    if (r.ok) { setSupForm({ name: "", phone: "", email: "", taxId: "", notes: "" }); await load(); }
+  };
+
+  // ---- ارسال فاکتور به تامین‌کننده (ایمیل/SMS) — آداپتور واقعی؛ بدون credential خطای صریح (بند ۱۱۱) ----
+  const sendInvoice = async (invoiceId: string, channel: "EMAIL" | "SMS") => {
+    const r = await call<{ delivery: { state: string }; error?: string; note?: string }>(
+      `/admin/purchasing/purchase-invoices/${invoiceId}/send`,
+      { method: "POST", body: JSON.stringify({ channel }) },
+    );
+    const state = r.data?.delivery?.state;
+    if (!r.ok) flash(false, r.error?.message ?? "خطا در ارسال");
+    else if (state === "SENT") flash(true, `فاکتور با ${channel === "EMAIL" ? "ایمیل" : "پیامک"} ارسال شد`);
+    else if (state === "QUEUED") flash(false, r.data?.error ?? "بدون credential — فاکتور در صف ارسال ماند (بند ۱۱۱)");
+    else flash(false, r.data?.error ?? "ارسال ناموفق — در تاریخچه تحویل ثبت شد");
   };
 
   // ---- PO ----
@@ -134,6 +147,7 @@ export default function PurchaseClient() {
             <div className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface p-4">
               <input value={supForm.name} onChange={(e) => setSupForm({ ...supForm, name: e.target.value })} placeholder="نام تامین‌کننده" className="h-9 w-48 rounded-lg border border-line bg-surface px-2 text-xs" />
               <input value={supForm.phone} onChange={(e) => setSupForm({ ...supForm, phone: e.target.value })} placeholder="تلفن" dir="ltr" className="h-9 w-32 rounded-lg border border-line bg-surface px-2 text-xs" />
+              <input value={supForm.email} onChange={(e) => setSupForm({ ...supForm, email: e.target.value })} placeholder="ایمیل (برای ارسال فاکتور)" dir="ltr" className="h-9 w-44 rounded-lg border border-line bg-surface px-2 text-xs" />
               <input value={supForm.taxId} onChange={(e) => setSupForm({ ...supForm, taxId: e.target.value })} placeholder="شناسه مالیاتی" dir="ltr" className="h-9 w-32 rounded-lg border border-line bg-surface px-2 text-xs" />
               <input value={supForm.notes} onChange={(e) => setSupForm({ ...supForm, notes: e.target.value })} placeholder="یادداشت" className="h-9 w-40 rounded-lg border border-line bg-surface px-2 text-xs" />
               <button onClick={() => void createSupplier()} disabled={loading || !supForm.name} className="h-9 rounded-full bg-primary px-4 text-xs font-bold text-on-accent disabled:opacity-50">ثبت</button>
@@ -280,7 +294,7 @@ export default function PurchaseClient() {
           <div className="overflow-hidden rounded-card border border-line bg-surface">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-ink/60">
-                <th className="p-3 text-right">شماره</th><th className="p-3">تامین‌کننده</th><th className="p-3">GRN</th><th className="p-3">مبلغ کل</th><th className="p-3">وضعیت</th><th className="p-3">پرداخت / جزئیات</th>
+                <th className="p-3 text-right">شماره</th><th className="p-3">تامین‌کننده</th><th className="p-3">GRN</th><th className="p-3">مبلغ کل</th><th className="p-3">وضعیت</th><th className="p-3">ارسال به تامین‌کننده</th><th className="p-3">پرداخت / جزئیات</th>
               </tr></thead>
               <tbody>
                 {invoices.map((iv) => (
@@ -290,6 +304,14 @@ export default function PurchaseClient() {
                     <td className="p-3 text-xs" dir="ltr">{iv.receipt?.number ?? "—"}</td>
                     <td className="p-3 text-center tabular-nums">{fa(iv.grandTotal)}</td>
                     <td className="p-3 text-center text-xs">{STATE_FA[iv.state] ?? iv.state}</td>
+                    <td className="p-3">
+                      {canManage ? (
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => void sendInvoice(iv.id, "EMAIL")} title="ارسال با ایمیل تامین‌کننده" className="rounded-full border border-line px-2.5 py-1 text-xs font-bold hover:bg-app-primary-soft">✉️ ایمیل</button>
+                          <button onClick={() => void sendInvoice(iv.id, "SMS")} title="ارسال با پیامک تامین‌کننده" className="rounded-full border border-line px-2.5 py-1 text-xs font-bold hover:bg-app-primary-soft">📱 پیامک</button>
+                        </div>
+                      ) : <span className="text-xs text-muted">—</span>}
+                    </td>
                     <td className="p-3">
                       {canPay && iv.state !== "PAID" ? (
                         <div className="flex items-center gap-1">
@@ -301,7 +323,7 @@ export default function PurchaseClient() {
                     </td>
                   </tr>
                 ))}
-                {invoices.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-ink/50">فاکتوری ثبت نشده است.</td></tr>}
+                {invoices.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-ink/50">فاکتوری ثبت نشده است.</td></tr>}
               </tbody>
             </table>
           </div>
