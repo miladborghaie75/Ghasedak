@@ -109,9 +109,13 @@ async function main(): Promise<void> {
 
   // ---- روش‌های ارسال DEMO (بند ۳۰: هزینه + قاعده رایگان) — idempotent
   {
-    const zone = await prisma.shippingZone.create({
-      data: { name: "تهران و سراسر کشور (DEMO)", provinceIds: [], status: "active" },
-    }).catch(async () => await prisma.shippingZone.findFirstOrThrow({ where: { name: { contains: "DEMO" } } }));
+    // ShippingZone کلید یکتا روی name ندارد؛ create().catch() در اجرای دوم duplicate می‌سازد
+    // (catch فقط خطای unique را می‌گیرد و اینجا constraintی وجود ندارد). lookup صریح به‌جای exception:
+    const zone =
+      (await prisma.shippingZone.findFirst({ where: { name: "تهران و سراسر کشور (DEMO)" } })) ??
+      (await prisma.shippingZone.create({
+        data: { name: "تهران و سراسر کشور (DEMO)", provinceIds: [], status: "active" },
+      }));
     const ship = [
       { name: "پست پیشتاز (۳ تا ۵ روز کاری)", cost: 49000, eta: "۳ تا ۵ روز کاری", free: 1500000, sort: 1 },
       { name: "پیک اکسپرس تهران (همان روز)", cost: 120000, eta: "همان روز", free: null, sort: 2 },
@@ -299,9 +303,14 @@ async function main(): Promise<void> {
   }
 
   // ---- فاکتور نمونه حسابداری: Chart of Accounts حداقلی + سال مالی
-  const fy = await prisma.fiscalYear.create({
-    data: { title: "۱۴۰۵ (DEMO)", startsAt: new Date("2026-03-21"), endsAt: new Date("2027-03-20") },
-  }).catch(() => null);
+  // FiscalYear کلید یکتا روی title ندارد؛ create().catch(() => null) در اجرای دوم duplicate می‌سازد.
+  // lookup صریح با کلید پایدار (title) به‌جای exception:
+  let fy = await prisma.fiscalYear.findFirst({ where: { title: "۱۴۰۵ (DEMO)" } });
+  if (!fy) {
+    fy = await prisma.fiscalYear.create({
+      data: { title: "۱۴۰۵ (DEMO)", startsAt: new Date("2026-03-21"), endsAt: new Date("2027-03-20") },
+    });
+  }
   if (fy) {
     const accounts: Array<{ code: string; name: string; type: string }> = [
       { code: "1000", name: "موجودی نقد", type: "ASSET" },
