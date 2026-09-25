@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { money, type Money } from "@ghasedak/contracts";
 
@@ -40,6 +41,27 @@ export class JournalService {
       const r = await this.post(input);
       return { posted: true, id: r.id, number: r.number };
     } catch (e) {
+      return this.notifyPostFailure(e, input);
+    }
+  }
+
+  /**
+   * شکست سند داخل تراکنشِ فراخوان — همان قرارداد درس ریسک ۶: تراکنش دامنه‌ی اصلی rollback می‌شود
+   * (درست است؛ عملیات مالی با سند هم‌پیمان‌اند) اما شکست هرگز بی‌صدا نیست:
+   * Notification(ADMIN) + AuditLog + console.error — سپس خطا دوباره پرتاب می‌شود تا rollback رخ دهد.
+   */
+  async postOrNotifyInTx(tx: Prisma.TransactionClient, input: PostEntryInput): Promise<{ id: string; number: string }> {
+    try {
+      return await this.postInTx(tx, input);
+    } catch (e) {
+      await this.notifyPostFailure(e, input);
+      throw e;
+    }
+  }
+
+  /** ثبت شکست سند: Notification ساعتی idempotent + AuditLog + console.error (هرگز throw نمی‌کند) */
+  async notifyPostFailure(e: unknown, input: PostEntryInput): Promise<{ posted: false; error: { code?: string; message: string } }> {
+    {
       const errBody = (e as { response?: { code?: string; message?: string } }).response ?? null;
       const code = errBody?.code ?? (e instanceof Error ? e.constructor.name : "UNKNOWN");
       const message = errBody?.message ?? (e instanceof Error ? e.message : String(e));
@@ -88,15 +110,24 @@ export class JournalService {
     }
   }
 
-  async post(input: PostEntryInput): Promise<{ id: string; number: string }> {
-    if (!input.lines || input.lines.length < 2) {
+  /**
+   * پست سند داخل تراکنشِ فراخوان (فاز ۸ — خزانه): مانده صندوق/بانک و سند باید اتمیک با هم باشند.
+   * همین منطق validation/numbering/create با post() مشترک است.
+   */
+  async postInTx(tx: Prisma.TransactionClient, input: PostEntryInput): Promise<{ id: string; number: string }> {
+    const prepared = this.prepareLines(input.lines);
+    return this.createEntryInTx(tx, input, prepared);
+  }
+
+  /** آماده‌سازی و اعتبارسنجی ردیف‌ها — مشترک بین post و postInTx */
+  private prepareLines(lines: JournalLineInput[]): Array<{ accountCode: string; debit: Money; credit: Money; partyType?: string; partyId?: string }> {
+    if (!lines || lines.length < 2) {
       throw new BadRequestException({ code: "JOURNAL_INVALID", message: "سند حداقل دو ردیف لازم دارد." });
     }
-
     let debitTotal = 0;
     let creditTotal = 0;
     const prepared: Array<{ accountCode: string; debit: Money; credit: Money; partyType?: string; partyId?: string }> = [];
-    for (const line of input.lines) {
+    for (const line of lines) {
       const debit = line.debit ?? 0;
       const credit = line.credit ?? 0;
       if (debit < 0 || credit < 0) {
@@ -125,62 +156,73 @@ export class JournalService {
         message: `سند متوازن نیست: بدهکار ${debitTotal} ≠ بستانکار ${creditTotal}`,
       });
     }
+    return prepared;
+  }
 
-    return this.prisma.$transaction(async (tx) => {
-      const year = await tx.fiscalYear.findFirst({ where: { state: "OPEN" } });
-      if (!year) {
-        throw new BadRequestException({ code: "NO_OPEN_FISCAL_YEAR", message: "سال مالی بازی وجود ندارد." });
-      }
+  /** ایجاد سند داخل تراکنش — مشترک بین post و postInTx (شماره‌گذاری اتمیک بند ۴۵/۸۲) */
+  private async createEntryInTx(
+    tx: Prisma.TransactionClient,
+    input: PostEntryInput,
+    prepared: Array<{ accountCode: string; debit: Money; credit: Money; partyType?: string; partyId?: string }>,
+  ): Promise<{ id: string; number: string }> {
+    const year = await tx.fiscalYear.findFirst({ where: { state: "OPEN" } });
+    if (!year) {
+      throw new BadRequestException({ code: "NO_OPEN_FISCAL_YEAR", message: "سال مالی بازی وجود ندارد." });
+    }
 
-      // شماره‌گذاری اتمیک (بند ۴۵/۸۲) — nextNumber در DB Int است
-      const series = await tx.$queryRaw<{ nextNumber: number }[]>`
-        SELECT "nextNumber" FROM "NumberSeries" WHERE scope = 'journal' FOR UPDATE`;
-      let seq = 1;
-      if (series.length === 0) {
-        await tx.numberSeries.create({ data: { scope: "journal", prefix: "JE", nextNumber: 2, padding: 5 } });
-      } else {
-        seq = series[0].nextNumber;
-        await tx.numberSeries.update({
-          where: { scope: "journal" },
-          data: { nextNumber: seq + 1 },
-        });
-      }
-      const number = `JE-${String(seq).padStart(5, "0")}`;
-
-      const entry = await tx.journalEntry.create({
-        data: {
-          number,
-          fiscalYearId: year.id,
-          date: input.date ?? new Date(),
-          description: input.description,
-          sourceType: input.sourceType,
-          sourceId: input.sourceId,
-          state: "FINAL",
-          actorId: input.actorId,
-          lines: {
-            create: await Promise.all(
-              prepared.map(async (l) => {
-                const account = await tx.account.findUnique({ where: { code: l.accountCode } });
-                if (!account) {
-                  throw new BadRequestException({
-                    code: "ACCOUNT_NOT_FOUND",
-                    message: `حساب ${l.accountCode} یافت نشد.`,
-                  });
-                }
-                return {
-                  accountId: account.id,
-                  debit: BigInt(l.debit.amount),
-                  credit: BigInt(l.credit.amount),
-                  partyType: l.partyType,
-                  partyId: l.partyId,
-                };
-              }),
-            ),
-          },
-        },
+    // شماره‌گذاری اتمیک (بند ۴۵/۸۲) — nextNumber در DB Int است
+    const series = await tx.$queryRaw<{ nextNumber: number }[]>`
+      SELECT "nextNumber" FROM "NumberSeries" WHERE scope = 'journal' FOR UPDATE`;
+    let seq = 1;
+    if (series.length === 0) {
+      await tx.numberSeries.create({ data: { scope: "journal", prefix: "JE", nextNumber: 2, padding: 5 } });
+    } else {
+      seq = series[0].nextNumber;
+      await tx.numberSeries.update({
+        where: { scope: "journal" },
+        data: { nextNumber: seq + 1 },
       });
-      return { id: entry.id, number: entry.number };
+    }
+    const number = `JE-${String(seq).padStart(5, "0")}`;
+
+    const entry = await tx.journalEntry.create({
+      data: {
+        number,
+        fiscalYearId: year.id,
+        date: input.date ?? new Date(),
+        description: input.description,
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+        state: "FINAL",
+        actorId: input.actorId,
+        lines: {
+          create: await Promise.all(
+            prepared.map(async (l) => {
+              const account = await tx.account.findUnique({ where: { code: l.accountCode } });
+              if (!account) {
+                throw new BadRequestException({
+                  code: "ACCOUNT_NOT_FOUND",
+                  message: `حساب ${l.accountCode} یافت نشد.`,
+                });
+              }
+              return {
+                accountId: account.id,
+                debit: BigInt(l.debit.amount),
+                credit: BigInt(l.credit.amount),
+                partyType: l.partyType,
+                partyId: l.partyId,
+              };
+            }),
+          ),
+        },
+      },
     });
+    return { id: entry.id, number: entry.number };
+  }
+
+  async post(input: PostEntryInput): Promise<{ id: string; number: string }> {
+    const prepared = this.prepareLines(input.lines);
+    return this.prisma.$transaction(async (tx) => this.createEntryInTx(tx, input, prepared));
   }
 
   /** تراز آزمایشی — از منبع حقیقت Ledger (بند ۱۰۶/۱۰۷) */

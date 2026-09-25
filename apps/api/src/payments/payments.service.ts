@@ -8,6 +8,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { InventoryService } from "../inventory/inventory.service";
 import { JournalService } from "../accounting/journal.service";
+import { TreasuryService } from "../treasury/treasury.service";
 import type { PaymentProviderAdapter, PaymentRequestContext } from "./provider";
 import { ZarinpalProvider } from "./zarinpal.provider";
 import { MockPaymentProvider } from "./mock.provider";
@@ -37,6 +38,7 @@ export class PaymentsService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
     private readonly journal: JournalService,
+    private readonly treasury: TreasuryService,
     private readonly zarinpal: ZarinpalProvider,
     private readonly mock: MockPaymentProvider,
   ) {}
@@ -258,6 +260,8 @@ export class PaymentsService implements OnModuleInit {
         where: { id: attempt.id },
         data: { state: "PAID", verifiedAt: new Date(), providerTxId: refId || attempt.providerTxId },
       });
+      // فاز ۸ — خزانه: ورود وجه به حساب بانکی اتمیک با تایید پرداخت (سند فروش قبلاً با postOrNotify ثبت می‌شود)
+      await this.treasury.creditBankForOnlineInTx(tx, Number(attempt.amount));
     });
 
     if (attempt.orderId) {

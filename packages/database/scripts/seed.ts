@@ -30,6 +30,7 @@ const PERMISSIONS = [
   "customers.view", "customers.manage",
   "payments.view", "payments.verify",
   "pos.view", "pos.sell",
+  "treasury.view", "treasury.manage",
   "accounting.view", "accounting.journal", "accounting.accounts", "accounting.reports",
   "reports.view",
   "media.view", "media.manage",
@@ -48,6 +49,7 @@ const ROLE_SETS: Record<string, string[]> = {
     "dashboard.view",
     "payments.view", "payments.verify", "payments.reconcile" as string,
     "accounting.view", "accounting.journal", "accounting.accounts", "accounting.reports",
+    "treasury.view", "treasury.manage",
     "purchasing.view", "purchasing.pay",
     "reports.view", "audit.view", "system.health",
   ],
@@ -314,6 +316,37 @@ async function main(): Promise<void> {
     ];
     for (const a of accounts) {
       await prisma.account.upsert({ where: { code: a.code }, update: {}, create: a });
+    }
+
+    // ---- خزانه DEMO (فاز ۸، بند ۵۹–۶۲): یک صندوق نقد + یک حساب بانکی روی حساب‌های GL
+    // مانده جاری = مانده دفتری GL (projection صادقانه؛ بند ۱۰۷: بدون محاسبه موازی)
+    const glCash = await prisma.account.findUnique({ where: { code: "1000" } });
+    const glBank = await prisma.account.findUnique({ where: { code: "1100" } });
+    if (glCash && glBank) {
+      const book = async (glId: string) => {
+        const agg = await prisma.journalLine.aggregate({ where: { accountId: glId }, _sum: { debit: true, credit: true } });
+        return (agg._sum.debit ?? 0n) - (agg._sum.credit ?? 0n);
+      };
+      await prisma.cashAccount.upsert({
+        where: { id: "demo-cash-main" },
+        update: { currentBalance: await book(glCash.id), openingBalance: await book(glCash.id) },
+        create: { id: "demo-cash-main", name: "صندوق فروشگاه (DEMO)", kind: "cash", glAccountId: glCash.id, openingBalance: await book(glCash.id), currentBalance: await book(glCash.id), active: true },
+      });
+      await prisma.bankAccount.upsert({
+        where: { id: "demo-bank-main" },
+        update: { currentBalance: await book(glBank.id), openingBalance: await book(glBank.id) },
+        create: {
+          id: "demo-bank-main",
+          name: "حساب جاری اصلی (DEMO)",
+          bankName: "بانک (DEMO)",
+          accountNumber: "0000000000",
+          iban: null,
+          glAccountId: glBank.id,
+          openingBalance: await book(glBank.id),
+          currentBalance: await book(glBank.id),
+          active: true,
+        },
+      });
     }
   }
 

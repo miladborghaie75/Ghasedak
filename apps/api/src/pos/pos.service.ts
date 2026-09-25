@@ -9,6 +9,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { InventoryService } from "../inventory/inventory.service";
 import { JournalService } from "../accounting/journal.service";
 import { PricingService } from "../pricing/pricing.service";
+import { TreasuryService } from "../treasury/treasury.service";
 import { nextNumber } from "../common/number-series";
 
 export interface PosSaleLine {
@@ -47,6 +48,7 @@ export class PosService {
     private readonly inventory: InventoryService,
     private readonly journal: JournalService,
     private readonly pricing: PricingService,
+    private readonly treasury: TreasuryService,
   ) {}
 
   async openShift(input: { userId: string; registerName: string; openingCash: number }) {
@@ -95,7 +97,8 @@ export class PosService {
     const sumOf = (m: string) =>
       Number(byMethod.find((b) => b.method === m)?._sum.amount ?? 0n);
     const cashSales = sumOf("CASH");
-    const expected = Number(shift.openingCash) + cashSales;
+    // فاز ۸ — خزانه: هزینه‌های نقدی ثبت‌شده از دراوِر کسر می‌شوند (بند ۷۲ petty cash)
+    const expected = Number(shift.openingCash) + cashSales - Number(shift.expenseTotal);
     const actual = Math.max(0, Math.round(input.actualCash));
     return this.prisma.cashierShift.update({
       where: { id: shift.id },
@@ -190,6 +193,8 @@ export class PosService {
 
     const created = await this.prisma.$transaction(async (tx) => {
       const number = await nextNumber(tx, "pos_invoice", "POS", 6);
+      // فاز ۸ — خزانه: مانده صندوق/بانک اتمیک با فاکتور (CASH→صندوق، CARD/ONLINE→بانک)
+      await this.treasury.applyPosSaleInTx(tx, { payments: input.payments });
       const invoice = await tx.posInvoice.create({
         data: {
           number,
@@ -242,20 +247,28 @@ export class PosService {
       });
     }
 
-    // سند حسابداری: Dr صندوق/بانک، Cr فروش (COGS/WAC در فاز O)
+    // سند حسابداری فروش — per-method (فاز ۸): CASH→1000، CARD/ONLINE/BANK_TRANSFER→1100
     // ردیف کالا با SKU/بارکد در توضیح — ردیابی بارکد در حسابداری (درخواست کاربر)
     const itemLines = priced
       .map((l) => `${l.qty}× ${l.title} [${l.sku}${l.barcode ? ` | بارکد ${l.barcode}` : ""}]`)
       .join(" ، ");
+    let cashAmt = 0;
+    let bankAmt = 0;
+    for (const p of input.payments) {
+      const m = (p.methodCode || "").toUpperCase();
+      if (m === "CASH") cashAmt += Math.round(p.amount);
+      else if (m === "CARD" || m === "ONLINE" || m === "BANK_TRANSFER") bankAmt += Math.round(p.amount);
+    }
+    const lines: Array<{ accountCode: string; debit?: number; credit?: number }> = [];
+    if (cashAmt > 0) lines.push({ accountCode: "1000", debit: cashAmt });
+    if (bankAmt > 0) lines.push({ accountCode: "1100", debit: bankAmt });
+    lines.push({ accountCode: "4000", credit: Number(grandTotal) });
     await this.journal.postOrNotify({
       description: `فروش POS ${created.number} — ${itemLines}`,
       sourceType: "pos_invoice",
       sourceId: created.id,
       actorId: cashierId,
-      lines: [
-        { accountCode: "1100", debit: Number(grandTotal) },
-        { accountCode: "4000", credit: Number(grandTotal) },
-      ],
+      lines,
     });
 
     return { number: created.number, grandTotal: created.grandTotal, id: created.id };

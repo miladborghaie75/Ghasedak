@@ -208,19 +208,8 @@ export class PurchasingController {
   @Post("purchase-invoices/:id/pay")
   @RequirePermission("purchasing.pay")
   async payInvoice(@Req() req: Request, @Param("id") id: string, @Body() body: { amount: number; method?: string; cashAccountId?: string }) {
-    const result = await this.purchasing.payInvoice({ invoiceId: id, amount: body.amount, method: body.method, actorId: this.actor(req) });
-    // سند حسابداری پرداخت — بند ۲۹: Dr AP / Cr نقد-بانک (روش تعیین‌کننده حساب است)
-    const cashAccount = body.method === "cash" ? "1000" : "1100";
-    await this.journal.postOrNotify({
-      description: `پرداخت فاکتور خرید — ${result.invoiceNumber}`,
-      sourceType: "purchase_payment",
-      sourceId: id,
-      actorId: this.actor(req),
-      lines: [
-        { accountCode: "2100", debit: body.amount },
-        { accountCode: cashAccount, credit: body.amount },
-      ],
-    });
-    return result;
+    // سند + مانده صندوق/بانک داخل همان تراکنش تسویه AP ثبت می‌شوند (فاز ۸ — TreasuryService.debitForPurchaseInTx)
+    // سند این‌جا تکرار نمی‌شود — دوبله‌ثبتی ممنوع
+    return this.purchasing.payInvoice({ invoiceId: id, amount: body.amount, method: body.method, actorId: this.actor(req) });
   }
 }

@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { InventoryService } from "./inventory.service";
 import { nextNumber } from "../common/number-series";
 import { EventBusService } from "../events/event-bus.service";
+import { TreasuryService } from "../treasury/treasury.service";
 
 /**
  * چرخه خرید — بند ۲۷–۲۹/۴۳: PO → GRN (ورود بهایی به انبار + WAC) → Invoice → AP.
@@ -29,6 +30,7 @@ export class PurchasingService {
     private readonly prisma: PrismaService,
     private readonly inv: InventoryService,
     private readonly events: EventBusService,
+    private readonly treasury: TreasuryService,
   ) {}
 
   // ---------------- تامین‌کننده ----------------
@@ -478,6 +480,14 @@ export class PurchasingService {
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.purchasePayment.create({
         data: { invoiceId: invoice.id, method: input.method ?? "transfer", amount: BigInt(amount) },
+      });
+      // فاز ۸ — خزانه: کاهش مانده صندوق/بانک + سند پرداخت، اتمیک با تسویه AP (درس ریسک ۶)
+      await this.treasury.debitForPurchaseInTx(tx, {
+        method: input.method ?? "transfer",
+        amount,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.number,
+        actorId: input.actorId,
       });
       const ap = await tx.accountsPayable.findFirst({
         where: { refType: "purchase_invoice", refId: invoice.id },

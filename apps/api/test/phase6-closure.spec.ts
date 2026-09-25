@@ -10,6 +10,8 @@ import { PurchasingService } from "../src/inventory/purchasing.service";
 import { InventoryService } from "../src/inventory/inventory.service";
 import { InventorySettingsService } from "../src/inventory/inventory-settings.service";
 import { EventBusService } from "../src/events/event-bus.service";
+import { JournalService } from "../src/accounting/journal.service";
+import { TreasuryService } from "../src/treasury/treasury.service";
 import { PricingService } from "../src/pricing/pricing.service";
 
 describe("Phase 6 closure smoke (پرینت/پیوست/یکسان‌سازی قیمت)", () => {
@@ -24,7 +26,7 @@ describe("Phase 6 closure smoke (پرینت/پیوست/یکسان‌سازی ق�
     prisma = new PrismaService();
     await prisma.$connect();
     const inv = new InventoryService(prisma, new InventorySettingsService(prisma));
-    purchasing = new PurchasingService(prisma, inv, new EventBusService(prisma));
+    purchasing = new PurchasingService(prisma, inv, new EventBusService(prisma), new TreasuryService(prisma, new JournalService(prisma)));
     pricing = new PricingService(prisma, new EventBusService(prisma));
     const u = await prisma.user.findFirst({ select: { id: true } });
     actor = u?.id;
