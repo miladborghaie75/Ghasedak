@@ -11,6 +11,7 @@
 > - Phase 5 (پیش از این): Git remote (github.com/miladborghaie75/Ghasedak) + push snapshot + **Price History/Channel-aware Pricing** (PricingService واحد + PriceHistory ledger + public quote/feed) — بند ۱۵ به **DONE (پایه)** رسید.
 > - Phase 6 — Purchase Invoice Professional (بند ۲۷/۳۳/۳۴): میزکار فاکتور خرید اختصاصی + ProductPicker مشترک + QuickCreate + جزئیات حرفه‌ای + GRNI؛ Procurement UI از PARTIAL به **DONE (پایه)** رسید.
 > - Phase 6 closure (commit فعلی): (۱) آپلود پیوست مستقیم در میزکار و صفحه جزئیات فاکتور — همان endpoint رسانه `POST /admin/capabilities/media` (mime/magic/10MB) + attach با audit؛ رفع باگ URL پیوست (`mediaId` ≠ `storageKey` → detail حالا `mediaKey` می‌دهد و لینک `/api/media/:storageKey` واقعاً سرو می‌شود). (۲) چاپ حرفه‌ای A4 (`@media print` در globals.css: پالت روشن اجباری، حذف سایدبار/فرم‌ها، جدول بدون شکست، سربرگ اختصاصی سند + امضا) + بارکد وکتور بدون وابستگی (`components/print/Barcode.tsx`: Code39 شماره سند، EAN-13 هر ردیف). (۳) یکسان‌سازی کامل مسیر قیمت: `admin/inventory/bulk-price` حالا از `PricingService.changePrice` می‌گذرد (PriceHistory + رویداد PriceChanged همیشه)، بدون levelId → سطح صریح **BASE** (seed شد) با آینه `productVariant.price`، mode `fixed` → `delta`، مجوز `inventory.adjust|pricing.manage` + reason — ریسک ۷ بسته شد. (۴) RBAC پیوست‌ها با مجوز جایگزین `media.manage`.
+> - چاپ برچسب بارکد (بند ۲۸/۱۱۶): `/inventory/labels` — انتخاب واریانت از picker مشترک، لیبل EAN-13 وکتور (کامپوننت موجود Barcode)، قالب رول حرارتی ۵۰×۳۰مم و A4 آستریک ۳×۸ با @page پویا، تعداد کپی per-variant؛ بدون endpoint جدید.
 > - ریسک باقی‌مانده: نگهداشت بکاپ فقط محلی است (نسخه خارج از دیسک توصیه شده در README بکاپ).
 
 ## ۱) Architecture / Monorepo Map
@@ -38,6 +39,7 @@
 | حسابداری | `JournalEntry/JournalLine` + COA ۸ حسابه | `journal.service` — سند متوازن اجباری + reverse | ✅ DONE |
 | خرید | `Supplier/PO/GRN/PurchaseInvoice/AP` | `purchasing.service` — GRN→Ledger+WAC، Three-Way Match، PPV | ✅ DONE |
 | ProductPicker/QuickCreate (بند ۲۷/۳۳/۳۴) | `/admin/products/picker` + کامپوننت مشترک `components/commerce/ProductPicker` | `products.service.pickerSearch` + QuickCreate (محصول/دسته/برند) | ✅ DONE |
+| چاپ برچسب بارکد (بند ۲۸/۱۱۶) | `/inventory/labels` + `components/print/Barcode` | همان picker مشترک + EAN-13 وکتور؛ رول ۵۰×۳۰/A4 ۳×۸، @page پویا | ✅ DONE |
 | POS | `PosInvoice/PosPayment/CashierShift` | `pos.service` — شیفت + پرداخت چندگانه + shared stock | ✅ DONE |
 | RMA | `ReturnRequest/Item(condition)/Policy/Refund` | `returns.service` — سیاست بهداشتی، بازشکستن موجودی فقط پس از بازرسی | ✅ DONE |
 | ارسال | `Shipment` | `shipping.service` — LABEL/IN_TRANSIT/DELIVERED + رهگیری عمومی | ✅ DONE |

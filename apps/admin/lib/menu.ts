@@ -24,6 +24,7 @@ export const MENU: MenuGroup[] = [
       { title: "ویژگی‌ها", href: "/attributes", permission: "attributes.view" },
       { title: "موجودی و انبارگردانی", href: "/inventory", permission: "inventory.view" },
       { title: "انبارها", href: "/inventory/warehouses", permission: "inventory.view" },
+      { title: "چاپ برچسب بارکد", href: "/inventory/labels", permission: "products.view" },
       { title: "گزارش‌های انبار", href: "/inventory/reports", permission: "inventory.reports" },
       { title: "خرید از تامین‌کننده", href: "/inventory/purchase", permission: "inventory.view" },
       { title: "رسانه", href: "/media", permission: "media.view" },

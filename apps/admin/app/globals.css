@@ -243,3 +243,110 @@ body {
 .print-only {
   display: none;
 }
+
+/*
+ * چاپ برچسب بارکد کالا (بند ۲۸/۱۱۶) — دو قالب:
+ * - رول حرارتی ۵۰×۳۰مم: هر لیبل یک صفحه کامل (@page در صفحه لیبل override می‌شود)
+ * - A4: شبکه ۳×۸ (لیبل ۶۶×۲۵مم استاندارد آستریک) با شکست صفحه هر ۲۴ لیبل
+ * روی صفحه فقط پیش‌نمایش خاکستری؛ در چاپ فقط لیبل‌ها چاپ می‌شوند.
+ */
+.label-print-area {
+  display: none; /* قالب غیرفعال روی صفحه هم مخفی */
+}
+.label-print-area.label-roll,
+.label-print-area.label-a4 {
+  display: grid; /* پیش‌نمایش روی صفحه */
+  gap: 8px;
+}
+.label-print-area.label-roll {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+.label-print-area.label-a4 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.label-item {
+  background: #fff;
+  border: 1px dashed var(--app-line);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+  overflow: hidden;
+}
+.label-name {
+  font-size: 10px;
+  font-weight: 700;
+  color: #000;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+.label-sku {
+  font-size: 8px;
+  color: #000;
+  font-family: var(--font-sans);
+}
+.label-price {
+  font-size: 10px;
+  font-weight: 800;
+  color: #000;
+}
+
+@media print {
+  /* در چاپ فقط ناحیه لیبل فعال — همه بخش‌های دیگر همین صفحه (و پوسته) مخفی */
+  .label-print-area {
+    display: none !important;
+  }
+  .label-print-area:not(.hidden-print-area) {
+    display: block !important;
+  }
+
+  .label-item {
+    border: none;
+    border-radius: 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* رول: هر لیبل دقیقاً یک صفحه ۵۰×۳۰مم (@page پویا در صفحه لیبل تعیین شده) */
+  .label-roll-item {
+    width: 50mm;
+    height: 30mm;
+    padding: 1.5mm;
+    box-sizing: border-box;
+    break-after: page;
+    page-break-after: always;
+  }
+  .label-roll-item:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  /* A4: شبکه ۳×۸ با لیبل ۶۶×۲۵مم — فاصله استاندارد لیبل آستریک */
+  .label-a4 {
+    display: grid !important;
+    grid-template-columns: repeat(3, 66mm) !important;
+    gap: 2.5mm 2mm !important;
+    justify-content: start;
+  }
+  .label-a4-item {
+    width: 66mm;
+    height: 25mm;
+    padding: 1.5mm;
+    box-sizing: border-box;
+  }
+
+  /* لیبل: بارکد وکتور با کنتراست کامل — بدون متن خاکستری */
+  .label-item * {
+    color: #000 !important;
+  }
+  .label-item svg {
+    max-width: 100%;
+  }
+}
