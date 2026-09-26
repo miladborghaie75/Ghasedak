@@ -88,4 +88,24 @@ export class TreasuryController {
   autoMatch(@Req() req: Request, @Param("id") id: string) {
     return this.treasury.autoMatch(id, this.actor(req));
   }
+
+  /** فاز ۹ (R3): تطبیق دستی — فقط reconciliation state؛ هیچ اثر GL/خزانه/Check (Match ≠ Clear) */
+  @Post("bank-accounts/:id/statements/:statementId/match")
+  @RequirePermission("treasury.manage")
+  manualMatch(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Param("statementId") statementId: string,
+    @Body() body: { sourceType: string; sourceId: string; amount: number },
+  ) {
+    const amount = BigInt(Math.round(Number(body.amount)));
+    return this.treasury.manualMatch(id, statementId, body.sourceType, body.sourceId, amount, this.actor(req));
+  }
+
+  /** فاز ۹ (R3): لغو تطبیق — فقط state=REJECTED */
+  @Post("bank-accounts/:id/statements/:statementId/unmatch")
+  @RequirePermission("treasury.manage")
+  unmatch(@Req() req: Request, @Param("id") id: string, @Param("statementId") statementId: string, @Body() body: { matchId: string }) {
+    return this.treasury.unmatch(statementId, body.matchId, this.actor(req));
+  }
 }

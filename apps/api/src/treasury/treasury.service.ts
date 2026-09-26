@@ -372,7 +372,7 @@ export class TreasuryService {
     const bank = await this.prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
     if (!bank) throw new NotFoundException({ code: "NOT_FOUND", message: "حساب بانکی یافت نشد." });
     const [items, agg] = await Promise.all([
-      this.prisma.bankStatement.findMany({ where: { bankAccountId }, orderBy: { date: "desc" }, take: 200 }),
+      this.prisma.bankStatement.findMany({ where: { bankAccountId }, orderBy: { date: "desc" }, take: 200, include: { matches: true } }),
       this.prisma.bankStatement.aggregate({ where: { bankAccountId }, _sum: { amount: true }, _count: true }),
     ]);
     const bookAgg = await this.prisma.journalLine.aggregate({ where: { accountId: bank.glAccountId }, _sum: { debit: true, credit: true } });
@@ -385,6 +385,14 @@ export class TreasuryService {
         amount: s.amount.toString(),
         description: s.description,
         matchedPaymentId: s.matchedPaymentId,
+        matches: s.matches.map((m) => ({
+          id: m.id,
+          sourceType: m.sourceType,
+          sourceId: m.sourceId,
+          allocatedAmount: m.allocatedAmount.toString(),
+          state: m.state,
+          note: m.note,
+        })),
       })),
       reconciliation: {
         bankAccountId,
@@ -418,7 +426,13 @@ export class TreasuryService {
     return { ok: true, count: r.count };
   }
 
-  /** مغایرت‌گیری خودکار: تطبیق مبلغ + بازه ۲ روز با PaymentAttempt تاییدشده */
+  /**
+   * مغایرت‌گیری خودکار — فاز ۹ (R3): رفتار قطعی 0/1/N، هرگز first-wins.
+   *  0 candidate → UNMATCHED (رها)
+   *  1 candidate → AUTO MATCH روی BankStatementMatch (state=MATCHED، matchedPaymentId سازگار پر می‌شود)
+   *  N candidate → AMBIGUOUS (رکورد MANUAL_REVIEW، هیچ انتخاب خودکار)
+   * اصل بند ۱۴ Design Gate: Match ≠ Clear — تطبیق هیچ تأثیری روی Check/GL/خزانه/settlement ندارد.
+   */
   async autoMatch(bankAccountId: string, actorId?: string) {
     const bank = await this.prisma.bankAccount.findUnique({ where: { id: bankAccountId } });
     if (!bank) throw new NotFoundException({ code: "NOT_FOUND", message: "حساب بانکی یافت نشد." });
@@ -426,28 +440,114 @@ export class TreasuryService {
     const alreadyMatched = (
       await this.prisma.bankStatement.findMany({ where: { matchedPaymentId: { not: null } }, select: { matchedPaymentId: true } })
     ).map((x) => x.matchedPaymentId as string);
-    let matched = 0;
+    let autoMatched = 0;
+    let ambiguous = 0;
+    let unmatched = 0;
     for (const s of pending) {
       if (s.amount < 0n) continue; // بدهی بانکی (کارمزد) با attempt تطبیق نمی‌شود
       const from = new Date(s.date.getTime() - 2 * 86_400_000);
       const to = new Date(s.date.getTime() + 2 * 86_400_000);
-      const cand = await this.prisma.paymentAttempt.findFirst({
+      const candidates = await this.prisma.paymentAttempt.findMany({
         where: {
           state: "PAID",
           amount: s.amount,
           verifiedAt: { gte: from, lte: to },
           id: alreadyMatched.length > 0 ? { notIn: alreadyMatched } : undefined,
         },
-        orderBy: { verifiedAt: "asc" },
+        orderBy: [{ verifiedAt: "asc" }, { id: "asc" }], // ترتیب فقط برای قطعیت گزارش؛ انتخاب خودکار ممنوع
       });
-      if (cand) {
-        await this.prisma.bankStatement.update({ where: { id: s.id }, data: { matchedPaymentId: cand.id } });
+      if (candidates.length === 1) {
+        const cand = candidates[0];
+        await this.prisma.$transaction(async (tx) => {
+          await tx.bankStatementMatch.create({
+            data: {
+              statementId: s.id,
+              sourceType: "payment_attempt",
+              sourceId: cand.id,
+              allocatedAmount: s.amount,
+              state: "MATCHED",
+              actorId: actorId ?? null,
+              note: "auto: exactly one candidate",
+            },
+          });
+          await tx.bankStatement.update({ where: { id: s.id }, data: { matchedPaymentId: cand.id } });
+        });
         alreadyMatched.push(cand.id);
-        matched += 1;
+        autoMatched += 1;
+      } else if (candidates.length > 1) {
+        // AMBIGUOUS: رکورد MANUAL_REVIEW بدون تخصیص — فقط درخواست بررسی انسانی (idempotent)
+        const existingReview = await this.prisma.bankStatementMatch.findFirst({
+          where: { statementId: s.id, sourceType: "manual_review", state: "MANUAL_REVIEW" },
+        });
+        if (!existingReview) {
+          await this.prisma.bankStatementMatch.create({
+            data: {
+              statementId: s.id,
+              sourceType: "manual_review",
+              sourceId: s.id,
+              allocatedAmount: 0n,
+              state: "MANUAL_REVIEW",
+              actorId: actorId ?? null,
+              note: `ambiguous: ${candidates.length} candidates (${candidates.map((c) => c.id).join(",")})`,
+            },
+          });
+        }
+        ambiguous += 1;
+      } else {
+        unmatched += 1;
       }
     }
-    await this.audit(actorId, "treasury.statement.match", "BankAccount", bankAccountId, { matched });
-    return { ok: true, matched, pending: pending.length - matched };
+    await this.audit(actorId, "treasury.statement.match", "BankAccount", bankAccountId, { autoMatched, ambiguous, unmatched });
+    return { ok: true, matched: autoMatched, ambiguous, unmatched, pending: unmatched + ambiguous };
+  }
+
+  /** تطبیق دستی — فاز ۹: فقط state ثبت می‌شود؛ هیچ GL/خزانه/Check-mutation (Match ≠ Clear) */
+  async manualMatch(bankAccountId: string, statementId: string, sourceType: string, sourceId: string, amount: bigint, actorId?: string) {
+    if (!(amount > 0n)) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "مبلغ تخصیص باید مثبت باشد." });
+    }
+    const stmt = await this.prisma.bankStatement.findUnique({ where: { id: statementId } });
+    if (!stmt || stmt.bankAccountId !== bankAccountId) {
+      throw new NotFoundException({ code: "NOT_FOUND", message: "ردیف صورتحساب یافت نشد." });
+    }
+    const already = await this.prisma.bankStatementMatch.aggregate({
+      where: { statementId, state: { not: "REJECTED" } },
+      _sum: { allocatedAmount: true },
+    });
+    const allocated = already._sum.allocatedAmount ?? 0n;
+    const statementAbs = stmt.amount < 0n ? -stmt.amount : stmt.amount;
+    if (allocated + amount > statementAbs) {
+      throw new BadRequestException({
+        code: "ALLOCATION_OVERFLOW",
+        message: `مجموع تخصیص (${allocated + amount}) از مبلغ ردیف (${statementAbs}) بیشتر است.`,
+      });
+    }
+    // بدون duplicate allocation به یک source
+    const dup = await this.prisma.bankStatementMatch.findUnique({
+      where: { statementId_sourceType_sourceId: { statementId, sourceType, sourceId } },
+    });
+    if (dup && dup.state !== "REJECTED") {
+      throw new BadRequestException({ code: "DUPLICATE_ALLOCATION", message: "این منبع قبلاً به این ردیف تخصیص یافته است." });
+    }
+    const r = await this.prisma.bankStatementMatch.create({
+      data: { statementId, sourceType, sourceId, allocatedAmount: amount, state: "MATCHED", actorId: actorId ?? null, note: "manual" },
+    });
+    await this.audit(actorId, "treasury.statement.manual_match", "BankStatement", statementId, { sourceType, sourceId, amount: amount.toString() });
+    return r;
+  }
+
+  /** لغو تطبیق — فقط state=REJECTED؛ هیچ اثر مالی (Match ≠ Clear) */
+  async unmatch(statementId: string, matchId: string, actorId?: string) {
+    const m = await this.prisma.bankStatementMatch.findUnique({ where: { id: matchId } });
+    if (!m || m.statementId !== statementId) {
+      throw new NotFoundException({ code: "NOT_FOUND", message: "تطبیق یافت نشد." });
+    }
+    const r = await this.prisma.bankStatementMatch.update({ where: { id: matchId }, data: { state: "REJECTED" } });
+    if (m.sourceType === "payment_attempt" && m.state === "MATCHED") {
+      await this.prisma.bankStatement.updateMany({ where: { id: statementId, matchedPaymentId: m.sourceId }, data: { matchedPaymentId: null } });
+    }
+    await this.audit(actorId, "treasury.statement.unmatch", "BankStatement", statementId, { matchId });
+    return r;
   }
 
   // ---------------- اتصال جریان‌های موجود (در-tx) ----------------

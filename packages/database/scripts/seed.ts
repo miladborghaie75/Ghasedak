@@ -29,6 +29,8 @@ const PERMISSIONS = [
   "pricing.view", "pricing.manage",
   "customers.view", "customers.manage",
   "payments.view", "payments.verify",
+  "payments.reconcile", // بند ۱۸ Audit فاز ۹: عدم‌تقارن قبل — در ROLE_SETS بود ولی در PERMISSIONS نبود
+  "checks.view", "checks.manage", "checks.clear", "checks.cancel", "checks.reconcile", // فاز ۹
   "pos.view", "pos.sell",
   "treasury.view", "treasury.manage",
   "accounting.view", "accounting.journal", "accounting.accounts", "accounting.reports",
@@ -316,7 +318,10 @@ async function main(): Promise<void> {
       { code: "1000", name: "موجودی نقد", type: "ASSET" },
       { code: "1100", name: "بانک", type: "ASSET" },
       { code: "1200", name: "موجودی کالا", type: "ASSET" },
+      { code: "1210", name: "حساب‌های دریافتنی تجاری", type: "ASSET" }, // فاز ۹ — Trade AR
+      { code: "1220", name: "چک‌های دریافتی", type: "ASSET" }, // فاز ۹ — Checks Receivable
       { code: "2100", name: "حساب‌های پرداختنی", type: "LIABILITY" },
+      { code: "2110", name: "چک‌های پرداختنی در جریان وصول", type: "LIABILITY" }, // فاز ۹ — Outstanding Checks Payable
       { code: "2150", name: "کالای دریافتی صورت‌حساب‌نشده (GRNI)", type: "LIABILITY" },
       { code: "3000", name: "سرمایه", type: "EQUITY" },
       { code: "4000", name: "فروش", type: "REVENUE" },

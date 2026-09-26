@@ -516,6 +516,7 @@ model Customer {
   updatedAt    DateTime  @updatedAt
 
   addresses Address[]
+  checks    Check[]
 }
 
 model Address {
@@ -1072,14 +1073,14 @@ enum NotificationStatus {
 }
 
 model Notification {
-  id          String              @id @default(cuid())
+  id          String             @id @default(cuid())
   channel     NotificationChannel
   templateKey String
   to          String
   payload     Json?
-  status      NotificationStatus  @default(QUEUED)
+  status      NotificationStatus @default(QUEUED)
   sentAt      DateTime?
-  createdAt   DateTime            @default(now())
+  createdAt   DateTime           @default(now())
 }
 
 model SmsTemplate {
@@ -1672,9 +1673,10 @@ model JournalEntry {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  fiscalYear FiscalYear    @relation(fields: [fiscalYearId], references: [id])
-  actor      User?         @relation(fields: [actorId], references: [id])
-  lines      JournalLine[]
+  fiscalYear       FiscalYear         @relation(fields: [fiscalYearId], references: [id])
+  actor            User?              @relation(fields: [actorId], references: [id])
+  lines            JournalLine[]
+  checkTransitions CheckTransition[]
 
   @@unique([fiscalYearId, number])
   @@index([sourceType, sourceId])
@@ -1727,6 +1729,7 @@ model Supplier {
   // فیلد email برای آداپتور EMAIL
   purchaseInvoices PurchaseInvoice[]
   purchaseReturns  PurchaseReturn[]
+  checks           Check[]
 }
 
 enum PurchaseState {
@@ -1834,15 +1837,17 @@ model PurchaseInvoiceItem {
 }
 
 model PurchasePayment {
-  id            String   @id @default(cuid())
-  invoiceId     String
-  method        String // cash|card|transfer|check
-  amount        BigInt
-  cashAccountId String?
-  checkId       String?
-  paidAt        DateTime @default(now())
+  id             String   @id @default(cuid())
+  invoiceId      String
+  method         String // cash|card|transfer|check
+  amount         BigInt
+  cashAccountId  String?
+  checkId        String?  @unique
+  idempotencyKey String?  @unique
+  paidAt         DateTime @default(now())
 
   invoice PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  check   Check?          @relation(fields: [checkId], references: [id])
 }
 
 model PurchaseReturn {
@@ -1941,12 +1946,13 @@ model PosPayment {
   method         PosPaymentMethod
   amount         BigInt
   cashRegisterId String?
-  checkId        String?
+  checkId        String?          @unique
   ref            String?
   paidAt         DateTime         @default(now())
 
   invoice      PosInvoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   cashRegister CashRegister? @relation(fields: [cashRegisterId], references: [id])
+  check        Check?         @relation(fields: [checkId], references: [id])
 }
 
 model CashRegister {
@@ -2015,6 +2021,7 @@ model BankAccount {
 
   account    Account         @relation(fields: [glAccountId], references: [id])
   statements BankStatement[]
+  checks     Check[]
 }
 
 model BankStatement {
@@ -2023,9 +2030,39 @@ model BankStatement {
   date             DateTime
   amount           BigInt
   description      String?
-  matchedPaymentId String?
+  matchedPaymentId String? // سازگاری با تطبیق قدیمی PaymentAttempt
 
-  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id])
+  bankAccount BankAccount          @relation(fields: [bankAccountId], references: [id])
+  matches     BankStatementMatch[]
+}
+
+enum BankStatementMatchState {
+  MANUAL_REVIEW
+  MATCHED
+  REJECTED
+}
+
+/// تخصیص/تطبیق reconciliation بانک؛ تطبیق هرگز به‌تنهایی Check را clear نمی‌کند.
+model BankStatementMatch {
+  id               String                   @id @default(cuid())
+  statementId      String
+  sourceType       String // check|payment_attempt|journal_entry|manual_review
+  sourceId         String
+  allocatedAmount  BigInt                   @default(0) // قدرمطلق allocation؛ علامت از source/statement می‌آید
+  state            BankStatementMatchState  @default(MANUAL_REVIEW)
+  note             String?
+  actorId          String?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  statement BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  check     Check?        @relation("CheckStatementMatches", fields: [checkId], references: [id], onDelete: Restrict)
+  checkId   String?
+
+  @@unique([statementId, sourceType, sourceId])
+  @@index([sourceType, sourceId, state])
+  @@index([statementId, state])
+  @@index([checkId])
 }
 
 enum CheckDirection {
@@ -2046,26 +2083,65 @@ enum CheckStatus {
 }
 
 model Check {
-  id         String         @id @default(cuid())
-  direction  CheckDirection
-  status     CheckStatus    @default(RECEIVED)
-  number     String
-  bankName   String
-  branch     String?
-  accountNo  String?
-  amount     BigInt
-  issueDate  DateTime
-  dueDate    DateTime
-  drawer     String?
-  payee      String?
-  sourceType String? // pos_invoice|purchase|customer
-  sourceId   String?
-  notes      String?
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  id                    String          @id @default(cuid())
+  direction             CheckDirection
+  status                CheckStatus     @default(RECEIVED)
+  number                String
+  bankName              String
+  branch                String?
+  accountNo             String?
+  amount                BigInt
+  issueDate             DateTime
+  dueDate               DateTime
+  drawer                String?
+  payee                 String?
+  sourceType            String? // pos_invoice|purchase_payment|accounts_receivable
+  sourceId              String?
+  customerId            String?
+  supplierId            String?
+  accountsReceivableId  String?
+  treasuryBankAccountId String?
+  idempotencyKey        String?         @unique
+  lifecycleVersion      Int             @default(0)
+  notes                 String?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  customer         Customer?           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  supplier         Supplier?           @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  receivable       AccountsReceivable? @relation(fields: [accountsReceivableId], references: [id], onDelete: Restrict)
+  treasuryBank     BankAccount?        @relation(fields: [treasuryBankAccountId], references: [id], onDelete: Restrict)
+  posPayment       PosPayment?
+  purchasePayment  PurchasePayment?
+  settlement       PaymentSettlement?
+  transitions      CheckTransition[]
+  statementMatches BankStatementMatch[] @relation("CheckStatementMatches")
 
   @@index([dueDate])
   @@index([direction, status])
+  @@index([customerId, dueDate])
+  @@index([supplierId, dueDate])
+  @@index([sourceType, sourceId])
+}
+
+model CheckTransition {
+  id             String      @id @default(cuid())
+  checkId        String
+  version        Int
+  fromStatus     CheckStatus?
+  toStatus       CheckStatus
+  idempotencyKey String      @unique
+  actorId        String?
+  reason         String?
+  requestId      String?
+  journalEntryId String?
+  createdAt      DateTime    @default(now())
+
+  check        Check         @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  journalEntry JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
+
+  @@unique([checkId, version])
+  @@index([checkId, createdAt])
 }
 
 enum ExpenseState {
@@ -2124,32 +2200,42 @@ enum ArState {
   WRITTEN_OFF
 }
 
+enum ArExposureType {
+  TRADE
+  CHECK
+}
+
 model AccountsReceivable {
-  id         String    @id @default(cuid())
-  accountPId String
-  refType    String // pos_invoice|order
-  refId      String
-  amount     BigInt
-  paidAmount BigInt    @default(0)
-  dueDate    DateTime?
-  state      ArState   @default(OPEN)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id            String         @id @default(cuid())
+  accountPId    String
+  refType       String // pos_invoice|order|check
+  refId         String
+  exposureType  ArExposureType @default(TRADE)
+  amount        BigInt
+  paidAmount    BigInt         @default(0)
+  dueDate       DateTime?
+  state         ArState        @default(OPEN)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   customerAccount CustomerAccount     @relation(fields: [accountPId], references: [id])
   settlements     PaymentSettlement[]
+  checks          Check[]
 
   @@index([refType, refId])
+  @@index([accountPId, exposureType, state])
 }
 
 model PaymentSettlement {
-  id     String   @id @default(cuid())
-  arId   String
-  method String
-  amount BigInt
-  paidAt DateTime @default(now())
+  id      String   @id @default(cuid())
+  arId    String
+  method  String
+  amount  BigInt
+  paidAt  DateTime @default(now())
+  checkId String?  @unique
 
-  ar AccountsReceivable @relation(fields: [arId], references: [id], onDelete: Cascade)
+  ar    AccountsReceivable @relation(fields: [arId], references: [id], onDelete: Cascade)
+  check Check?             @relation(fields: [checkId], references: [id])
 }
 
 enum CreditTxType {
@@ -2418,6 +2504,7 @@ model Reminder {
   repeat            String? // daily|weekly|monthly|yearly
   relatedEntityType String?
   relatedEntityId   String?
+  idempotencyKey    String?       @unique
   priority          Int           @default(0)
   status            ReminderState @default(PENDING)
   channels          String[]      @default(["in_app"])
