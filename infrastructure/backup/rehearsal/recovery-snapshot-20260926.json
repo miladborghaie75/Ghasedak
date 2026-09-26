@@ -1,0 +1,49 @@
+{
+  "gate": "Production Recovery Execution Gate",
+  "capturedAt": "2026-09-26T08:11:02.000Z",
+  "phase": "PHASE 4 — snapshot before first mutation",
+  "primary": {
+    "host": "localhost",
+    "port": 5433,
+    "database": "ghasedak",
+    "systemIdentifier": "7688682880612306664",
+    "postgresVersion": "16.4",
+    "dataDirectory": "C:/ghasedak-pg/data",
+    "postmasterPid": 28776,
+    "publicTables": 0,
+    "prismaMigrationsTable": "absent",
+    "userSchemas": ["public"]
+  },
+  "quiescence": {
+    "otherClientBackendsOnGhasedak": 0,
+    "activeTransactionsOtherSessions": 0,
+    "preparedXacts": 0,
+    "waitingLocks": 0,
+    "replicas": 0,
+    "apiPort4001Listening": false,
+    "rehearsalPorts55432_55433_55434Listening": false,
+    "nodeProcesses": [
+      { "pid": 6368, "cmd": "next start --port 3200", "role": "frontend only, no DB connection observed" }
+    ],
+    "verdict": "PRIMARY_QUIESCED = YES"
+  },
+  "recoverySource": {
+    "dir": "C:/ghasedak-backups/2026-09-24T21-37-14",
+    "tables": 131,
+    "rows": 652,
+    "manifestSha256": "588bb632641818f16ce453c27023c4cfea3b28d05b84ca01808594c3d4043d74",
+    "manifestSha256Valid": true,
+    "fileHashes": "131/131 OK (sha256 + bytes)",
+    "sourceMetadata": "postgresql://postgres:***@localhost:5433/ghasedak"
+  },
+  "baseline": {
+    "migration": "20260926000000_recovery_baseline",
+    "sha256": "32f78b563c592f7f6b4a8653a3d02df1070b3d2472eff05b0ef74f09fd8ce719",
+    "expectedCounts": { "tables": 132, "enums": 48, "fks": 136, "uniqueStmts": 79, "indexes": 41 }
+  },
+  "guardOverride": {
+    "mechanism": "REHEARSAL_ALLOW_PRIMARY=1 + REHEARSAL_PRIMARY_SYSTEM_IDENTIFIER must match live primary",
+    "guardTests": "8/8 PASS (guard-test.mjs, no mutation)",
+    "permanentEnvChange": false
+  }
+}

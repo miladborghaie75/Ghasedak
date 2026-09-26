@@ -1,0 +1,312 @@
+*** PRIMARY OVERRIDE ACTIVE (validate-restore): connecting to PRODUCTION PRIMARY localhost:5433/ghasedak — destructive recovery tool, per Final Production Recovery Gate approval ***
+=== VALIDATION REPORT ===
+{
+ "tableCount": 133,
+ "fk": {
+  "singleColFks": 136,
+  "multiColFks": 0,
+  "orphans": 0,
+  "orphanDetail": []
+ },
+ "constraints": "f=136 c=2 u=48 p=195",
+ "sequences": 0,
+ "accounting": {
+  "journalEntry": 20,
+  "journalLine": 40,
+  "unbalancedEntries": 0,
+  "totalDebit": "15231000",
+  "totalCredit": "15231000",
+  "orphanLines": 0
+ },
+ "counts": {
+  "Product": {
+   "actual": 120,
+   "expected": 120,
+   "ok": true
+  },
+  "ProductVariant": {
+   "actual": 4,
+   "expected": 4,
+   "ok": true
+  },
+  "StockLedgerEntry": {
+   "actual": 9,
+   "expected": 9,
+   "ok": true
+  },
+  "CostLayer": {
+   "actual": 1,
+   "expected": 1,
+   "ok": true
+  },
+  "StockReservation": {
+   "actual": 2,
+   "expected": 2,
+   "ok": true
+  },
+  "QuarantineRecord": {
+   "actual": 1,
+   "expected": 1,
+   "ok": true
+  },
+  "Warehouse": {
+   "actual": 1,
+   "expected": 1,
+   "ok": true
+  },
+  "PosInvoice": {
+   "actual": 4,
+   "expected": 4,
+   "ok": true
+  },
+  "PosPayment": {
+   "actual": 4,
+   "expected": 4,
+   "ok": true
+  },
+  "PosInvoiceItem": {
+   "actual": 4,
+   "expected": 4,
+   "ok": true
+  },
+  "CashRegister": {
+   "actual": 2,
+   "expected": 2,
+   "ok": true
+  },
+  "CashierShift": {
+   "actual": 3,
+   "expected": 3,
+   "ok": true
+  },
+  "PurchaseInvoice": {
+   "actual": 1,
+   "expected": 1,
+   "ok": true
+  },
+  "PurchaseOrder": {
+   "actual": 1,
+   "expected": 1,
+   "ok": true
+  },
+  "PurchasePayment": {
+   "actual": 1,
+   "expected": 1,
+   "ok": true
+  },
+  "GoodsReceipt": {
+   "actual": 1,
+   "expected": 1,
+   "ok": true
+  },
+  "AccountsPayable": {
+   "actual": 1,
+   "expected": 1,
+   "ok": true
+  },
+  "Supplier": {
+   "actual": 1,
+   "expected": 1,
+   "ok": true
+  },
+  "SupplierAccount": {
+   "actual": 1,
+   "expected": 1,
+   "ok": true
+  },
+  "Order": {
+   "actual": 2,
+   "expected": 2,
+   "ok": true
+  },
+  "OrderItem": {
+   "actual": 2,
+   "expected": 2,
+   "ok": true
+  },
+  "PaymentAttempt": {
+   "actual": 1,
+   "expected": 1,
+   "ok": true
+  },
+  "DomainEventOutbox": {
+   "actual": 158,
+   "expected": 158,
+   "ok": true
+  },
+  "Account": {
+   "actual": 8,
+   "expected": 8,
+   "ok": true
+  },
+  "NumberSeries": {
+   "actual": 10,
+   "expected": 10,
+   "ok": true
+  },
+  "User": {
+   "actual": 4,
+   "expected": 4,
+   "ok": true
+  },
+  "Permission": {
+   "actual": 51,
+   "expected": 51,
+   "ok": true
+  },
+  "RolePermission": {
+   "actual": 85,
+   "expected": 85,
+   "ok": true
+  },
+  "FiscalYear": {
+   "actual": 5,
+   "expected": 5,
+   "ok": true
+  }
+ },
+ "posPayments": [
+  {
+   "id": "cmuec1iqh000vfkcoilzole9g",
+   "paid_sum": "749000"
+  },
+  {
+   "id": "cmuefz1jn000ffkzo1hb6esog",
+   "paid_sum": "850000"
+  },
+  {
+   "id": "cmueg25v5000kfkzoe86k2wuf",
+   "paid_sum": "850000"
+  },
+  {
+   "id": "cmueh33zo0011fkzol013oq4o",
+   "paid_sum": "850000"
+  }
+ ],
+ "negativeLedgerRows": 0,
+ "outbox": {
+  "payloadTypes": [
+   "jsonb=158"
+  ],
+  "processed": "FAILED=158",
+  "corruptPayload": 0
+ },
+ "numberSeries": [
+  {
+   "scope": "damage",
+   "prefix": "DMG",
+   "nextNumber": 30,
+   "padding": 5,
+   "nextFormatted": "DMG00030",
+   "maxActual": null,
+   "maxima": [],
+   "collisionRisk": false
+  },
+  {
+   "scope": "goods_receipt",
+   "prefix": "GRN",
+   "nextNumber": 2,
+   "padding": 5,
+   "nextFormatted": "GRN00002",
+   "maxActual": 1,
+   "maxima": [
+    "GoodsReceipt=1"
+   ],
+   "collisionRisk": false
+  },
+  {
+   "scope": "journal",
+   "prefix": "JE",
+   "nextNumber": 21,
+   "padding": 5,
+   "nextFormatted": "JE00021",
+   "maxActual": 20,
+   "maxima": [
+    "JournalEntry=20"
+   ],
+   "collisionRisk": false
+  },
+  {
+   "scope": "order",
+   "prefix": "ORD",
+   "nextNumber": 3,
+   "padding": 6,
+   "nextFormatted": "ORD000003",
+   "maxActual": null,
+   "maxima": [],
+   "collisionRisk": false
+  },
+  {
+   "scope": "pos_invoice",
+   "prefix": "POS",
+   "nextNumber": 5,
+   "padding": 6,
+   "nextFormatted": "POS000005",
+   "maxActual": 4,
+   "maxima": [
+    "PosInvoice=4"
+   ],
+   "collisionRisk": false
+  },
+  {
+   "scope": "purchase_invoice",
+   "prefix": "PINV",
+   "nextNumber": 2,
+   "padding": 5,
+   "nextFormatted": "PINV00002",
+   "maxActual": 1,
+   "maxima": [
+    "PurchaseInvoice=1"
+   ],
+   "collisionRisk": false
+  },
+  {
+   "scope": "purchase_order",
+   "prefix": "PO",
+   "nextNumber": 2,
+   "padding": 5,
+   "nextFormatted": "PO00002",
+   "maxActual": 1,
+   "maxima": [
+    "PurchaseOrder=1"
+   ],
+   "collisionRisk": false
+  },
+  {
+   "scope": "quarantine",
+   "prefix": "QRN",
+   "nextNumber": 18,
+   "padding": 5,
+   "nextFormatted": "QRN00018",
+   "maxActual": 15,
+   "maxima": [
+    "QuarantineRecord=15"
+   ],
+   "collisionRisk": false
+  },
+  {
+   "scope": "stock_transfer",
+   "prefix": "TRF",
+   "nextNumber": 27,
+   "padding": 5,
+   "nextFormatted": "TRF00027",
+   "maxActual": null,
+   "maxima": [],
+   "collisionRisk": false
+  },
+  {
+   "scope": "stocktake",
+   "prefix": "STK",
+   "nextNumber": 2,
+   "padding": 6,
+   "nextFormatted": "STK000002",
+   "maxActual": 1,
+   "maxima": [
+    "Stocktake=1"
+   ],
+   "collisionRisk": false
+  }
+ ],
+ "phase9Absent": 0
+}
+NO PROBLEMS — INTEGRITY OK

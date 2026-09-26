@@ -1,0 +1,51 @@
+*** PRIMARY OVERRIDE ACTIVE (seed-check): connecting to PRODUCTION PRIMARY localhost:5433/ghasedak — destructive recovery tool, per Final Production Recovery Gate approval ***
+{
+ "label": "C:\\Program Files\\nodejs\\node.exe",
+ "counts": {
+  "User": 4,
+  "Permission": 55,
+  "RolePermission": 91,
+  "NumberSeries": 10,
+  "CashAccount": 1,
+  "BankAccount": 1,
+  "Account": 9,
+  "JournalEntry": 20,
+  "JournalLine": 40,
+  "FiscalYear": 5,
+  "PriceLevel": 6,
+  "SalesChannel": 5,
+  "PaymentMethod": 5,
+  "PaymentProvider": 2,
+  "TaxRate": 1,
+  "Category": 7,
+  "Brand": 2,
+  "Attribute": 6,
+  "AttributeTerm": 17,
+  "Product": 120,
+  "ProductVariant": 4,
+  "VariantPrice": 2,
+  "VariantBarcode": 1,
+  "Warehouse": 1,
+  "ShippingZone": 3,
+  "ShippingMethod": 2,
+  "FeatureFlag": 5
+ },
+ "treasury": [
+  {
+   "k": "cash",
+   "id": "demo-cash-main",
+   "name": "صندوق فروشگاه (DEMO)",
+   "bal": "11984000",
+   "glbal": "11984000",
+   "match": true
+  },
+  {
+   "k": "bank",
+   "id": "demo-bank-main",
+   "name": "حساب جاری اصلی (DEMO)",
+   "bal": "3247000",
+   "glbal": "3247000",
+   "match": true
+  }
+ ]
+}
