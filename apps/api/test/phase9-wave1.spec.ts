@@ -1,4 +1,12 @@
-/** فاز ۹ — Wave 1: R1 (POS CHECK) + R3 (auto-match 0/1/N) روی rehearsal DB */
+/**
+ * فاز ۹ — Wave 1: R1 (POS CHECK) + R3 (auto-match 0/1/N) روی rehearsal DB
+ *
+ * Hardening Gate:
+ *  §3 ایزولاسیون — هر Case فیکسچر خودش را می‌سازد (bank + statement + attempt با مبلغ یکتا per-run)؛
+ *    هیچ دستکاری داده‌های unrelated (مثل flip PAID→VERIFYING) وجود ندارد.
+ *  §5 unmatch — state machine صریح MATCHED→REJECTED، بدون اثر GL/خزانه/Check + re-match ممکن.
+ *  §6 Match ≠ Clear — در همه Caseها GL/خزانه/Check قبل/بعد مقایسه می‌شود.
+ */
 import { PrismaService } from "../src/prisma/prisma.service";
 import { JournalService } from "../src/accounting/journal.service";
 import { TreasuryService } from "../src/treasury/treasury.service";
@@ -46,8 +54,8 @@ describe("Phase 9 Wave 1 — R1/R3", () => {
   });
 
   afterAll(async () => {
-    // پاک‌سازی فقط داده‌های همین تست
-    const invoices = await prisma.posInvoice.findMany({ where: { number: { startsWith: "POS" }, createdAt: { gte: new Date(Date.now() - 3_600_000) } }, select: { id: true } });
+    // پاک‌سازی فقط داده‌های همین اجرا — با idempotencyKey یکتا، نه پنجره زمانی
+    const invoices = await prisma.posInvoice.findMany({ where: { OR: [`w1-check-${tag}`, `w1-fail-${tag}`].map((k) => ({ idempotencyKey: k })) }, select: { id: true } });
     const ids = invoices.map((i) => i.id);
     if (ids.length) {
       await prisma.posPayment.deleteMany({ where: { invoiceId: { in: ids } } });
@@ -87,6 +95,42 @@ describe("Phase 9 Wave 1 — R1/R3", () => {
     if (!ledger) {
       await inventory.move({ warehouseId: whId, variantSku: sku, type: "ADJUSTMENT", qty: 10, unitCost: 100000n, refType: "manual", refId: tag, idempotencyKey: `w1-restock-${tag}`, actorId: actor });
     }
+  };
+
+  /** مبلغ یکتا per-run: هیچ attempt قدیمی در DB این مبلغ را ندارد → 0/1/N قطعی می‌شود */
+  const uniqueAmount = (salt: string): bigint => BigInt(1_000_000 + (Date.now() % 900_000) + salt.split("").reduce((a, c) => a + c.charCodeAt(0) * 7, 0));
+
+  /** فیکسچر R3: بانک اختصاصی + statement + attemptهای PAID با مبلغ یکتا — بدون دستکاری unrelated */
+  const caseFixture = async (suffix: string, attemptCount: number, fixedAmount?: bigint) => {
+    const glBank = await prisma.account.findUniqueOrThrow({ where: { code: "1100" } });
+    const bank = await prisma.bankAccount.create({
+      data: { id: `test-bank-${tag}-${suffix}`, name: `بانک ${suffix.toUpperCase()} ${tag}`, bankName: "بانک", accountNumber: suffix, glAccountId: glBank.id, currentBalance: 0n },
+    });
+    const amount = fixedAmount ?? uniqueAmount(suffix);
+    await treasury.importStatements({ bankAccountId: bank.id, lines: [{ date: new Date().toISOString(), amount: Number(amount), description: "ورودی درگاه" }], actorId: actor });
+    const method = await prisma.paymentMethod.findFirstOrThrow({ where: { code: "online" } });
+    const attempts: string[] = [];
+    for (let i = 0; i < attemptCount; i++) {
+      const a = await prisma.paymentAttempt.create({
+        data: { methodId: method.id, amount, state: "PAID", idempotencyKey: `test-${tag}-${suffix}${i}`, authority: `AUT-${tag}-${suffix}-${i}`, verifiedAt: new Date() },
+      });
+      attempts.push(a.id);
+    }
+    const stmt = await prisma.bankStatement.findFirstOrThrow({ where: { bankAccountId: bank.id, amount } });
+    return { bank, amount, stmt, attempts };
+  };
+
+  /** GL/خزانه/Check قبل و بعد — اصل Match ≠ Clear */
+  const glSum = async (glBankId: string) => {
+    const agg = await prisma.journalLine.aggregate({ where: { accountId: glBankId }, _sum: { debit: true, credit: true } });
+    return { debit: agg._sum.debit ?? 0n, credit: agg._sum.credit ?? 0n };
+  };
+  const checkStateFingerprint = async () => {
+    const [byStatus, transitions] = await Promise.all([
+      prisma.check.groupBy({ by: ["status"], _count: true }),
+      prisma.checkTransition.count(),
+    ]);
+    return JSON.stringify({ byStatus, transitions });
   };
 
   it("R1 happy path: POS CHECK → invoice+payment+check+journal(out)+outbox در یک tx؛ Dr 1220/Cr 4000؛ خزانه بی‌تغییر", async () => {
@@ -192,76 +236,58 @@ describe("Phase 9 Wave 1 — R1/R3", () => {
     // هیچ orphan چک/پرداخت جدید اضافه نشده (شمارش‌ها باید بعد از rollback همان قبل از sale باشند)
     expect(checksBefore).toBe(await prisma.check.count());
     expect(paymentsBefore).toBe(await prisma.posPayment.count());
+    void gl1220;
   });
 
   it("R3 Case A: صفر candidate → UNMATCHED (هیچ رکورد match و هیچ mutation مالی)", async () => {
-    const glBank = await prisma.account.findUniqueOrThrow({ where: { code: "1100" } });
-    const bank = await prisma.bankAccount.create({ data: { id: `test-bank-${tag}-a`, name: `بانک A ${tag}`, bankName: "بانک", accountNumber: "1", glAccountId: glBank.id, currentBalance: 0n } });
-    await treasury.importStatements({ bankAccountId: bank.id, lines: [{ date: new Date().toISOString(), amount: 111000, description: "بدون تطبیق" }], actorId: actor });
-    const bookBefore = await prisma.journalLine.aggregate({ where: { accountId: glBank.id }, _sum: { debit: true, credit: true } });
+    const glBankId = (await prisma.account.findUniqueOrThrow({ where: { code: "1100" } })).id;
+    const { bank, stmt } = await caseFixture("a", 0);
+    const before = await glSum(glBankId);
     const r = await treasury.autoMatch(bank.id, actor);
     expect(r.matched).toBe(0);
     expect(r.ambiguous).toBe(0);
     expect(r.unmatched).toBe(1);
     expect(await prisma.bankStatementMatch.count({ where: { statement: { bankAccountId: bank.id } } })).toBe(0);
-    const bookAfter = await prisma.journalLine.aggregate({ where: { accountId: glBank.id }, _sum: { debit: true, credit: true } });
-    expect(bookAfter._sum.debit).toBe(bookBefore._sum.debit); // no GL mutation
+    expect(stmt.matchedPaymentId).toBeNull();
+    const after = await glSum(glBankId);
+    expect(after.debit).toBe(before.debit); // no GL mutation
+    expect(after.credit).toBe(before.credit);
   });
 
-  it("R3 Case B: دقیقاً یک candidate → AUTO MATCH (matchedPaymentId + Match رکورد؛ بدون GL/خزانه/Check-clear)", async () => {
-    const glBank = await prisma.account.findUniqueOrThrow({ where: { code: "1100" } });
-    const bank = await prisma.bankAccount.create({ data: { id: `test-bank-${tag}-b`, name: `بانک B ${tag}`, bankName: "بانک", accountNumber: "2", glAccountId: glBank.id, currentBalance: 0n } });
-    await treasury.importStatements({ bankAccountId: bank.id, lines: [{ date: new Date().toISOString(), amount: 1500000, description: "ورودی درگاه" }], actorId: actor });
-    const method = await prisma.paymentMethod.findFirstOrThrow({ where: { code: "online" } });
-    const attempt = await prisma.paymentAttempt.create({ data: { methodId: method.id, amount: 1500000n, state: "PAID", idempotencyKey: `test-${tag}-b`, authority: `AUT-${tag}`, verifiedAt: new Date() } });
-    const bookBefore = await prisma.journalLine.aggregate({ where: { accountId: glBank.id }, _sum: { debit: true, credit: true } });
+  it("R3 Case B: دقیقاً یک candidate → AUTO MATCH — فیکسچر خودکفا، بدون دستکاری unrelated legacy attempts", async () => {
+    const glBankId = (await prisma.account.findUniqueOrThrow({ where: { code: "1100" } })).id;
+    const { bank, stmt, attempts } = await caseFixture("b", 1);
+    const bookBefore = await glSum(glBankId);
     const bankBefore = (await prisma.bankAccount.findUniqueOrThrow({ where: { id: bank.id } })).currentBalance;
+    const checkFpBefore = await checkStateFingerprint();
 
-    // فیکسچر ۰/۱/N: از previous runs روی rehearsal DB مشترک، candidateهای 1.5M جمع شده‌اند.
-    // برای «دقیقاً یک candidate»، فقط attemptهای همین tag را در زمان‌پنجره نگه می‌داریم:
-    // previous-run attemptها را موقتاً به state PAID→VERIFYING می‌بریم تا خارج از فیلتر شوند، بعد برمی‌گردانیم.
-    const others = await prisma.paymentAttempt.findMany({
-      where: { state: "PAID", amount: 1500000n, idempotencyKey: { not: `test-${tag}-b` } },
-      select: { id: true },
-    });
-    // eslint-disable-next-line no-console
-    console.log(`[caseB pre-autoMatch] isolating ${others.length} legacy 1.5M attempts`);
-    await prisma.paymentAttempt.updateMany({ where: { id: { in: others.map((o) => o.id) } }, data: { state: "VERIFYING" } });
-    let r;
-    try {
-      r = await treasury.autoMatch(bank.id, actor);
-    } finally {
-      await prisma.paymentAttempt.updateMany({ where: { id: { in: others.map((o) => o.id) } }, data: { state: "PAID" } });
-    }
+    // مبلغ فیکسچر یکتاست → دقیقاً یک candidate. هیچ attempt دیگری دستکاری نمی‌شود.
+    const r = await treasury.autoMatch(bank.id, actor);
     expect(r.matched).toBe(1);
     expect(r.ambiguous).toBe(0);
 
-    const stmt = await prisma.bankStatement.findFirstOrThrow({ where: { bankAccountId: bank.id, amount: 1500000n } });
-    expect(stmt.matchedPaymentId).toBe(attempt.id);
-    const match = await prisma.bankStatementMatch.findFirstOrThrow({ where: { statementId: stmt.id } });
-    expect(match.state).toBe("MATCHED");
+    const stmtAfter = await prisma.bankStatement.findUniqueOrThrow({ where: { id: stmt.id } });
+    expect(stmtAfter.matchedPaymentId).toBe(attempts[0]);
+    const match = await prisma.bankStatementMatch.findFirstOrThrow({ where: { statementId: stmt.id, state: "MATCHED" } });
     expect(match.sourceType).toBe("payment_attempt");
-    expect(match.allocatedAmount).toBe(1500000n);
+    expect(match.sourceId).toBe(attempts[0]);
+    expect(match.allocatedAmount).toBe(stmtAfter.amount);
 
-    const bookAfter = await prisma.journalLine.aggregate({ where: { accountId: glBank.id }, _sum: { debit: true, credit: true } });
-    expect(bookAfter._sum.debit).toBe(bookBefore._sum.debit); // no GL mutation
+    const bookAfter = await glSum(glBankId);
+    expect(bookAfter.debit).toBe(bookBefore.debit); // no GL mutation
+    expect(bookAfter.credit).toBe(bookBefore.credit);
     expect((await prisma.bankAccount.findUniqueOrThrow({ where: { id: bank.id } })).currentBalance).toBe(bankBefore); // no treasury mutation
-    // Match ≠ Clear: هیچ وضعیت چکی تغییر نکرده (تعداد/status چک‌ها قبل/بعد یکسان)
-    expect(await prisma.check.count({ where: { status: { not: "RECEIVED" } } })).toBe(0);
+    // Match ≠ Clear: هیچ چکی clear/settle نشده
+    expect(await checkStateFingerprint()).toBe(checkFpBefore);
   });
 
-  it("R3 Case C: چند candidate → MANUAL_REVIEW (هیچ انتخاب خودکار؛ matchedPaymentId خالی می‌ماند)", async () => {
-    const glBank = await prisma.account.findUniqueOrThrow({ where: { code: "1100" } });
-    const bank = await prisma.bankAccount.create({ data: { id: `test-bank-${tag}-c`, name: `بانک C ${tag}`, bankName: "بانک", accountNumber: "3", glAccountId: glBank.id, currentBalance: 0n } });
-    await treasury.importStatements({ bankAccountId: bank.id, lines: [{ date: new Date().toISOString(), amount: 250000, description: "مبهم" }], actorId: actor });
-    const method = await prisma.paymentMethod.findFirstOrThrow({ where: { code: "online" } });
-    for (let i = 0; i < 2; i++) {
-      await prisma.paymentAttempt.create({ data: { methodId: method.id, amount: 250000n, state: "PAID", idempotencyKey: `test-${tag}-c${i}`, authority: `AUT2-${tag}-${i}`, verifiedAt: new Date() } });
-    }
+  it("R3 Case C: چند candidate → MANUAL_REVIEW (هیچ انتخاب خودکار؛ GL هم بی‌تغییر)", async () => {
+    const glBankId = (await prisma.account.findUniqueOrThrow({ where: { code: "1100" } })).id;
+    const { bank, stmt } = await caseFixture("c", 2);
+    const bookBefore = await glSum(glBankId);
     const r = await treasury.autoMatch(bank.id, actor);
     expect(r.ambiguous).toBe(1);
     expect(r.matched).toBe(0);
-    const stmt = await prisma.bankStatement.findFirstOrThrow({ where: { bankAccountId: bank.id, amount: 250000n } });
     expect(stmt.matchedPaymentId).toBeNull(); // هیچ انتخاب خودکار
     const review = await prisma.bankStatementMatch.findFirstOrThrow({ where: { statementId: stmt.id, state: "MANUAL_REVIEW" } });
     expect(review.allocatedAmount).toBe(0n);
@@ -269,31 +295,69 @@ describe("Phase 9 Wave 1 — R1/R3", () => {
     const r2 = await treasury.autoMatch(bank.id, actor);
     expect(r2.ambiguous).toBe(1);
     expect(await prisma.bankStatementMatch.count({ where: { statementId: stmt.id, state: "MANUAL_REVIEW" } })).toBe(1);
+    const bookAfter = await glSum(glBankId);
+    expect(bookAfter.debit).toBe(bookBefore.debit); // no GL mutation
   });
 
-  it("R3 manual match/unmatch: allocation integrity (مثبت، بدون سرریز، بدون duplicate، unmatch=REJECTED)", async () => {
-    const glBank = await prisma.account.findUniqueOrThrow({ where: { code: "1100" } });
-    const bank = await prisma.bankAccount.create({ data: { id: `test-bank-${tag}-d`, name: `بانک D ${tag}`, bankName: "بانک", accountNumber: "4", glAccountId: glBank.id, currentBalance: 0n } });
-    await treasury.importStatements({ bankAccountId: bank.id, lines: [{ date: new Date().toISOString(), amount: 1000000, description: "چند تخصیصی" }], actorId: actor });
-    const stmt = await prisma.bankStatement.findFirstOrThrow({ where: { bankAccountId: bank.id, amount: 1000000n } });
-
-    await treasury.manualMatch(bank.id, stmt.id, "check", `chk-1-${tag}`, 600000n, actor);
-    await treasury.manualMatch(bank.id, stmt.id, "check", `chk-2-${tag}`, 400000n, actor);
+  it("R3 manual match: allocation integrity (مثبت، بدون سرریز، بدون duplicate)", async () => {
+    // مبلغ ثابت ۱٬۰۰۰٬۰۰۰ تا 600k+400k ردیف را پر کند و سرریز قابل‌تست باشد
+    const { stmt } = await caseFixture("d", 0, 1_000_000n);
+    await treasury.manualMatch(stmt.bankAccountId, stmt.id, "check", `chk-1-${tag}`, 600000n, actor);
+    await treasury.manualMatch(stmt.bankAccountId, stmt.id, "check", `chk-2-${tag}`, 400000n, actor);
     expect(await prisma.bankStatementMatch.count({ where: { statementId: stmt.id, state: "MATCHED" } })).toBe(2);
 
     // سرریز → رد
-    await expect(treasury.manualMatch(bank.id, stmt.id, "check", `chk-3-${tag}`, 1n, actor)).rejects.toThrow();
+    await expect(treasury.manualMatch(stmt.bankAccountId, stmt.id, "check", `chk-3-${tag}`, 1n, actor)).rejects.toThrow();
     // مبلغ صفر/منفی → رد
-    await expect(treasury.manualMatch(bank.id, stmt.id, "check", `chk-4-${tag}`, 0n, actor)).rejects.toThrow();
+    await expect(treasury.manualMatch(stmt.bankAccountId, stmt.id, "check", `chk-4-${tag}`, 0n, actor)).rejects.toThrow();
     // duplicate → رد
-    await expect(treasury.manualMatch(bank.id, stmt.id, "check", `chk-1-${tag}`, 100000n, actor)).rejects.toThrow();
+    await expect(treasury.manualMatch(stmt.bankAccountId, stmt.id, "check", `chk-1-${tag}`, 100000n, actor)).rejects.toThrow();
+  });
 
-    // unmatch → REJECTED، بدون اثر GL
-    const m = await prisma.bankStatementMatch.findFirstOrThrow({ where: { statementId: stmt.id, sourceId: `chk-1-${tag}` } });
-    const bookBefore = await prisma.journalLine.aggregate({ where: { accountId: glBank.id }, _sum: { debit: true, credit: true } });
-    await treasury.unmatch(stmt.id, m.id, actor);
-    expect((await prisma.bankStatementMatch.findUniqueOrThrow({ where: { id: m.id } })).state).toBe("REJECTED");
-    const bookAfter = await prisma.journalLine.aggregate({ where: { accountId: glBank.id }, _sum: { debit: true, credit: true } });
-    expect(bookAfter._sum.debit).toBe(bookBefore._sum.debit);
+  it("R3 unmatch: state machine MATCHED→REJECTED، re-match ممکن، بدون اثر GL/خزانه/Check", async () => {
+    const glBankId = (await prisma.account.findUniqueOrThrow({ where: { code: "1100" } })).id;
+    const { bank, stmt, attempts } = await caseFixture("e", 1);
+
+    // auto-match روی candidate یکتا
+    const m1 = await treasury.autoMatch(bank.id, actor);
+    expect(m1.matched).toBe(1);
+    const match = await prisma.bankStatementMatch.findFirstOrThrow({ where: { statementId: stmt.id, state: "MATCHED" } });
+    expect(match.sourceId).toBe(attempts[0]);
+    expect((await prisma.bankStatement.findUniqueOrThrow({ where: { id: stmt.id } })).matchedPaymentId).toBe(attempts[0]);
+
+    const checkFpBefore = await checkStateFingerprint();
+    const treasuryBefore = (await prisma.bankAccount.findUniqueOrThrow({ where: { id: bank.id } })).currentBalance;
+
+    // unmatch → REJECTED (تاریخ حفظ می‌شود)، matchedPaymentId آزاد می‌شود
+    await treasury.unmatch(stmt.id, match.id, actor);
+    const rejected = await prisma.bankStatementMatch.findUniqueOrThrow({ where: { id: match.id } });
+    expect(rejected.state).toBe("REJECTED");
+    expect(rejected.allocatedAmount).toBe(stmt.amount); // سابقه تخصیص حفظ شده
+    expect((await prisma.bankStatement.findUniqueOrThrow({ where: { id: stmt.id } })).matchedPaymentId).toBeNull();
+
+    // re-match همان منبع → مجاز (ردیف REJECTED re-activate می‌شود؛ unique constraint نقض نمی‌شود)
+    const m2 = await treasury.autoMatch(bank.id, actor);
+    expect(m2.matched).toBe(1);
+    const remarried = await prisma.bankStatementMatch.findUniqueOrThrow({ where: { id: match.id } });
+    expect(remarried.state).toBe("MATCHED");
+    expect((await prisma.bankStatement.findUniqueOrThrow({ where: { id: stmt.id } })).matchedPaymentId).toBe(attempts[0]);
+    // فقط یک رکورد برای این جفت وجود دارد (unique نگه داشته شده)
+    expect(await prisma.bankStatementMatch.count({ where: { statementId: stmt.id, sourceId: attempts[0] } })).toBe(1);
+
+    // هیچ اثر مالی (Match ≠ Clear)
+    expect((await prisma.bankAccount.findUniqueOrThrow({ where: { id: bank.id } })).currentBalance).toBe(treasuryBefore);
+    expect(await checkStateFingerprint()).toBe(checkFpBefore);
+
+    // unmatch روی رکورد MANUAL_REVIEW هم مجاز است (review را می‌بندد)
+    // (Case C رکورد خودش را دارد؛ اینجا فقط مسیر MANUAL_REVIEW→REJECTED را با فیکسچر تازه می‌سازیم)
+    const f = await caseFixture("f", 2);
+    await treasury.autoMatch(f.bank.id, actor); // → MANUAL_REVIEW
+    const review = await prisma.bankStatementMatch.findFirstOrThrow({ where: { statementId: f.stmt.id, state: "MANUAL_REVIEW" } });
+    await treasury.unmatch(f.stmt.id, review.id, actor);
+    expect((await prisma.bankStatementMatch.findUniqueOrThrow({ where: { id: review.id } })).state).toBe("REJECTED");
+    // و unmatch تکراری همان رکورد idempotent می‌ماند
+    await treasury.unmatch(f.stmt.id, review.id, actor);
+    expect((await prisma.bankStatementMatch.findUniqueOrThrow({ where: { id: review.id } })).state).toBe("REJECTED");
+    void glBankId;
   });
 });

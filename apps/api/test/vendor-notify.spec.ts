@@ -3,7 +3,10 @@
  * 1) کانال EMAIL بدون ایمیل تامین‌کننده → NO_SUPPLIER_EMAIL (بدون داده فیک)
  * 2) بدون credential → ردیف QUEUED با خطای صریح REQUIRES_CREDENTIAL — هیچ «ارسال شد» جعل نمی‌شود
  * 3) موبایل نامعتبر SMS → VALIDATION_ERROR
- * با DB واقعی dev — آخرین فاکتور موجود استفاده می‌شود (ساخت سند جدید لازم نیست).
+ *
+ * ایزولاسیون (Hardening Gate §3): فیکسچر خودش فاکتور + تامین‌کننده اختصاصی می‌سازد؛
+ * هیچ وابستگی به spec دیگر یا داده legacy نیست. afterAll ردیف‌های email تامین‌کننده‌ها
+ * را به مقدار اصلی برمی‌گرداند (snapshot per-row) و فیکسچر را حذف می‌کند.
  */
 import { BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../src/prisma/prisma.service";
@@ -14,19 +17,40 @@ describe("VendorNotifyService (تحویل فاکتور به تامین‌کنن�
   let svc: VendorNotifyService;
   let invoiceId: string;
   let actor: string | undefined;
-  const supplierEmail = "vendor-smoke@example.com";
   const createdIds: string[] = [];
+  const supplierEmail = "vendor-smoke@example.com";
+  const supplierId = `test-sup-vn-${Date.now()}`;
+  const invoiceNumber = `PINV-TESTVN-${Date.now()}`;
+  /** snapshot ایمیل همه تامین‌کننده‌ها قبل از تست — برای restore دقیق در afterAll */
+  let emailSnapshot: Array<{ id: string; email: string | null }> = [];
   const prevKavenegar = process.env.KAVENEGAR_API_KEY;
 
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
     svc = new VendorNotifyService(prisma);
-    const inv = await prisma.purchaseInvoice.findFirst({ orderBy: { createdAt: "desc" }, select: { id: true } });
-    if (!inv) throw new Error("هیچ فاکتور خریدی در DB نیست — purchasing.service.spec اجرا شود");
-    invoiceId = inv.id;
+
+    // ---- فیکسچر مستقل: Supplier + Account + Invoice + Item ----
+    // PurchaseInvoiceItem.variantSku به ProductVariant ارجاع FK دارد — واریانت موجود استفاده می‌شود
+    const variant = await prisma.productVariant.findFirstOrThrow({ where: { status: "PUBLISHED" }, select: { sku: true } });
+    await prisma.supplier.create({ data: { id: supplierId, name: "تست فیکسچر VendorNotify" } });
+    await prisma.supplierAccount.create({ data: { supplierId, outstanding: 0n } });
+    const invRow = await prisma.purchaseInvoice.create({
+      data: {
+        number: invoiceNumber,
+        supplierId,
+        state: "DRAFT",
+        subtotal: 50000n,
+        grandTotal: 50000n,
+        items: { create: [{ variantSku: variant.sku, qty: 1, unitCost: 50000n }] },
+      },
+      select: { id: true },
+    });
+    invoiceId = invRow.id;
+
     const u = await prisma.user.findFirst({ select: { id: true } });
     actor = u?.id; // FK واقعی برای AuditLog
+    emailSnapshot = await prisma.supplier.findMany({ select: { id: true, email: true } });
     delete process.env.KAVENEGAR_API_KEY; // مسیر بدون credential قطعی شود
   });
 
@@ -34,7 +58,15 @@ describe("VendorNotifyService (تحویل فاکتور به تامین‌کنن�
     for (const id of createdIds) {
       await prisma.supplierInvoiceDelivery.deleteMany({ where: { id } });
     }
-    await prisma.supplier.updateMany({ where: { email: supplierEmail }, data: { email: null } });
+    // restore دقیق per-row (بدون destroy کلاینت‌های دیگر)
+    for (const row of emailSnapshot) {
+      await prisma.supplier.update({ where: { id: row.id }, data: { email: row.email } }).catch(() => undefined);
+    }
+    await prisma.auditLog.deleteMany({ where: { entity: "PurchaseInvoice", entityId: invoiceId, action: "purchasing.invoice.send.email" } }).catch(() => undefined);
+    await prisma.purchaseInvoiceItem.deleteMany({ where: { invoiceId } }).catch(() => undefined);
+    await prisma.purchaseInvoice.deleteMany({ where: { id: invoiceId } }).catch(() => undefined);
+    await prisma.supplierAccount.deleteMany({ where: { supplierId } }).catch(() => undefined);
+    await prisma.supplier.deleteMany({ where: { id: supplierId } }).catch(() => undefined);
     if (prevKavenegar !== undefined) process.env.KAVENEGAR_API_KEY = prevKavenegar;
     else delete process.env.KAVENEGAR_API_KEY;
     await prisma.$disconnect();
@@ -49,8 +81,7 @@ describe("VendorNotifyService (تحویل فاکتور به تامین‌کنن�
   });
 
   it("بدون SMTP credential → ردیف QUEUED با REQUIRES_CREDENTIAL — نه SENT (بند ۱۱۱)", async () => {
-    const sup = await prisma.purchaseInvoice.findUnique({ where: { id: invoiceId }, select: { supplierId: true } });
-    await prisma.supplier.update({ where: { id: sup!.supplierId }, data: { email: supplierEmail } });
+    await prisma.supplier.update({ where: { id: supplierId }, data: { email: supplierEmail } });
     delete process.env.SMTP_HOST;
     delete process.env.SMTP_USER;
     delete process.env.SMTP_PASS;

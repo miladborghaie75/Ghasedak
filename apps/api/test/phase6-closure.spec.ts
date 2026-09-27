@@ -3,7 +3,9 @@
  * 1) سطح BASE از seed موجود است (پیش‌نیاز bulk-price جدید)
  * 2) attach پیوست با Media واقعی → detail شامل mediaKey (URL درست /api/media/:storageKey)
  * 3) تغییر قیمت WEB (معادل مسیر ادمین changePrice) → رکورد PriceHistory با actor/source
- * با DB واقعی dev — اجرای سریع، بدون ساخت سند خرید جدید.
+ *
+ * ایزولاسیون (Hardening Gate §3): این spec هیچ وابستگی به ترتیب اجرای specهای دیگر ندارد —
+ * فیکسچر خودش فاکتور خرید مستقل (Supplier/Invoice/Item) می‌سازد و afterAll همه را پاک می‌کند.
  */
 import { PrismaService } from "../src/prisma/prisma.service";
 import { PurchasingService } from "../src/inventory/purchasing.service";
@@ -21,6 +23,10 @@ describe("Phase 6 closure smoke (پرینت/پیوست/یکسان‌سازی ق�
   let actor: string | undefined;
   let invoiceId: string | undefined;
   const mediaIds: string[] = [];
+  const supplierId = `test-sup-p6-${Date.now()}`;
+  const invoiceNumber = `PINV-TESTP6-${Date.now()}`;
+  /** PurchaseInvoiceItem.variantSku به ProductVariant ارجاع FK دارد — واریانت موجود استفاده می‌شود */
+  let fixtureSku: string;
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -31,17 +37,37 @@ describe("Phase 6 closure smoke (پرینت/پیوست/یکسان‌سازی ق�
     const u = await prisma.user.findFirst({ select: { id: true } });
     actor = u?.id;
 
-    // یک فاکتور واقعی موجود را انتخاب کن (از تست purchasing یا smoke قبلی)
-    const inv0 = await prisma.purchaseInvoice.findFirst({ orderBy: { createdAt: "desc" }, select: { id: true } });
-    if (!inv0) throw new Error("هیچ فاکتور خریدی در DB نیست — ابتدا purchasing.service.spec اجرا شود");
-    invoiceId = inv0.id;
+    // ---- فیکسچر مستقل: Supplier + Account + Invoice + Item (بدون سند خرید کامل) ----
+    const variant = await prisma.productVariant.findFirstOrThrow({ where: { status: "PUBLISHED" }, select: { sku: true } });
+    fixtureSku = variant.sku;
+    // فقط همین spec به آن وابسته است؛ afterAll حذف می‌کند. سند GL/AP خنثی (state=DRAFT).
+    await prisma.supplier.create({ data: { id: supplierId, name: "تست فیکسچر Phase6" } });
+    await prisma.supplierAccount.create({ data: { supplierId, outstanding: 0n } });
+    const invRow = await prisma.purchaseInvoice.create({
+      data: {
+        number: invoiceNumber,
+        supplierId,
+        state: "DRAFT",
+        subtotal: 100000n,
+        grandTotal: 100000n,
+        items: { create: [{ variantSku: fixtureSku, qty: 1, unitCost: 100000n }] },
+      },
+      select: { id: true },
+    });
+    invoiceId = invRow.id;
   });
 
   afterAll(async () => {
+    // پاک‌سازی فیکسچر — فقط داده‌های همین spec
+    await prisma.auditLog.deleteMany({ where: { entity: "PurchaseInvoice", entityId: invoiceId, action: { in: ["purchasing.invoice.attach", "purchasing.invoice.detach"] } } }).catch(() => undefined);
+    await prisma.attachment.deleteMany({ where: { ownerType: "purchase_invoice", ownerId: invoiceId } }).catch(() => undefined);
     for (const id of mediaIds) {
-      await prisma.attachment.deleteMany({ where: { mediaId: id } });
       await prisma.media.delete({ where: { id } }).catch(() => undefined);
     }
+    await prisma.purchaseInvoiceItem.deleteMany({ where: { invoiceId } }).catch(() => undefined);
+    await prisma.purchaseInvoice.deleteMany({ where: { id: invoiceId } }).catch(() => undefined);
+    await prisma.supplierAccount.deleteMany({ where: { supplierId } }).catch(() => undefined);
+    await prisma.supplier.deleteMany({ where: { id: supplierId } }).catch(() => undefined);
     await prisma.$disconnect();
   });
 

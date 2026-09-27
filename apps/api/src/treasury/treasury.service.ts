@@ -444,7 +444,12 @@ export class TreasuryService {
     let ambiguous = 0;
     let unmatched = 0;
     for (const s of pending) {
-      if (s.amount < 0n) continue; // بدهی بانکی (کارمزد) با attempt تطبیق نمی‌شود
+      if (s.amount < 0n) {
+        // بدهی بانکی (کارمزد) با attempt تطبیق نمی‌شود — اما صریحاً unmatched شمرده می‌شود
+        // (skip خاموش، گزارش pending/matching را ناسازگار می‌کرد)
+        unmatched += 1;
+        continue;
+      }
       const from = new Date(s.date.getTime() - 2 * 86_400_000);
       const to = new Date(s.date.getTime() + 2 * 86_400_000);
       const candidates = await this.prisma.paymentAttempt.findMany({
@@ -459,17 +464,29 @@ export class TreasuryService {
       if (candidates.length === 1) {
         const cand = candidates[0];
         await this.prisma.$transaction(async (tx) => {
-          await tx.bankStatementMatch.create({
-            data: {
-              statementId: s.id,
-              sourceType: "payment_attempt",
-              sourceId: cand.id,
-              allocatedAmount: s.amount,
-              state: "MATCHED",
-              actorId: actorId ?? null,
-              note: "auto: exactly one candidate",
-            },
+          // اگر یک رکورد REJECTED قبلی برای همین جفت وجود دارد، همان re-activate می‌شود —
+          // @@unique([statementId, sourceType, sourceId]) ساخت ردیف جدید را ممنوع می‌کند.
+          const stale = await tx.bankStatementMatch.findUnique({
+            where: { statementId_sourceType_sourceId: { statementId: s.id, sourceType: "payment_attempt", sourceId: cand.id } },
           });
+          if (stale && stale.state === "REJECTED") {
+            await tx.bankStatementMatch.update({
+              where: { id: stale.id },
+              data: { state: "MATCHED", allocatedAmount: s.amount, actorId: actorId ?? null, note: "auto re-match after unmatch" },
+            });
+          } else {
+            await tx.bankStatementMatch.create({
+              data: {
+                statementId: s.id,
+                sourceType: "payment_attempt",
+                sourceId: cand.id,
+                allocatedAmount: s.amount,
+                state: "MATCHED",
+                actorId: actorId ?? null,
+                note: "auto: exactly one candidate",
+              },
+            });
+          }
           await tx.bankStatement.update({ where: { id: s.id }, data: { matchedPaymentId: cand.id } });
         });
         alreadyMatched.push(cand.id);
@@ -522,21 +539,49 @@ export class TreasuryService {
         message: `مجموع تخصیص (${allocated + amount}) از مبلغ ردیف (${statementAbs}) بیشتر است.`,
       });
     }
-    // بدون duplicate allocation به یک source
+    // بدون duplicate allocation به یک source — رکوردهای REJECTED (لغوشده) مانع تخصیص مجدد نیستند
     const dup = await this.prisma.bankStatementMatch.findUnique({
       where: { statementId_sourceType_sourceId: { statementId, sourceType, sourceId } },
     });
     if (dup && dup.state !== "REJECTED") {
       throw new BadRequestException({ code: "DUPLICATE_ALLOCATION", message: "این منبع قبلاً به این ردیف تخصیص یافته است." });
     }
-    const r = await this.prisma.bankStatementMatch.create({
-      data: { statementId, sourceType, sourceId, allocatedAmount: amount, state: "MATCHED", actorId: actorId ?? null, note: "manual" },
+    // تطبیق به payment_attempt معادل resolve کردن ردیف است — matchedPaymentId هم پر می‌شود
+    // (تا با autoMatch هم‌دست بماند و اجرای مجدد auto-match تضاد unique index پیدا نکند).
+    const r = await this.prisma.$transaction(async (tx) => {
+      // اگر رکورد REJECTED قبلی برای همین جفت وجود دارد، همان re-activate می‌شود —
+      // @@unique([statementId, sourceType, sourceId]) ساخت ردیف جدید بعد از unmatch را ممنوع می‌کند.
+      const stale = await tx.bankStatementMatch.findUnique({
+        where: { statementId_sourceType_sourceId: { statementId, sourceType, sourceId } },
+      });
+      const created = stale && stale.state === "REJECTED"
+        ? await tx.bankStatementMatch.update({
+            where: { id: stale.id },
+            data: { state: "MATCHED", allocatedAmount: amount, actorId: actorId ?? null, note: "manual re-match after unmatch" },
+          })
+        : await tx.bankStatementMatch.create({
+            data: { statementId, sourceType, sourceId, allocatedAmount: amount, state: "MATCHED", actorId: actorId ?? null, note: "manual" },
+          });
+      if (sourceType === "payment_attempt") {
+        await tx.bankStatement.updateMany({
+          where: { id: statementId, matchedPaymentId: null }, // فقط اگر آزاد است — هرگز تخصیص دیگری نمی‌دزدد
+          data: { matchedPaymentId: sourceId },
+        });
+      }
+      return created;
     });
     await this.audit(actorId, "treasury.statement.manual_match", "BankStatement", statementId, { sourceType, sourceId, amount: amount.toString() });
     return r;
   }
 
-  /** لغو تطبیق — فقط state=REJECTED؛ هیچ اثر مالی (Match ≠ Clear) */
+  /**
+   * لغو تطبیق — state machine فاز ۹ (R3):
+   *   MATCHED → REJECTED (پایانی) | MANUAL_REVIEW → REJECTED | REJECTED → REJECTED (idempotent)
+   * REJECTED عمدی است، نه implementation ناقص: سابقه تخصیص حفظ می‌شود (audit/حسابرسی)،
+   * اما از مجموع تخصیص‌ها و dup-check خارج می‌شود تا re-match همان منبع ممکن باشد.
+   * اثر مالی صفر (اصل بند ۱۴: Match ≠ Clear): GL/خزانه/Check/settlement دست نمی‌خورد؛
+   * فقط اشاره‌گر matchedPaymentId ردیف (اگر به همین پرداخت اشاره می‌کرد) آزاد می‌شود.
+   */
   async unmatch(statementId: string, matchId: string, actorId?: string) {
     const m = await this.prisma.bankStatementMatch.findUnique({ where: { id: matchId } });
     if (!m || m.statementId !== statementId) {
