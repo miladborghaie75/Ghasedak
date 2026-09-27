@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { JournalService } from "../accounting/journal.service";
@@ -412,7 +413,7 @@ export class TreasuryService {
     if (!Array.isArray(input.lines) || input.lines.length === 0) {
       throw new BadRequestException({ code: "VALIDATION_ERROR", message: "هیچ ردیفی برای وارد کردن نیست." });
     }
-    const data = input.lines.map((l) => {
+    const parsed = input.lines.map((l) => {
       const amount = Math.round(Number(l.amount));
       if (!Number.isSafeInteger(amount) || amount === 0) {
         throw new BadRequestException({ code: "VALIDATION_ERROR", message: "مبلغ صورتحساب نامعتبر است." });
@@ -421,9 +422,32 @@ export class TreasuryService {
       if (Number.isNaN(d.getTime())) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "تاریخ نامعتبر است." });
       return { bankAccountId: bank.id, date: d, amount: BigInt(amount), description: l.description ?? null };
     });
-    const r = await this.prisma.bankStatement.createMany({ data });
-    await this.audit(input.actorId, "treasury.statement.import", "BankAccount", bank.id, { count: r.count });
-    return { ok: true, count: r.count };
+    // فاز ۹ (Wave 2 STEP 8): اثر انگشت فایل + dedup — ایمپورت تکراری همان فایل هیچ ردیف دومی نمی‌سازد.
+    const fingerprint = createHash("sha256")
+      .update(
+        parsed
+          .map((r) => `${r.date.toISOString()}|${r.amount}|${r.description ?? ""}`)
+          .sort()
+          .join("\n"),
+      )
+      .digest("hex");
+    let inserted = 0;
+    let skipped = 0;
+    for (const row of parsed) {
+      // dedup: کلید منطقی (bank, date, amount, description) — «external id» همپوشانی واقعی ردیف است
+      const dup = await this.prisma.bankStatement.findFirst({
+        where: { bankAccountId: row.bankAccountId, date: row.date, amount: row.amount, description: row.description },
+        select: { id: true },
+      });
+      if (dup) {
+        skipped += 1;
+        continue;
+      }
+      await this.prisma.bankStatement.create({ data: row });
+      inserted += 1;
+    }
+    await this.audit(input.actorId, "treasury.statement.import", "BankAccount", bank.id, { count: inserted, skipped, fingerprint });
+    return { ok: true, count: inserted, skipped, fingerprint };
   }
 
   /**

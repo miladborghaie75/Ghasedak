@@ -15,6 +15,7 @@ import { EventBusService } from "../src/events/event-bus.service";
 import { JournalService } from "../src/accounting/journal.service";
 import { TreasuryService } from "../src/treasury/treasury.service";
 import { PricingService } from "../src/pricing/pricing.service";
+import { ChecksService } from "../src/checks/checks.service";
 
 describe("Phase 6 closure smoke (پرینت/پیوست/یکسان‌سازی قیمت)", () => {
   let prisma: PrismaService;
@@ -32,7 +33,7 @@ describe("Phase 6 closure smoke (پرینت/پیوست/یکسان‌سازی ق�
     prisma = new PrismaService();
     await prisma.$connect();
     const inv = new InventoryService(prisma, new InventorySettingsService(prisma));
-    purchasing = new PurchasingService(prisma, inv, new EventBusService(prisma), new TreasuryService(prisma, new JournalService(prisma)));
+    purchasing = new PurchasingService(prisma, inv, new EventBusService(prisma), new TreasuryService(prisma, new JournalService(prisma)), new ChecksService(prisma, new JournalService(prisma)));
     pricing = new PricingService(prisma, new EventBusService(prisma));
     const u = await prisma.user.findFirst({ select: { id: true } });
     actor = u?.id;

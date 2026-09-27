@@ -4,6 +4,7 @@ import { InventoryService } from "./inventory.service";
 import { nextNumber } from "../common/number-series";
 import { EventBusService } from "../events/event-bus.service";
 import { TreasuryService } from "../treasury/treasury.service";
+import { ChecksService } from "../checks/checks.service";
 
 /**
  * چرخه خرید — بند ۲۷–۲۹/۴۳: PO → GRN (ورود بهایی به انبار + WAC) → Invoice → AP.
@@ -31,6 +32,7 @@ export class PurchasingService {
     private readonly inv: InventoryService,
     private readonly events: EventBusService,
     private readonly treasury: TreasuryService,
+    private readonly checks: ChecksService,
   ) {}
 
   // ---------------- تامین‌کننده ----------------
@@ -461,34 +463,78 @@ export class PurchasingService {
     return { invoice, ppvLines };
   }
 
-  /** پرداخت فاکتور خرید — AP تسویه (کامل/جزیی) + سند حسابداری */
-  async payInvoice(input: { invoiceId: string; amount: number; method?: string; actorId?: string }) {
+  /**
+   * پرداخت فاکتور خرید — AP تسویه (کامل/جزیی) + سند حسابداری.
+   * فاز ۹ (Wave 2 STEP 4): method="check" → چک صادره ISSUED در همان تراکنش:
+   *   صدور: Dr 2100 / Cr 2110 — بانک/صندوق دست نمی‌خورد (کاهش بانک فقط در clearing واقعی).
+   * پرداخت چکیِ مؤثر فقط با چک‌های زنده شمرده می‌شود (bounced/cancelled/returned حذف می‌شوند —
+   * reinstateSupplierDebtInTx در برگشت، AP/معین را بازسازی می‌کند).
+   */
+  async payInvoice(input: {
+    invoiceId: string; amount: number; method?: string; actorId?: string;
+    /** فقط method="check" — مشخصات چک صادره */
+    checkNumber?: string; checkBankName?: string; checkDueDateDays?: number;
+  }) {
     const amount = Math.round(Number(input.amount));
     if (!Number.isSafeInteger(amount) || amount <= 0) {
       throw new BadRequestException({ code: "VALIDATION_ERROR", message: "مبلغ پرداخت نامعتبر است." });
     }
+    const isCheck = (input.method ?? "").toLowerCase() === "check";
+    if (isCheck && (!input.checkNumber?.trim() || !input.checkBankName?.trim())) {
+      throw new BadRequestException({ code: "CHECK_FIELDS_REQUIRED", message: "شماره چک و نام بانک برای پرداخت چکی الزامی است." });
+    }
     const invoice = await this.prisma.purchaseInvoice.findUnique({
       where: { id: input.invoiceId },
-      include: { payments: true },
+      include: { payments: true, supplier: { select: { name: true } } },
     });
     if (!invoice) throw new NotFoundException({ code: "NOT_FOUND", message: "فاکتور یافت نشد." });
     if (invoice.state === "PAID") throw new BadRequestException({ code: "INVALID_STATE", message: "فاکتور تسویه شده است." });
-    const paid = invoice.payments.reduce((acc, p) => acc + Number(p.amount), 0) + amount;
+    // effective-paid: چک‌های مرده (bounced/cancelled/returned) جزو پرداخت مؤثر نیستند (STEP 4)
+    const deadCheckStates = ["BOUNCED", "CANCELLED", "RETURNED"];
+    const checkIds = invoice.payments.filter((p) => p.checkId).map((p) => p.checkId as string);
+    const deadCheckIds = new Set(
+      checkIds.length
+        ? (await this.prisma.check.findMany({ where: { id: { in: checkIds }, status: { in: deadCheckStates as never } }, select: { id: true } })).map((c) => c.id)
+        : [],
+    );
+    const effectivePrev = invoice.payments.reduce((acc, p) => {
+      if (!p.checkId) return acc + Number(p.amount);
+      return deadCheckIds.has(p.checkId) ? acc : acc + Number(p.amount);
+    }, 0);
+    const paid = effectivePrev + amount;
     if (paid > Number(invoice.grandTotal)) {
-      throw new BadRequestException({ code: "OVERPAY", message: `مجموع پرداخت (${paid}) از کل فاکتور (${Number(invoice.grandTotal)}) بیشتر است.` });
+      throw new BadRequestException({ code: "OVERPAY", message: `مجموع پرداخت مؤثر (${paid}) از کل فاکتور (${Number(invoice.grandTotal)}) بیشتر است.` });
     }
     const result = await this.prisma.$transaction(async (tx) => {
+      let checkId: string | null = null;
+      if (isCheck) {
+        const check = await this.checks.createIssuedInTx(tx, {
+          number: input.checkNumber!,
+          bankName: input.checkBankName!,
+          amount: BigInt(amount),
+          dueDate: new Date(Date.now() + Math.max(0, Math.round(Number(input.checkDueDateDays ?? 0))) * 86_400_000),
+          payee: invoice.supplier?.name ?? null,
+          supplierId: invoice.supplierId,
+          sourceType: "purchase_payment",
+          sourceId: invoice.id,
+          idempotencyKey: `pay:${invoice.id}:${amount}:${Date.now()}`,
+          actorId: input.actorId,
+        });
+        checkId = check.id;
+      }
       await tx.purchasePayment.create({
-        data: { invoiceId: invoice.id, method: input.method ?? "transfer", amount: BigInt(amount) },
+        data: { invoiceId: invoice.id, method: input.method ?? "transfer", amount: BigInt(amount), checkId },
       });
-      // فاز ۸ — خزانه: کاهش مانده صندوق/بانک + سند پرداخت، اتمیک با تسویه AP (درس ریسک ۶)
-      await this.treasury.debitForPurchaseInTx(tx, {
-        method: input.method ?? "transfer",
-        amount,
-        invoiceId: invoice.id,
-        invoiceNumber: invoice.number,
-        actorId: input.actorId,
-      });
+      if (!isCheck) {
+        // پرداخت نقد/بانکی — فقط اینجا خزانه کم می‌شود؛ پرداخت چکی بانک را دست نمی‌زند (STEP 2/4)
+        await this.treasury.debitForPurchaseInTx(tx, {
+          method: input.method ?? "transfer",
+          amount,
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.number,
+          actorId: input.actorId,
+        });
+      }
       const ap = await tx.accountsPayable.findFirst({
         where: { refType: "purchase_invoice", refId: invoice.id },
       });
@@ -508,9 +554,9 @@ export class PurchasingService {
       });
       const state = paid >= Number(invoice.grandTotal) ? "PAID" : "PARTIALLY_PAID";
       await tx.purchaseInvoice.update({ where: { id: invoice.id }, data: { state } });
-      return { state, paid, invoiceNumber: invoice.number };
+      return { state, paid, invoiceNumber: invoice.number, checkId };
     });
-    await this.audit(input.actorId, "purchasing.invoice.pay", "PurchaseInvoice", invoice.id, { amount, state: result.state });
+    await this.audit(input.actorId, "purchasing.invoice.pay", "PurchaseInvoice", invoice.id, { amount, state: result.state, method: input.method ?? "transfer", checkId: result.checkId });
     return result;
   }
 

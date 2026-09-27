@@ -10,6 +10,7 @@ import { InventoryService } from "../inventory/inventory.service";
 import { JournalService } from "../accounting/journal.service";
 import { PricingService } from "../pricing/pricing.service";
 import { TreasuryService } from "../treasury/treasury.service";
+import { ChecksService } from "../checks/checks.service";
 import { nextNumber } from "../common/number-series";
 
 export interface PosSaleLine {
@@ -65,6 +66,7 @@ export class PosService {
     private readonly journal: JournalService,
     private readonly pricing: PricingService,
     private readonly treasury: TreasuryService,
+    private readonly checks: ChecksService,
   ) {}
 
   async openShift(input: { userId: string; registerName: string; openingCash: number }) {
@@ -259,7 +261,8 @@ export class PosService {
         },
       });
 
-      // فاز ۹ (R1): ثبت چک دریافتی در همان تراکنش فاکتور — هیچ orphan Check/Payment باقی نمی‌ماند
+      // فاز ۹ (R1/Wave 2 STEP 3): چک دریافتی با سرویس متمرکز دامنهٔ چک، در همان تراکنش فاکتور —
+      // Check + CheckTransition(v0) + CheckCreated outbox + ردیف AR CHECK همه در یک tx؛ هیچ orphan باقی نمی‌ماند.
       const createdChecks: Array<{ checkId: string; paymentId: string }> = [];
       for (const cp of checkPayments) {
         const payment = await tx.posPayment.findFirst({
@@ -270,29 +273,28 @@ export class PosService {
           throw new BadRequestException({ code: "CHECK_PAYMENT_NOT_FOUND", message: "ردیف پرداخت چک یافت نشد." });
         }
         const dueDate = new Date(Date.now() + Math.max(0, Number(cp.dueDateDays ?? 0)) * 86_400_000);
-        const check = await tx.check.create({
-          data: {
-            direction: "RECEIVED",
-            status: "RECEIVED",
-            number: cp.checkNumber ?? "—",
-            bankName: cp.bankName ?? "—",
-            amount: BigInt(Math.round(cp.amount)),
-            issueDate: new Date(),
-            dueDate,
-            drawer: customerName ?? null,
-            payee: null,
-            sourceType: "pos_invoice",
-            sourceId: invoice.id,
-            customerId,
-            idempotencyKey: `${idem}:check:${createdChecks.length + 1}`,
-          },
+        const check = await this.checks.createReceivedInTx(tx, {
+          number: cp.checkNumber ?? "—",
+          bankName: cp.bankName ?? "—",
+          amount: BigInt(Math.round(cp.amount)),
+          dueDate,
+          drawer: customerName ?? null,
+          customerId: customerId!,
+          customerName,
+          sourceType: "pos_invoice",
+          sourceId: invoice.id,
+          idempotencyKey: `${idem}:check:${createdChecks.length + 1}`,
+          actorId: cashierId,
         });
         await tx.posPayment.update({ where: { id: payment.id }, data: { checkId: check.id } });
         createdChecks.push({ checkId: check.id, paymentId: payment.id });
       }
 
-      // فاز ۹ (R1): سند فروش داخل تراکنش (postOrNotifyInTx) — شکست سند ⇒ rollback کامل فاکتور/چک/مانده
-      // Cr 4000 = کل فروش؛ Dr: CASH→1000، CARD/ONLINE/BANK_TRANSFER→1100، CHECK→1220 (بند ۸ Design Gate)
+      // فاز ۹ (R1/Wave 2 STEP 2): سند فروش داخل تراکنش — شکست سند ⇒ rollback کامل فاکتور/چک/مانده.
+      // درآمد فقط یک‌بار شناسایی می‌شود: کل فروش Cr 4000؛ Dr: نقد/بانک نقدشده + چک‌دریافتی (1220).
+      // در Wave 2، بخش چکیِ Dr به‌صورت جابه‌جایی حسابداری درآمد↔AR مدل می‌شود:
+      //   Dr 1220 / Cr 1210 (موضع چک) — سپس ماندهٔ نقدی: Dr 1000/1100 / Cr 1210.
+      // یعنی Cr 1210 مجموع «فروش نقدی + موضع چک» = کل فروش؛ هیچ Cr 4000 دوبار رخ نمی‌دهد.
       const itemLines = priced
         .map((l) => `${l.qty}× ${l.title} [${l.sku}${l.barcode ? ` | بارکد ${l.barcode}` : ""}]`)
         .join(" ، ");
@@ -311,6 +313,12 @@ export class PosService {
       if (bankAmt > 0) lines.push({ accountCode: "1100", debit: bankAmt });
       if (checkAmt > 0) lines.push({ accountCode: "1220", debit: checkAmt });
       lines.push({ accountCode: "4000", credit: Number(grandTotal) });
+      // تحلیل STEP 2 (درآمد فقط یک‌بار): فروش POS مستقیم = رویداد شناسایی درآمد — چکِ دریافتی خودِ دارایی است
+      // (Dr 1220) و Cr 4000 دقیقاً یک‌بار زده می‌شود. جفتِ Dr 1220/Cr 1210 برای جریان دیگری است:
+      // «پرداخت چک به بدهی AR-TRADE قبلی» (سفارش اعتباری → چک) که آنجا درآمد قبلاً شناسایی شده و
+      // فقط exposure جابه‌جا می‌شود — در فروش مستقیم POS چنین جابه‌جایی‌ای وجود ندارد و 1210 دخالتی ندارد.
+      // سطح مشتری: موضع چک در AR CHECK (exposureType=CHECK) توسط createReceivedInTx ثبت می‌شود؛
+      // وصول → تسویهٔ همان ردیف (بدون double-count با TRADE).
       const entry = await this.journal.postOrNotifyInTx(tx, {
         description: `فروش POS ${number} — ${itemLines}`,
         sourceType: "pos_invoice",

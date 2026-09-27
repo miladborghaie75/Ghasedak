@@ -15,6 +15,7 @@ import { InventorySettingsService } from "../src/inventory/inventory-settings.se
 import { PricingService } from "../src/pricing/pricing.service";
 import { PosService } from "../src/pos/pos.service";
 import { EventBusService } from "../src/events/event-bus.service";
+import { ChecksService } from "../src/checks/checks.service";
 
 jest.setTimeout(60_000);
 
@@ -40,7 +41,7 @@ describe("Phase 9 Wave 1 — R1/R3", () => {
     bus = new EventBusService(prisma);
     pricing = new PricingService(prisma, bus);
     inventory = new InventoryService(prisma, new InventorySettingsService(prisma));
-    pos = new PosService(prisma, inventory, journal, pricing, treasury);
+    pos = new PosService(prisma, inventory, journal, pricing, treasury, new ChecksService(prisma, journal));
     actor = (await prisma.user.findFirstOrThrow()).id;
     const variant = await prisma.productVariant.findFirstOrThrow({ where: { status: "PUBLISHED" }, select: { sku: true } });
     sku = variant.sku;

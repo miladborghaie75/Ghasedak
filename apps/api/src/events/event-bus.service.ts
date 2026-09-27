@@ -208,6 +208,43 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
         this.logger.log(`PriceChanged: level=${String(payload.level)} count=${String(payload.count)}`);
         return;
       }
+      // ---------------- فاز ۹ — Wave 2: مصرف‌کننده‌های دامنهٔ چک ----------------
+      case "CheckCleared": {
+        await this.notifyAdmin(
+          `check-cleared:${String(payload.checkId)}`, // idempotent per check (clear فقط یک‌بار)
+          `چک ${payload.direction === "ISSUED" ? "صادره" : "دریافتی"} وصول شد — مبلغ ${String(payload.amount)}`,
+          payload,
+        );
+        this.logger.log(`CheckCleared: check=${String(payload.checkId)}`);
+        return;
+      }
+      case "CheckBounced": {
+        await this.notifyAdmin(
+          `check-bounced:${String(payload.checkId)}`,
+          `⚠️ چک برگشت خورد — مبلغ ${String(payload.amount)}`,
+          payload,
+        );
+        this.logger.log(`CheckBounced: check=${String(payload.checkId)}`);
+        return;
+      }
+      case "CheckCancelled": {
+        await this.notifyAdmin(
+          `check-cancelled:${String(payload.checkId)}`,
+          `چک ابطال شد — مبلغ ${String(payload.amount)}`,
+          payload,
+        );
+        return;
+      }
+      case "ReminderCreated": {
+        // یادآور سررسید چک → زنگ ادمین (کانال واقعی با abstraction Notification — هیچ provider hard-code)
+        await this.notifyAdmin(
+          `check-reminder:${String(payload.reminderKey)}`, // reminderKey خودش پایدار/idempotent است
+          `یادآوری چک — اولویت ${String(payload.priority)}`,
+          payload,
+        );
+        this.logger.log(`ReminderCreated: check=${String(payload.checkId)} kind=${String(payload.kind)}`);
+        return;
+      }
       default:
         this.logger.debug(`event ${name} — handler ثبت نشده؛ فقط PROCESSED می‌شود`);
     }

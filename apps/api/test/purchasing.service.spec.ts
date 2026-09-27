@@ -11,6 +11,7 @@ import { PrismaService } from "../src/prisma/prisma.service";
 import { EventBusService } from "../src/events/event-bus.service";
 import { JournalService } from "../src/accounting/journal.service";
 import { TreasuryService } from "../src/treasury/treasury.service";
+import { ChecksService } from "../src/checks/checks.service";
 
 describe("PurchasingService (integration با DB dev)", () => {
   let prisma: PrismaService;
@@ -29,7 +30,7 @@ describe("PurchasingService (integration با DB dev)", () => {
     prisma = new PrismaService();
     await prisma.$connect();
     inv = new InventoryService(prisma, new InventorySettingsService(prisma));
-    service = new PurchasingService(prisma, inv, new EventBusService(prisma), new TreasuryService(prisma, new JournalService(prisma)));
+    service = new PurchasingService(prisma, inv, new EventBusService(prisma), new TreasuryService(prisma, new JournalService(prisma)), new ChecksService(prisma, new JournalService(prisma)));
     const u = await prisma.user.findFirst({ select: { id: true } });
     actor = u?.id;
 

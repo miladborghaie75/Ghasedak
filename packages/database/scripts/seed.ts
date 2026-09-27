@@ -52,6 +52,8 @@ const ROLE_SETS: Record<string, string[]> = {
     "payments.view", "payments.verify", "payments.reconcile" as string,
     "accounting.view", "accounting.journal", "accounting.accounts", "accounting.reports",
     "treasury.view", "treasury.manage",
+    // فاز ۹ Wave 2: دامنهٔ چک — دسترسی کامل حسابدار (هم‌راستا با خزانه)
+    "checks.view", "checks.manage", "checks.clear", "checks.cancel", "checks.reconcile" as string,
     "purchasing.view", "purchasing.pay",
     "reports.view", "audit.view", "system.health",
   ],

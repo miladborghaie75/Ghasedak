@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAdminApi, fa } from "@/components/useAdminApi";
+import ChecksWorkspace from "./ChecksWorkspace";
 
 interface CashRow { id: string; kind: string; name: string; glCode: string; glName: string; openingBalance: string; currentBalance: string; glBookBalance: string; }
 interface BankRow { id: string; name: string; bankName: string; accountNumber: string; iban: string | null; glCode: string; glName: string; openingBalance: string; currentBalance: string; glBookBalance: string; }
@@ -286,6 +287,9 @@ export default function TreasuryClient() {
           </div>
         </section>
       </div>
+
+      {/* فاز ۹ — Wave 2: دامنهٔ چک (STEP 13) — همان فضای خزانه، بدون sidebar جدید */}
+      <ChecksWorkspace />
     </div>
   );
 }
