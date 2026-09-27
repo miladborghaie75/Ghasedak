@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -61,9 +61,57 @@ const KIND_TITLE: Record<Kind, string> = {
   OVERDUE: "چک از سررسید گذشته",
 };
 
+/** خروجی تیک زمان‌بند — برای گزارش و تست */
+export interface ScheduledRunResult {
+  ran: boolean;
+  reason?: "already-run-today" | "already-running";
+  result?: { created: number; cancelled: number; scanned: number };
+}
+
 @Injectable()
-export class ReminderService {
+export class ReminderService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(ReminderService.name);
+  private timer: ReturnType<typeof setInterval> | null = null;
+  /** آخرین «روز تهران» اجرا شده — فقط حافظهٔ فرایند؛ idempotency واقعی روی DB (idempotencyKey unique) است */
+  private lastRunDay: string | null = null;
+  private running = false;
+
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * فاز ۹ — Wave 3 (STEP 1): زمان‌بند واقعی روزانه.
+   *  - همان الگوی setInterval موجود EventBus (بدون lib جدید — Existing Capability First).
+   *  - تیک هر ۶۰ ثانیه؛ فقط «اولین تیکِ هر روز تهران» واقعاً runDaily را اجرا می‌کند.
+   *  - restart-safe: اجرای تکراری بعد از restart هیچ ردیف/رویداد تکراری نمی‌سازد —
+   *    idempotencyKey پایدار `check-due:{checkId}:{kind}:{tehranDay}` روی Reminder.unique است،
+   *    پس هیچ ارسال مجدد Reminder رخ نمی‌دهد (runDaily قبل از ساخت، وجود را چک می‌کند).
+   *  - خطا swallow نمی‌شود: log + lastRunDay به‌روز نمی‌شود → تیک بعدی دوباره تلاش می‌کند.
+   */
+  onModuleInit(): void {
+    this.timer = setInterval(() => void this.runScheduled(), 60_000);
+    // اولین تلاش بلافاصله بعد از بوت — اگر امروز هنوز اجرا نشده، اجرا می‌شود (idempotent)
+    void this.runScheduled();
+  }
+
+  onModuleDestroy(): void {
+    if (this.timer) clearInterval(this.timer);
+  }
+
+  /** یک تیک زمان‌بند — در تست هم قابل فراخوانی مستقیم */
+  async runScheduled(now?: Date): Promise<ScheduledRunResult> {
+    const day = tehranDay(now ?? new Date());
+    if (this.lastRunDay === day) return { ran: false, reason: "already-run-today" };
+    if (this.running) return { ran: false, reason: "already-running" };
+    this.running = true;
+    try {
+      const result = await this.runDaily({ now });
+      this.lastRunDay = tehranDay(now ?? new Date());
+      this.logger.log(`reminder daily run: created=${result.created} cancelled=${result.cancelled} scanned=${result.scanned}`);
+      return { ran: true, result };
+    } finally {
+      this.running = false;
+    }
+  }
 
   /**
    * پیمایش روزانه — هر چند بار هم صدا زده شود برای همان روز همان خروجی را می‌سازد (idempotent).

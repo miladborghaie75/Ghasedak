@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAdminApi, fa } from "@/components/useAdminApi";
 import ChecksWorkspace from "./ChecksWorkspace";
+import StatementChecks from "./StatementChecks";
 
 interface CashRow { id: string; kind: string; name: string; glCode: string; glName: string; openingBalance: string; currentBalance: string; glBookBalance: string; }
 interface BankRow { id: string; name: string; bankName: string; accountNumber: string; iban: string | null; glCode: string; glName: string; openingBalance: string; currentBalance: string; glBookBalance: string; }
@@ -255,6 +256,9 @@ export default function TreasuryClient() {
                   </tbody>
                 </table>
               </div>
+
+              {/* فاز ۹ — Wave 3 (STEP 2): تأیید وصول چک از صورتحساب — بدون sidebar جدید، همان بخش صورتحساب */}
+              {sel && <StatementChecks bankAccountId={sel.id} />}
             </div>
           )}
         </section>

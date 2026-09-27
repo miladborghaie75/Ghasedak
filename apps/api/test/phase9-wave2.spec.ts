@@ -181,9 +181,11 @@ describe("Phase 9 Wave 2 — Check domain", () => {
     const reason = (rejected[0] as PromiseRejectedResult).reason;
     expect(await prisma.checkTransition.count({ where: { checkId: check.id, toStatus: "DEPOSITED" } })).toBe(1);
     expect((await prisma.check.findUniqueOrThrow({ where: { id: check.id } })).lifecycleVersion).toBe(1);
-    // در READ COMMITTED هر دو tx اول validate می‌شوند — بخش‌ندهٔ واقعی اینجا allow-list است
-    // (دومی INVALID می‌گیرد) و CAS از double-transition واقعی جلوگیری می‌کند؛ فقط یک گذار.
-    expect(reason).toBeInstanceOf(BadRequestException);
+    // فاز ۹ — Wave 3 (STEP 3): بازنده بعد از شکست CAS دوباره وضعیت را می‌خواند؛
+    // اگر version توسط برنده عوض شده → CONCURRENT_MODIFICATION (Conflict)؛
+    // اگر txها serialize شده باشند → INVALID_TRANSITION (BadRequest). پوشش قطعی هر شاخه
+    // در phase9-wave3.spec انجام شده؛ اینجا فقط ردِ «مشخص» با exactly-1 گذار مهم است.
+    expect([BadRequestException, ConflictException]).toContain(reason.constructor);
   });
 
   // ---------- STEP 2/5: accounting — clearing ----------

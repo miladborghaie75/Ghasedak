@@ -77,6 +77,13 @@ export class TreasuryController {
     return this.treasury.listStatements(id);
   }
 
+  /** فاز ۹ — Wave 3 (STEP 2): وضعیت چکِ متصل به ردیف صورتحساب — read-only؛ وصول فقط از دامنهٔ چک */
+  @Get("bank-accounts/:id/statements/:statementId/check")
+  @RequirePermission("checks.view", "treasury.view")
+  statementCheck(@Param("statementId") statementId: string) {
+    return this.treasury.checkByStatement(statementId);
+  }
+
   @Post("bank-accounts/:id/statements/import")
   @RequirePermission("treasury.manage")
   importStatements(@Req() req: Request, @Param("id") id: string, @Body() body: { lines: Array<{ date: string; amount: number; description?: string }> }) {

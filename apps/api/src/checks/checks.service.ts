@@ -312,7 +312,9 @@ export class ChecksService {
 
   /**
    * transition با CAS: update شرطی روی lifecycleVersion — اگر دو request همزمان برسند
-   * فقط یکی version را می‌بَرد و transition واقعی می‌سازد؛ دیگری CONCURRENT_TRANSITION می‌گیرد.
+   * فقط یکی version را می‌بَرد و transition واقعی می‌سازد؛ دیگری CONCURRENT_MODIFICATION
+   * (تغییر version توسط request دیگر) یا INVALID_TRANSITION (اجازهٔ allow-list) می‌گیرد —
+   * تفکیک با re-read بعد از شکست CAS، نه با حدسِ اولیه (Wave 3 STEP 3).
    * idempotencyKey تکراری → همان transition قبلی (replay، بدون اثر دوم).
    */
   async transition(input: TransitionInput) {
@@ -339,15 +341,27 @@ export class ChecksService {
       // — منبع حقیقتِ تک: همان allow-list؛ هیچ گارد دومِ موازی‌ای لازم نیست.
 
       const targetVersion = check.lifecycleVersion + 1;
-      // CAS — ردیف فقط با version فعلی به‌روز می‌شود؛ race → count=0 → Conflict
+      // CAS — ردیف فقط با version فعلی به‌روز می‌شود؛ race → count=0 → تفکیک دقیق نوع تعارض
       const updated = await tx.check.updateMany({
         where: { id: check.id, lifecycleVersion: check.lifecycleVersion },
         data: { status: input.toStatus as never, lifecycleVersion: targetVersion },
       });
       if (updated.count !== 1) {
-        throw new ConflictException({
-          code: "CONCURRENT_TRANSITION",
-          message: "وضعیت چک همزمان تغییر کرده — دوباره تلاش کنید.",
+        // فاز ۹ — Wave 3 (STEP 3): تفکیک CONCURRENT_MODIFICATION از INVALID_TRANSITION.
+        // در READ COMMITTED هر دو tx ممکن است قبل از CAS وضعیت مشابه ببینند؛ پاسخ درست با
+        // re-read بعد از شکست CAS مشخص می‌شود:
+        //  - version تغییر کرده (request دیگری transition را برده) → CONCURRENT_MODIFICATION
+        //  - version همان است اما allow-list اجازه نمی‌دهد (state از مسیر دیگری عوض شده) → INVALID_TRANSITION
+        const fresh = await tx.check.findUnique({ where: { id: check.id }, select: { lifecycleVersion: true, status: true } });
+        if (fresh && fresh.lifecycleVersion !== check.lifecycleVersion) {
+          throw new ConflictException({
+            code: "CONCURRENT_MODIFICATION",
+            message: `وضعیت چک همزمان تغییر کرده (نسخهٔ ${check.lifecycleVersion} → ${fresh.lifecycleVersion}) — دوباره تلاش کنید.`,
+          });
+        }
+        throw new BadRequestException({
+          code: "INVALID_TRANSITION",
+          message: `گذار ${check.status} → ${input.toStatus} مجاز نیست.`,
         });
       }
 

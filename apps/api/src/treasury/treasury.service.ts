@@ -407,6 +407,47 @@ export class TreasuryService {
     };
   }
 
+  /**
+   * فاز ۹ — Wave 3 (STEP 2): اطلاعات چکِ متصل به یک ردیف صورتحساب — فقط خواندنی، هیچ mutation.
+   * UI «تأیید وصول» برای نمایش وضعیت چک قبل از confirm از این استفاده می‌کند.
+   * هیچ clearing خودکاری اینجا رخ نمی‌دهد (Match ≠ Clear) — وصول فقط با endpoint صریح دامنهٔ چک.
+   */
+  async checkByStatement(statementId: string) {
+    const stmt = await this.prisma.bankStatement.findUnique({ where: { id: statementId } });
+    if (!stmt) throw new NotFoundException({ code: "NOT_FOUND", message: "ردیف صورتحساب یافت نشد." });
+    const m = await this.prisma.bankStatementMatch.findFirst({
+      where: { statementId, sourceType: "check", state: { not: "REJECTED" } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!m) return { matched: false as const, check: null };
+    const check = await this.prisma.check.findUnique({
+      where: { id: m.sourceId },
+      include: {
+        customer: { select: { id: true, name: true, mobile: true } },
+        supplier: { select: { id: true, name: true } },
+        treasuryBank: { select: { id: true, name: true, bankName: true } },
+      },
+    });
+    if (!check) return { matched: true as const, check: null };
+    return {
+      matched: true as const,
+      check: {
+        id: check.id,
+        direction: check.direction,
+        status: check.status,
+        number: check.number,
+        bankName: check.bankName,
+        amount: check.amount.toString(),
+        dueDate: check.dueDate.toISOString(),
+        lifecycleVersion: check.lifecycleVersion,
+        partyName: check.customer?.name ?? check.supplier?.name ?? null,
+        clearedBefore: check.status === "CLEARED",
+        canClear: check.status === "RECEIVED" || check.status === "DEPOSITED",
+        matchId: m.id,
+      },
+    };
+  }
+
   async importStatements(input: { bankAccountId: string; lines: Array<{ date: string; amount: number; description?: string }>; actorId?: string }) {
     const bank = await this.prisma.bankAccount.findUnique({ where: { id: input.bankAccountId } });
     if (!bank) throw new NotFoundException({ code: "NOT_FOUND", message: "حساب بانکی یافت نشد." });
