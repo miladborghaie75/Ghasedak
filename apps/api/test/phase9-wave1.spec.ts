@@ -45,6 +45,12 @@ describe("Phase 9 Wave 1 — R1/R3", () => {
     actor = (await prisma.user.findFirstOrThrow()).id;
     const variant = await prisma.productVariant.findFirstOrThrow({ where: { status: "PUBLISHED" }, select: { sku: true } });
     sku = variant.sku;
+    // فاز ۱۱ (P1-A): فروش حالا اتمیک با انبار است — واریانت باید موجودی کافی داشته باشد
+    const whId = (await prisma.salesChannel.findUniqueOrThrow({ where: { slug: "pos" } })).defaultWarehouseId;
+    const agg = await prisma.stockLedgerEntry.aggregate({ where: { warehouseId: whId!, variantSku: sku }, _sum: { qtyIn: true, qtyOut: true } });
+    if ((agg._sum.qtyIn ?? 0) - (agg._sum.qtyOut ?? 0) < 10) {
+      await inventory.move({ warehouseId: whId!, variantSku: sku, type: "ADJUSTMENT", qty: 20, unitCost: 100_000n, refType: "manual", refId: tag, idempotencyKey: `w1-restock-${tag}`, actorId: actor });
+    }
     // اگر از اجرای قبلی شیفت بازی مانده، همان را استفاده کن (idempotent across runs)
     let shift = await prisma.cashierShift.findFirst({ where: { userId: actor, state: "OPEN" } });
     if (!shift) {

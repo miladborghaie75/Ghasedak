@@ -113,6 +113,7 @@ const PERMISSIONS = [
   "payments.view", "payments.verify",
   "payments.reconcile", // بند ۱۸ Audit فاز ۹: عدم‌تقارن قبل — در ROLE_SETS بود ولی در PERMISSIONS نبود
   "checks.view", "checks.manage", "checks.clear", "checks.cancel", "checks.reconcile", // فاز ۹
+  "returns.manage", "orders.refund", // فاز ۱۱ P1-B: endpointهای مرجوعی/بازگشت بدون permission بودند
   "pos.view", "pos.sell",
   "treasury.view", "treasury.manage",
   "accounting.view", "accounting.journal", "accounting.accounts", "accounting.reports",
@@ -132,6 +133,7 @@ const ROLE_SETS: Record<string, string[]> = {
   ACCOUNTANT: [
     "dashboard.view",
     "payments.view", "payments.verify", "payments.reconcile" as string,
+    "returns.manage", "orders.refund" as string, // فاز ۱۱ P1-B
     "accounting.view", "accounting.journal", "accounting.accounts", "accounting.reports",
     "treasury.view", "treasury.manage",
     // فاز ۹ Wave 2: دامنهٔ چک — دسترسی کامل حسابدار (هم‌راستا با خزانه)

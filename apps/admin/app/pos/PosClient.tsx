@@ -42,6 +42,10 @@ interface Ticket {
   note?: string;
   held: boolean;
   createdAt: number;
+  /** فاز ۱۱ (P2-A): id تیکت ماندگار سمت سرور + version برای optimistic locking */
+  serverId?: string;
+  version?: number;
+  saving?: boolean;
 }
 
 let ticketSeq = 0;
@@ -77,6 +81,84 @@ export default function PosClient() {
 
   const active = useMemo(() => tickets.find((t) => t.id === activeId) ?? tickets.find((t) => !t.held) ?? tickets[0], [tickets, activeId]);
 
+  // ---------- فاز ۱۱ (P2-A): تیکت ماندگار — sync با سرور ----------
+  /** محتوای تیکت را به سرور می‌فرستد (create یا update) — شکست sync مانع فروش نمی‌شود ولی دیده می‌شود */
+  const syncTicket = useCallback(async (t: Ticket) => {
+    const payload = {
+      items: t.lines.map((l) => ({ sku: l.sku, qty: l.qty })),
+      customerMobile: t.customerMobile || undefined,
+      customerName: t.customerName || undefined,
+      discountTotal: t.discountTotal,
+    };
+    try {
+      if (!t.serverId) {
+        const r = await call<{ id: string; version: number }>("/pos/tickets", { method: "POST", body: JSON.stringify(payload) });
+        if (r.ok && r.data) {
+          setTickets((ts) => ts.map((x) => (x.id === t.id ? { ...x, serverId: r.data!.id, version: r.data!.version, saving: false } : x)));
+          return r.data.id;
+        }
+      } else {
+        const r = await call<{ id: string; version: number }>(`/pos/tickets/${t.serverId}/update`, {
+          method: "POST",
+          body: JSON.stringify({ ...payload, expectedVersion: t.version ?? 1 }),
+        });
+        if (r.ok && r.data) {
+          setTickets((ts) => ts.map((x) => (x.serverId === t.serverId ? { ...x, version: r.data!.version, saving: false } : x)));
+          return t.serverId;
+        }
+      }
+      setTickets((ts) => ts.map((x) => (x.id === t.id ? { ...x, saving: false } : x)));
+      return null;
+    } catch {
+      setTickets((ts) => ts.map((x) => (x.id === t.id ? { ...x, saving: false } : x)));
+      return null;
+    }
+  }, [call]);
+
+  /** بازیابی تیکت‌های باز/held از سرور بعد از refresh/reconnect */
+  const loadServerTickets = useCallback(async () => {
+    const r = await call<Array<{ id: string; status: string; version: number; items: Array<{ sku: string; qty: number }>; customerMobile: string | null; customerName: string | null; discountTotal: number; createdAt: string }>>("/pos/tickets");
+    if (r.ok && r.data && r.data.length) {
+      const serverTickets = r.data;
+      setTickets((ts) => {
+        // تیکت‌های محلی تازهٔ خالی را با سروری جایگزین می‌کنیم؛ محلیِ دارای serverId حفظ می‌شود
+        const fromServer = serverTickets.map((s, i) => ({
+          id: `srv-${s.id}`,
+          label: `Ticket ${i + 1}`,
+          lines: s.items.map((it) => ({ sku: it.sku, name: it.sku, price: 0, qty: it.qty })),
+          customerMobile: s.customerMobile ?? "",
+          customerName: s.customerName ?? "",
+          discountTotal: s.discountTotal,
+          held: s.status === "HELD",
+          createdAt: new Date(s.createdAt).getTime(),
+          serverId: s.id,
+          version: s.version,
+        }));
+        const localKept = ts.filter((t) => t.serverId && !fromServer.some((s) => s.serverId === t.serverId) && (t.lines.length > 0));
+        return [...fromServer, ...localKept];
+      });
+    }
+  }, [call]);
+
+  useEffect(() => {
+    void loadServerTickets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** hold/resume/cancel روی تیکت ماندگار — best-effort با نمایش خطا */
+  const serverTransition = useCallback(async (t: Ticket, to: "HELD" | "OPEN" | "CANCELLED") => {
+    if (!t.serverId) return;
+    const r = await call<{ version: number }>(`/pos/tickets/${t.serverId}/transition`, {
+      method: "POST",
+      body: JSON.stringify({ expectedVersion: t.version ?? 1, to }),
+    });
+    if (r.ok && r.data) {
+      setTickets((ts) => ts.map((x) => (x.serverId === t.serverId ? { ...x, version: r.data!.version } : x)));
+    } else if (r.error) {
+      setError(`sync تیکت: ${r.error.message}`);
+    }
+  }, [call]);
+
   useEffect(() => {
     if (active && active.id !== activeId) setActiveId(active.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,14 +189,18 @@ export default function PosClient() {
     if (!active) return;
     if (active.lines.length === 0) { setError("Ticket خالی برای hold ندارد."); return; }
     patchTicket(active.id, { held: true, label: active.label });
+    void syncTicket({ ...active, held: true });
+    void serverTransition({ ...active, held: true }, "HELD");
     const nextOpen = tickets.find((t) => t.id !== active.id && !t.held);
     if (nextOpen) setActiveId(nextOpen.id);
     else addTicket();
   };
 
   const resumeTicket = (id: string) => {
-    setTickets((ts) => ts.map((t) => (t.id === id ? { ...t, held: false } : t)));
+    const t = tickets.find((x) => x.id === id);
+    setTickets((ts) => ts.map((x) => (x.id === id ? { ...x, held: false } : x)));
     setActiveId(id);
+    if (t) void serverTransition({ ...t, held: false }, "OPEN");
   };
 
   const dropTicket = (id: string) => {
@@ -211,6 +297,13 @@ export default function PosClient() {
           methods: pays.map((p) => METHOD_FA[p.method] ?? p.method),
           customer: active.customerName || active.customerMobile || null,
         });
+        // فاز ۱۱ (P2-A): تیکت ماندگار را COMPLETED کن بعد Ticket خالی جدید
+        if (active.serverId) {
+          void call(`/pos/tickets/${active.serverId}/complete`, {
+            method: "POST",
+            body: JSON.stringify({ expectedVersion: active.version ?? 1, invoiceId: (r.data as { id?: string }).id }),
+          });
+        }
         // Ticket مصرف‌شده حذف و Ticket خالی جدید
         setTickets((ts) => [...ts.filter((t) => t.id !== active.id), newTicket()]);
       } else setError(r.error?.message ?? "خطا در ثبت فاکتور");

@@ -57,4 +57,31 @@ export class ReturnsController {
   settle(@Param("id") id: string, @Identity() actor?: { userId: string }) {
     return this.returns.settle(id, actor?.userId);
   }
+
+  /** فاز ۱۱ (P1-B): نهایی‌کردن بازگشت PENDING → COMPLETED با اثر خزانه/سند */
+  @Post("refunds/:refundId/finalize")
+  @RequirePermission("orders.refund")
+  finalizeRefund(
+    @Param("refundId") refundId: string,
+    @Body() body: { idempotencyKey?: string; reason?: string },
+    @Identity() actor?: { userId: string },
+  ) {
+    const key = body.idempotencyKey ?? `refund-finalize:${refundId}:${actor?.userId ?? "system"}`;
+    return this.returns.finalizeRefund(refundId, {
+      idempotencyKey: key,
+      actorId: actor?.userId,
+      reason: body.reason,
+    });
+  }
+
+  /** فاز ۱۱ (P1-B): لغو بازگشت PENDING → CANCELLED (بدون اثر مالی — پول خارج نشده) */
+  @Post("refunds/:refundId/cancel")
+  @RequirePermission("orders.refund")
+  cancelRefund(
+    @Param("refundId") refundId: string,
+    @Body() body: { reason?: string },
+    @Identity() actor?: { userId: string },
+  ) {
+    return this.returns.cancelRefund(refundId, { actorId: actor?.userId, reason: body.reason });
+  }
 }

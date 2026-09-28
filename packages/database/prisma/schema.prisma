@@ -1080,6 +1080,8 @@ model Notification {
   payload     Json?
   status      NotificationStatus @default(QUEUED)
   sentAt      DateTime?
+  lastError   String? // فاز ۱۱ (P2-B): آخرین خطای dispatch — NOT_CONFIGURED/PROVIDER/...
+  attempts    Int                @default(0) // فاز ۱۱ (P2-B): شمار تلاش‌های dispatch
   createdAt   DateTime           @default(now())
 }
 
@@ -1978,6 +1980,25 @@ model CashRegister {
 enum ShiftState {
   OPEN
   CLOSED
+}
+
+// فاز ۱۱ (P2-A): تیکت POS ماندگار — hold/resume بین رفرش/ترمینال‌ها؛ هیچ V2 workflow نیست
+model PosTicket {
+  id             String   @id @default(cuid())
+  userId         String   // صندوقدار مالک تیکت
+  shiftId        String?  // شیفت مرتبط در لحظهٔ hold
+  status         String   @default("OPEN") // OPEN|HELD|COMPLETED|CANCELLED
+  customerMobile String?
+  customerName   String?
+  items          Json     // [{sku, qty}] — snapshot خطوط تیکت
+  discountTotal  Int      @default(0)
+  version        Int      @default(1) // optimistic locking — بند ۱۱
+  audit          Json?    // [{at, actorId, action}] — trace مختصر
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, userId])
+  @@index([shiftId])
 }
 
 model CashierShift {

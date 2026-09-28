@@ -360,10 +360,11 @@ describe("Phase 9 Wave 2 — Check domain", () => {
     // فیکسچر موجودی
     const whId = (await prisma.salesChannel.findUniqueOrThrow({ where: { slug: "pos" } })).defaultWarehouseId;
     const variant = await prisma.productVariant.findFirstOrThrow({ where: { status: "PUBLISHED" }, select: { sku: true } });
-    const ledger = await prisma.stockLedgerEntry.findFirst({ where: { warehouseId: whId!, variantSku: variant.sku } });
-    if (!ledger) {
+    // فاز ۱۱ (P1-A): فروش اتمیک با انبار — موجودی خالص باید کافی باشد (نه فقط وجود یک ledger)
+    const agg = await prisma.stockLedgerEntry.aggregate({ where: { warehouseId: whId!, variantSku: variant.sku }, _sum: { qtyIn: true, qtyOut: true } });
+    if ((agg._sum.qtyIn ?? 0) - (agg._sum.qtyOut ?? 0) < 5) {
       const inv = new InventoryService(prisma, new InventorySettingsService(prisma));
-      await inv.move({ warehouseId: whId!, variantSku: variant.sku, type: "ADJUSTMENT", qty: 10, unitCost: 100000n, refType: "manual", refId: tag, idempotencyKey: `w2-restock-${tag}`, actorId: actor });
+      await inv.move({ warehouseId: whId!, variantSku: variant.sku, type: "ADJUSTMENT", qty: 15, unitCost: 100000n, refType: "manual", refId: tag, idempotencyKey: `w2-restock-${tag}`, actorId: actor });
     }
     const shift = await prisma.cashierShift.findFirst({ where: { userId: actor, state: "OPEN" } })
       ?? await pos.openShift({ userId: actor, registerName: `REG-${tag}`, openingCash: 0 });

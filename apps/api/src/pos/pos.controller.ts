@@ -118,4 +118,57 @@ export class PosController {
   ) {
     return this.pos.correctInvoice({ ...body, invoiceId: id }, actor?.userId ?? "");
   }
+
+  // ---------------- فاز ۱۱ (P2-A) — تیکت ماندگار ----------------
+
+  @Post("tickets")
+  @RequirePermission("pos.sell")
+  ticketCreate(
+    @Body() body: { items?: Array<{ sku: string; qty: number }>; customerMobile?: string; customerName?: string; discountTotal?: number },
+    @Identity() actor?: { userId: string },
+  ) {
+    return this.pos.ticketCreate({ userId: actor?.userId ?? "", items: body.items, customerMobile: body.customerMobile, customerName: body.customerName, discountTotal: body.discountTotal });
+  }
+
+  @Get("tickets")
+  @RequirePermission("pos.view")
+  ticketList(@Identity() actor?: { userId: string }) {
+    return this.pos.ticketList(actor?.userId ?? "");
+  }
+
+  @Get("tickets/:id")
+  @RequirePermission("pos.view")
+  ticketGet(@Param("id") id: string) {
+    return this.pos.ticketGet(id);
+  }
+
+  @Post("tickets/:id/update")
+  @RequirePermission("pos.sell")
+  ticketUpdate(
+    @Param("id") id: string,
+    @Body() body: { expectedVersion: number; items?: Array<{ sku: string; qty: number }>; customerMobile?: string; customerName?: string; discountTotal?: number },
+    @Identity() actor?: { userId: string },
+  ) {
+    return this.pos.ticketUpdate(id, { expectedVersion: body.expectedVersion, actorId: actor?.userId ?? "", items: body.items, customerMobile: body.customerMobile, customerName: body.customerName, discountTotal: body.discountTotal });
+  }
+
+  @Post("tickets/:id/transition")
+  @RequirePermission("pos.sell")
+  ticketTransition(
+    @Param("id") id: string,
+    @Body() body: { expectedVersion: number; to: "HELD" | "OPEN" | "CANCELLED" },
+    @Identity() actor?: { userId: string },
+  ) {
+    return this.pos.ticketTransition(id, { expectedVersion: body.expectedVersion, actorId: actor?.userId ?? "", to: body.to });
+  }
+
+  @Post("tickets/:id/complete")
+  @RequirePermission("pos.sell")
+  ticketComplete(
+    @Param("id") id: string,
+    @Body() body: { expectedVersion: number; invoiceId?: string },
+    @Identity() actor?: { userId: string },
+  ) {
+    return this.pos.ticketComplete(id, { expectedVersion: body.expectedVersion, actorId: actor?.userId ?? "", invoiceId: body.invoiceId });
+  }
 }

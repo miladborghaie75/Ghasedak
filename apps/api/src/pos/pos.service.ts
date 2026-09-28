@@ -367,22 +367,24 @@ export class PosService {
         });
       }
 
+      // فاز ۱۱ (P1-A): مصرف موجودی داخل همان تراکنش مالی — «فروش مالی ⇔ مصرف انبار» اتمیک.
+      // moveInTx idempotent است (کلید pos-sale:{invoiceId}:{sku})؛ شکست انبار (موجودی ناکافی
+      // و غیره) ⇒ rollback کامل فاکتور/سند/چک/خزانه/رویداد — هیچ حالت silent failure نمی‌ماند.
+      for (const line of priced) {
+        await this.inventory.moveInTx(tx, {
+          warehouseId,
+          variantSku: line.sku,
+          type: "SALE",
+          qty: line.qty,
+          refType: "pos_invoice",
+          refId: invoice.id,
+          idempotencyKey: `pos-sale:${invoice.id}:${line.sku}`,
+          actorId: cashierId,
+        });
+      }
+
       return { invoice, journalId: entry.id, journalNumber: entry.number };
     });
-
-    // مصرف مستقیم موجودی (فروش حضوری بدون رزرو) — idempotent per invoice
-    for (const line of priced) {
-      await this.inventory.move({
-        warehouseId,
-        variantSku: line.sku,
-        type: "SALE",
-        qty: line.qty,
-        refType: "pos_invoice",
-        refId: created.invoice.id,
-        idempotencyKey: `pos-sale:${created.invoice.id}:${line.sku}`,
-        actorId: cashierId,
-      });
-    }
 
     return { number: created.invoice.number, grandTotal: created.invoice.grandTotal, id: created.invoice.id };
   }
@@ -547,5 +549,128 @@ export class PosService {
       });
     });
     return { number: corrected.number, grandTotal: corrected.grandTotal, id: corrected.id, corrects: source.number };
+  }
+
+  // ---------------- فاز ۱۱ (P2-A) — تیکت ماندگار POS ----------------
+  // lifecycle: OPEN → HELD → OPEN(resume) → (sale موفق) COMPLETED؛ CANCELLED terminal.
+  // version = optimistic locking (بند ۱۱) — دو ترمینال همزمان هرگز ناسازگار نمی‌شوند.
+
+  private static readonly TICKET_FLOW: Record<string, string[]> = {
+    OPEN: ["HELD", "COMPLETED", "CANCELLED"],
+    HELD: ["OPEN", "CANCELLED"], // resume = HELD → OPEN
+    COMPLETED: [],
+    CANCELLED: [],
+  };
+
+  private ticketVersionGuard(current: { version: number; status: string }, expectedVersion: number): void {
+    if (current.version !== expectedVersion) {
+      throw new ConflictException({
+        code: "TICKET_VERSION_CONFLICT",
+        message: "تیکت توسط ترمینال دیگری تغییر کرده است — دوباره بارگذاری کنید.",
+      });
+    }
+  }
+
+  /** ایجاد تیکت OPEN — هر terminal/cashier تیکت‌های خودش را دارد */
+  async ticketCreate(input: { userId: string; shiftId?: string; items?: Array<{ sku: string; qty: number }>; customerMobile?: string; customerName?: string; discountTotal?: number }) {
+    const t = await this.prisma.posTicket.create({
+      data: {
+        userId: input.userId,
+        shiftId: input.shiftId ?? null,
+        status: "OPEN",
+        customerMobile: input.customerMobile ?? null,
+        customerName: input.customerName ?? null,
+        items: (input.items ?? []) as never,
+        discountTotal: Math.max(0, Math.round(input.discountTotal ?? 0)),
+        audit: [{ at: new Date().toISOString(), actorId: input.userId, action: "CREATE" }] as never,
+      },
+    });
+    return t;
+  }
+
+  /** تیکت‌های باز/held این صندوقدار — برای بازیابی بعد از refresh/reconnect */
+  async ticketList(userId: string) {
+    return this.prisma.posTicket.findMany({
+      where: { userId, status: { in: ["OPEN", "HELD"] } },
+      orderBy: { updatedAt: "desc" },
+      take: 50,
+    });
+  }
+
+  async ticketGet(id: string) {
+    const t = await this.prisma.posTicket.findUnique({ where: { id } });
+    if (!t) throw new NotFoundException({ code: "NOT_FOUND", message: "تیکت یافت نشد." });
+    return t;
+  }
+
+  /** به‌روزرسانی محتوای تیکت (items/customer/discount) — فقط در OPEN؛ با version check */
+  async ticketUpdate(id: string, input: { expectedVersion: number; actorId: string; items?: Array<{ sku: string; qty: number }>; customerMobile?: string; customerName?: string; discountTotal?: number }) {
+    const cur = await this.ticketGet(id);
+    this.ticketVersionGuard(cur, input.expectedVersion);
+    if (cur.status !== "OPEN") {
+      throw new BadRequestException({ code: "TICKET_NOT_OPEN", message: "فقط تیکت OPEN قابل ویرایش است." });
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.posTicket.updateMany({
+        where: { id, version: input.expectedVersion, status: "OPEN" },
+        data: {
+          items: (input.items ?? (cur.items as unknown)) as never,
+          customerMobile: input.customerMobile ?? cur.customerMobile,
+          customerName: input.customerName ?? cur.customerName,
+          discountTotal: input.discountTotal != null ? Math.max(0, Math.round(input.discountTotal)) : cur.discountTotal,
+          version: { increment: 1 },
+          audit: ([...(Array.isArray(cur.audit) ? (cur.audit as unknown[]) : []), { at: new Date().toISOString(), actorId: input.actorId, action: "UPDATE" }]) as never,
+        },
+      });
+      if (claimed.count !== 1) throw new ConflictException({ code: "TICKET_VERSION_CONFLICT", message: "تیکت همزمان تغییر کرده است." });
+      return tx.posTicket.findUniqueOrThrow({ where: { id } });
+    });
+  }
+
+  /** hold / resume / cancel — گذارهای صریح با version check و audit */
+  async ticketTransition(id: string, input: { expectedVersion: number; actorId: string; to: "HELD" | "OPEN" | "CANCELLED"; shiftId?: string }) {
+    const cur = await this.ticketGet(id);
+    this.ticketVersionGuard(cur, input.expectedVersion);
+    const allowed = (PosService.TICKET_FLOW[cur.status] ?? []).includes(input.to);
+    if (!allowed) {
+      throw new BadRequestException({
+        code: "TICKET_INVALID_TRANSITION",
+        message: `گذار ${cur.status} → ${input.to} مجاز نیست.`,
+      });
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.posTicket.updateMany({
+        where: { id, version: input.expectedVersion, status: cur.status },
+        data: {
+          status: input.to,
+          shiftId: input.shiftId ?? cur.shiftId,
+          version: { increment: 1 },
+          audit: ([...(Array.isArray(cur.audit) ? (cur.audit as unknown[]) : []), { at: new Date().toISOString(), actorId: input.actorId, action: input.to }]) as never,
+        },
+      });
+      if (claimed.count !== 1) throw new ConflictException({ code: "TICKET_VERSION_CONFLICT", message: "تیکت همزمان تغییر کرده است." });
+      return tx.posTicket.findUniqueOrThrow({ where: { id } });
+    });
+  }
+
+  /** پس از ثبت فروش موفق: تیکت COMPLETED می‌شود (اتمیک با شناخت تیکت اختیاری است) */
+  async ticketComplete(id: string, input: { expectedVersion: number; actorId: string; invoiceId?: string }) {
+    const cur = await this.ticketGet(id);
+    this.ticketVersionGuard(cur, input.expectedVersion);
+    if (!(PosService.TICKET_FLOW[cur.status] ?? []).includes("COMPLETED")) {
+      throw new BadRequestException({ code: "TICKET_INVALID_TRANSITION", message: `گذار ${cur.status} → COMPLETED مجاز نیست.` });
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.posTicket.updateMany({
+        where: { id, version: input.expectedVersion, status: cur.status },
+        data: {
+          status: "COMPLETED",
+          version: { increment: 1 },
+          audit: ([...(Array.isArray(cur.audit) ? (cur.audit as unknown[]) : []), { at: new Date().toISOString(), actorId: input.actorId, action: "COMPLETED", invoiceId: input.invoiceId ?? null }]) as never,
+        },
+      });
+      if (claimed.count !== 1) throw new ConflictException({ code: "TICKET_VERSION_CONFLICT", message: "تیکت همزمان تغییر کرده است." });
+      return tx.posTicket.findUniqueOrThrow({ where: { id } });
+    });
   }
 }

@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { InventoryService } from "../inventory/inventory.service";
+import { TreasuryService } from "../treasury/treasury.service";
 import { nextNumber } from "../common/number-series";
 
 /** وضعیت‌های مجاز RMA (بند ۲۸/۳۸) */
@@ -23,7 +25,9 @@ export class ReturnsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
-  ) {}
+    private readonly treasury: TreasuryService,
+  ) {
+  }
 
   /**
    * ایجاد درخواست مرجوعی — خط‌ها فقط از آیتم‌های واقعی سفارش؛
@@ -186,5 +190,167 @@ export class ReturnsService {
     });
     await this.prisma.returnRequest.update({ where: { id }, data: { status: "SETTLED", refundId: refund.id, actorId } });
     return refund;
+  }
+
+  /** گذارهای مجاز رکورد Refund (فاز ۱۱ P1-B) — خارج از FLOWی ReturnRequest */
+  private static REFUND_FLOW: Record<string, string[]> = {
+    PENDING: ["COMPLETED", "CANCELLED"],
+    COMPLETED: [], // terminal
+    FAILED: ["PENDING"], // بازگشت به صف پس از خطای provider — با همان idempotencyKey
+    CANCELLED: [], // terminal
+  };
+
+  /**
+   * فاز ۱۱ (P1-B): نهایی‌کردن بازگشت — Refund PENDING → COMPLETED در یک تراکنش:
+   * خزانه (کاهش صندوق/بانک) + سند Dr 4000 / Cr نقد-بانک + AuditLog + رویداد outbox.
+   * idempotent با refundIdempotencyKey: تکرار همان کلید ⇒ همان نتیجه بدون اثر دوم.
+   * STORE_CREDIT خزانه/سند ندارد (نقد واقعی خارج نمی‌شود) — فقط وضعیت COMPLETED + audit.
+   */
+  async finalizeRefund(
+    refundId: string,
+    input: { idempotencyKey: string; actorId?: string; reason?: string },
+  ) {
+    const refund = await this.prisma.refund.findUnique({ where: { id: refundId } });
+    if (!refund) throw new NotFoundException({ code: "NOT_FOUND", message: "بازگشت یافت نشد." });
+
+    // idempotency (فاز ۱۱ P1-B) — قبل از گارد گذار: همان کلید ⇒ همان نتیجه بدون اثر دوم
+    const replay = await this.prisma.auditLog.findFirst({
+      where: {
+        action: "refund.finalize",
+        entity: "Refund",
+        entityId: refund.id,
+        newValues: { path: ["idempotencyKey"], equals: input.idempotencyKey } as never,
+      },
+    });
+    if (replay) {
+      return this.prisma.refund.findUniqueOrThrow({ where: { id: refund.id } });
+    }
+
+    if (!(ReturnsService.REFUND_FLOW[refund.state] ?? []).includes("COMPLETED")) {
+      if (refund.state === "COMPLETED") {
+        // نهایی‌شده با کلید دیگری — درخواست همزمان/تکراری: Conflict نه BadRequest
+        throw new ConflictException({
+          code: "REFUND_ALREADY_FINALIZED",
+          message: "این بازگشت قبلاً با کلید دیگری نهایی شده است.",
+        });
+      }
+      throw new BadRequestException({
+        code: "REFUND_INVALID_TRANSITION",
+        message: `گذار ${refund.state} → COMPLETED مجاز نیست.`,
+      });
+    }
+
+    const amount = Number(refund.amount);
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      throw new BadRequestException({ code: "REFUND_AMOUNT_INVALID", message: "مبلغ بازگشت نامعتبر است." });
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      // قفل بهینه: فقط ردیف PENDING به COMPLETED می‌رسد — درخواست همزمانِ دوم صفر ردیف می‌بیند
+      const claimed = await tx.refund.updateMany({
+        where: { id: refund.id, state: "PENDING" },
+        data: { state: "COMPLETED" as never },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictException({
+          code: "REFUND_ALREADY_FINALIZED",
+          message: "این بازگشت قبلاً نهایی شده است.",
+        });
+      }
+
+      if (refund.method !== "STORE_CREDIT") {
+        await this.treasury.creditForRefundInTx(tx, {
+          method: refund.method === "CASH" ? "CASH" : "BANK",
+          amount,
+          refundId: refund.id,
+          refundNumber: refund.number,
+          actorId: input.actorId,
+        });
+      }
+
+      if (refund.returnId) {
+        // SETTLED → REFUNDED در همان tx — بدون silent failure
+        const returned = await tx.returnRequest.updateMany({
+          where: { id: refund.returnId, status: "SETTLED" },
+          data: { status: "REFUNDED" as never, actorId: input.actorId },
+        });
+        if (returned.count !== 1) {
+          throw new ConflictException({
+            code: "RETURN_STATE_CHANGED",
+            message: "وضعیت مرجوعی همزمان تغییر کرده است.",
+          });
+        }
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorId: input.actorId ?? null,
+          action: "refund.finalize",
+          entity: "Refund",
+          entityId: refund.id,
+          newValues: {
+            state: "COMPLETED",
+            amount,
+            method: refund.method,
+            reason: input.reason ?? null,
+            idempotencyKey: input.idempotencyKey,
+          } as object,
+        },
+      });
+
+      await tx.domainEventOutbox.create({
+        data: {
+          name: "RefundCompleted",
+          payload: {
+            refundId: refund.id,
+            refundNumber: refund.number,
+            amount,
+            method: refund.method,
+            sourceType: refund.sourceType,
+            sourceId: refund.sourceId,
+            actorId: input.actorId ?? null,
+          } as never,
+        },
+      });
+
+      return tx.refund.findUniqueOrThrow({ where: { id: refund.id } });
+    });
+
+    return updated;
+  }
+
+  /** لغو بازگشتِ PENDING — فقط از PENDING؛ خزانه/سند ندارد (هنوز پول خارج نشده) */
+  async cancelRefund(refundId: string, input: { actorId?: string; reason?: string }) {
+    const refund = await this.prisma.refund.findUnique({ where: { id: refundId } });
+    if (!refund) throw new NotFoundException({ code: "NOT_FOUND", message: "بازگشت یافت نشد." });
+    if (!(ReturnsService.REFUND_FLOW[refund.state] ?? []).includes("CANCELLED")) {
+      throw new BadRequestException({
+        code: "REFUND_INVALID_TRANSITION",
+        message: `گذار ${refund.state} → CANCELLED مجاز نیست.`,
+      });
+    }
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.refund.updateMany({
+        where: { id: refund.id, state: "PENDING" },
+        data: { state: "CANCELLED" as never },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictException({
+          code: "REFUND_ALREADY_FINALIZED",
+          message: "این بازگشت قابل لغو نیست.",
+        });
+      }
+      await tx.auditLog.create({
+        data: {
+          actorId: input.actorId ?? null,
+          action: "refund.cancel",
+          entity: "Refund",
+          entityId: refund.id,
+          newValues: { state: "CANCELLED", reason: input.reason ?? null } as object,
+        },
+      });
+      return tx.refund.findUniqueOrThrow({ where: { id: refund.id } });
+    });
+    return updated;
   }
 }

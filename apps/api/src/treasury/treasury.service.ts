@@ -745,6 +745,38 @@ export class TreasuryService {
     });
   }
 
+  /**
+   * فاز ۱۱ (P1-B): پرداخت بازگشتی به مشتری داخل همان تراکنش finalize بازگشت —
+   * کاهش مانده صندوق/بانک + سند Dr 4000 (برگشت درآمد) / Cr نقد-بانک.
+   * آینهٔ debitForPurchaseInTx؛ بدون محاسبهٔ موازی — حساب مقابل از مدل فروش فعلی (4000).
+   */
+  async creditForRefundInTx(
+    tx: Prisma.TransactionClient,
+    input: { method: string; amount: number; refundId: string; refundNumber: string; actorId?: string },
+  ): Promise<void> {
+    const amount = Math.round(Number(input.amount));
+    if (!Number.isSafeInteger(amount) || amount <= 0) return;
+    const isCash = (input.method || "").toUpperCase() === "CASH";
+    const acc = isCash ? await this.primaryCashAccount() : await this.primaryBankAccount();
+    if (!acc) return; // بدون حساب seedشده — مطابق رفتار debitForPurchaseInTx
+    const glCode = await this.glCodeOf(acc.glAccountId);
+    if (isCash) {
+      await tx.cashAccount.update({ where: { id: acc.id }, data: { currentBalance: { decrement: BigInt(amount) } } });
+    } else {
+      await tx.bankAccount.update({ where: { id: acc.id }, data: { currentBalance: { decrement: BigInt(amount) } } });
+    }
+    await this.journal.postOrNotifyInTx(tx, {
+      description: `بازپرداخت به مشتری — ${input.refundNumber}`,
+      sourceType: "refund",
+      sourceId: input.refundId,
+      actorId: input.actorId,
+      lines: [
+        { accountCode: "4000", debit: amount },
+        { accountCode: glCode, credit: amount },
+      ],
+    });
+  }
+
   private async audit(actorId: string | undefined, action: string, entity: string, entityId: string, meta: Record<string, unknown>): Promise<void> {
     await this.prisma.auditLog
       .create({

@@ -12,6 +12,7 @@ import {
 import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
+import { NotificationDispatcherService } from "../events/notification-dispatcher.service";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -34,7 +35,10 @@ const MEDIA_DIR = process.env.MEDIA_DIR ?? path.resolve(process.cwd(), "../data/
 
 @Controller("admin/capabilities")
 export class CapabilitiesController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly dispatcher: NotificationDispatcherService,
+  ) {}
 
   // ================== مجوزهای کاربر جاری (برای UI شرطی) ==================
   @Get("me/permissions")
@@ -352,5 +356,51 @@ export class CapabilitiesController {
   async deleteSection(@Param("id") id: string) {
     await this.prisma.homeSection.delete({ where: { id } });
     return { ok: true };
+  }
+
+  // ================== فاز ۱۱ (P2-B) — Notifications workspace ==================
+
+  /** وضعیت صف نوتیفیکیشن‌ها — Pending/Sent/Failed/NotConfigured */
+  @Get("notifications")
+  @RequirePermission("settings.view")
+  async notificationsList(@Query("status") status?: string) {
+    const where = status && ["QUEUED", "SENT", "FAILED"].includes(status)
+      ? { status: status as never }
+      : { channel: { in: ["SMS", "EMAIL"] as never[] } };
+    const items = await this.prisma.notification.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      select: { id: true, channel: true, templateKey: true, to: true, status: true, lastError: true, attempts: true, sentAt: true, createdAt: true },
+    });
+    const [queued, sent, failed, notConfigured] = await Promise.all([
+      this.prisma.notification.count({ where: { status: "QUEUED", channel: { in: ["SMS", "EMAIL"] } } }),
+      this.prisma.notification.count({ where: { status: "SENT" } }),
+      this.prisma.notification.count({ where: { status: "FAILED" } }),
+      this.prisma.notification.count({ where: { status: "QUEUED", lastError: { startsWith: "NOT_CONFIGURED" } } }),
+    ]);
+    return { items, summary: { queued, sent, failed, notConfigured } };
+  }
+
+  /** retry آگاهانهٔ ادمین — FAILED → QUEUED و dispatch فوری */
+  @Post("notifications/:id/retry")
+  @RequirePermission("settings.manage")
+  async notificationRetry(@Param("id") id: string) {
+    const n = await this.prisma.notification.findUnique({ where: { id } });
+    if (!n) throw new BadRequestException({ code: "NOT_FOUND", message: "نوتیفیکیشن یافت نشد." });
+    if (n.status !== "FAILED") {
+      throw new BadRequestException({ code: "NOT_RETRYABLE", message: "فقط ردیف FAILED قابل retry است." });
+    }
+    await this.prisma.notification.update({ where: { id }, data: { status: "QUEUED", lastError: null } });
+    const r = await this.dispatcher.dispatchOnce(50);
+    const after = await this.prisma.notification.findUniqueOrThrow({ where: { id } });
+    return { ok: after.status === "SENT", status: after.status, lastError: after.lastError, dispatch: r };
+  }
+
+  /** dispatch دستی فوری (مثلاً بعد از تنظیم credential) */
+  @Post("notifications/dispatch")
+  @RequirePermission("settings.manage")
+  async notificationDispatch() {
+    return this.dispatcher.dispatchOnce(100);
   }
 }
