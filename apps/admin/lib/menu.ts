@@ -35,6 +35,7 @@ export const MENU: MenuGroup[] = [
     title: "POS",
     items: [
       { title: "ترمینال فروش", href: "/pos", permission: "pos.view" },
+      { title: "فاکتورهای فروش", href: "/pos/invoices", permission: "pos.view" },
     ],
   },
   {

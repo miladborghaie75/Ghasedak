@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { PosService, type PosSaleInput } from "./pos.service";
 import { RequirePermission } from "../auth/permissions.guard";
 import { Identity } from "../auth/identity.decorator";
@@ -60,5 +60,62 @@ export class PosController {
       take: 50,
       select: { number: true, grandTotal: true, state: true, customerMobile: true, createdAt: true },
     });
+  }
+
+  /** فاز ۱۰ — لیست عملیاتی با فیلترها (بخش ۷) */
+  @Get("invoices/search")
+  @RequirePermission("pos.view")
+  invoiceList(
+    @Query() q: { q?: string; cashierId?: string; method?: string; state?: string; from?: string; to?: string; take?: string },
+  ) {
+    return this.pos.invoiceList({
+      q: q.q,
+      cashierId: q.cashierId,
+      method: q.method,
+      state: q.state,
+      from: q.from,
+      to: q.to,
+      take: q.take ? Number(q.take) : undefined,
+    });
+  }
+
+  /** فاز ۱۰ — جزئیات فاکتور از دادهٔ persisted (بخش ۵) — مسیر by-number برای چاپ/مشاهده */
+  @Get("invoices/by-number/:number")
+  @RequirePermission("pos.view")
+  invoiceDetailByNumber(@Param("number") number: string) {
+    return this.prisma.posInvoice.findUnique({
+      where: { number },
+      include: {
+        items: { include: { variant: { select: { sku: true, product: { select: { name: true } } } } } },
+        payments: true,
+        cashier: { select: { id: true, name: true } },
+        shift: { select: { id: true, openedAt: true, register: { select: { name: true } } } },
+      },
+    });
+  }
+
+  /** جزئیات با id — قبل از مسیرهای :id دیگر */
+  @Get("invoices/by-id/:id")
+  @RequirePermission("pos.view")
+  invoiceDetail(@Param("id") id: string) {
+    return this.pos.invoiceDetail(id);
+  }
+
+  /** فاز ۱۰ — اصلاحیهٔ کنترل‌شده (بخش ۶) — بجای overwrite */
+  @Post("invoices/by-id/:id/correct")
+  @RequirePermission("pos.sell")
+  correctInvoice(
+    @Param("id") id: string,
+    @Body() body: {
+      lines: Array<{ sku: string; qty: number }>;
+      payments: PosSaleInput["payments"];
+      discountTotal?: number;
+      reason: string;
+      idempotencyKey?: string;
+      shiftId: string;
+    },
+    @Identity() actor?: { userId: string },
+  ) {
+    return this.pos.correctInvoice({ ...body, invoiceId: id }, actor?.userId ?? "");
   }
 }

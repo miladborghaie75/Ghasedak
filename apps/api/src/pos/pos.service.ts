@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { randomUUID } from "crypto";
+import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { InventoryService } from "../inventory/inventory.service";
 import { JournalService } from "../accounting/journal.service";
@@ -327,6 +328,24 @@ export class PosService {
         lines,
       });
 
+      // فاز ۱۰ (بخش ۸): رویداد POS_SALE_COMPLETED — همیشه در همان tx (idempotent per invoice).
+      // لایهٔ نوتیفیکیشن (event-bus) consumer آن است؛ provider پیامک هرگز اینجا hard-code نمی‌شود.
+      await tx.domainEventOutbox.create({
+        data: {
+          name: "POS_SALE_COMPLETED",
+          payload: {
+            invoiceId: invoice.id,
+            invoiceNumber: number,
+            grandTotal: Number(grandTotal),
+            customerMobile: input.customerMobile ?? null,
+            customerName: customerName ?? null,
+            paymentMethods: input.payments.map((p) => toPosMethod(p.methodCode)),
+            createdAt: new Date().toISOString(),
+            actorId: cashierId,
+          } as never,
+        },
+      });
+
       // فاز ۹ (R1): رویداد دامنه در همان تراکنش (الگوی outbox in-tx موجود)
       if (createdChecks.length > 0) {
         await tx.domainEventOutbox.create({
@@ -366,5 +385,167 @@ export class PosService {
     }
 
     return { number: created.invoice.number, grandTotal: created.invoice.grandTotal, id: created.invoice.id };
+  }
+
+  // ---------------- فاز ۱۰ — Invoice detail / list / correction ----------------
+
+  /** جزئیات کامل فاکتور POS — منبع حقیقت واحد: خود فاکتور persisted (بخش ۵/۹) */
+  async invoiceDetail(invoiceId: string) {
+    const invoice = await this.prisma.posInvoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        items: { include: { variant: { select: { sku: true, product: { select: { name: true } } } } } },
+        payments: { include: { check: { select: { id: true, number: true, bankName: true, dueDate: true, status: true } } } },
+        cashier: { select: { id: true, name: true } },
+        shift: { select: { id: true, openedAt: true, register: { select: { name: true } } } },
+      },
+    });
+    if (!invoice) throw new NotFoundException({ code: "NOT_FOUND", message: "فاکتور یافت نشد." });
+    // PosInvoice.customerId relation ندارد — lookup دستی مشتری
+    const customer = invoice.customerId
+      ? await this.prisma.customer.findUnique({
+          where: { id: invoice.customerId },
+          select: { id: true, name: true, mobile: true },
+        })
+      : null;
+    // اثر حسابداری و انبار — از منابع حقیقت خودشان (بدون محاسبهٔ موازی)
+    const [journal, ledgerMoves, corrections] = await Promise.all([
+      this.prisma.journalEntry.findFirst({
+        where: { sourceType: "pos_invoice", sourceId: invoice.id },
+        include: { lines: { include: { account: { select: { code: true, name: true } } } } },
+      }),
+      this.prisma.stockLedgerEntry.findMany({ where: { refType: "pos_invoice", refId: invoice.id }, orderBy: { id: "asc" } }),
+      this.prisma.posInvoice.findMany({ where: { correctsId: invoice.id }, select: { id: true, number: true, revision: true, createdAt: true } }),
+    ]);
+    return { invoice, customer, journal, ledgerMoves, corrections };
+  }
+
+  /** لیست فاکتورها با فیلترهای عملیاتی (بخش ۷) */
+  async invoiceList(q: {
+    q?: string; cashierId?: string; method?: string; state?: string;
+    from?: string; to?: string; take?: number;
+  }) {
+    const where: Prisma.PosInvoiceWhereInput = {};
+    if (q.state) where.state = q.state as never;
+    if (q.cashierId) where.cashierId = q.cashierId;
+    if (q.q) {
+      where.OR = [
+        { number: { contains: q.q } },
+        { customerMobile: { contains: q.q } },
+        { customerName: { contains: q.q } },
+      ];
+    }
+    if (q.from || q.to) where.createdAt = { ...(q.from ? { gte: new Date(q.from) } : {}), ...(q.to ? { lte: new Date(q.to) } : {}) };
+    if (q.method) where.payments = { some: { method: q.method as never } };
+    const items = await this.prisma.posInvoice.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: Math.min(Math.max(q.take ?? 50, 1), 200),
+      select: {
+        id: true, number: true, state: true, grandTotal: true, customerName: true,
+        customerMobile: true, createdAt: true, revision: true, shiftId: true,
+        cashier: { select: { name: true } },
+        payments: { select: { method: true, amount: true } },
+      },
+    });
+    return { items };
+  }
+
+  /**
+   * اصلاحیهٔ کنترل‌شده (بخش ۶): FINALIZED هرگز overwrite نمی‌شود.
+   * اصلاح = فاکتور جدید revision+1 با correctsId + سند حسابداری معکوس سند مبدأ + سند فروش جدید؛
+   * اثر انبار فاکتور مبدأ برگردانده و اقلام اصلاحیه دوباره مصرف می‌شود. همه در یک tx + audit.
+   */
+  async correctInvoice(input: {
+    invoiceId: string; lines: Array<{ sku: string; qty: number }>;
+    payments: PosSaleInput["payments"]; discountTotal?: number;
+    reason: string; idempotencyKey?: string; shiftId: string;
+  }, cashierId: string) {
+    if (!input.reason?.trim()) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "دلیل اصلاحیه الزامی است." });
+    }
+    const source = await this.prisma.posInvoice.findUnique({
+      where: { id: input.invoiceId },
+      include: { items: true, payments: true },
+    });
+    if (!source) throw new NotFoundException({ code: "NOT_FOUND", message: "فاکتور مبدأ یافت نشد." });
+    if (source.state !== "FINALIZED") {
+      throw new BadRequestException({ code: "NOT_FINALIZED", message: "فقط فاکتور نهایی قابل اصلاح است." });
+    }
+    const latest = await this.prisma.posInvoice.findFirst({
+      where: { OR: [{ id: source.id }, { correctsId: source.id }] },
+      orderBy: { revision: "desc" },
+    });
+    if (latest && latest.revision > source.revision) {
+      throw new ConflictException({ code: "STALE_SOURCE", message: `این فاکتور قبلاً اصلاح شده (${latest.number}) — از آخرین نسخه اصلاح بگیرید.` });
+    }
+    const idem = input.idempotencyKey ?? `pos-correction:${source.id}:auto:${randomUUID()}`;
+    const existing = await this.prisma.posInvoice.findUnique({ where: { idempotencyKey: idem } });
+    if (existing) return { number: existing.number, grandTotal: existing.grandTotal, id: existing.id };
+
+    // فاکتور اصلاحی با همان قواعد sale (قیمت از Pricing Domain) — ولی revision=source.revision+1
+    const sale = await this.sale(
+      {
+        shiftId: input.shiftId,
+        lines: input.lines,
+        payments: input.payments,
+        discountTotal: input.discountTotal,
+        customerMobile: source.customerMobile,
+        customerName: source.customerName,
+        idempotencyKey: idem,
+      },
+      cashierId,
+    );
+    const corrected = await this.prisma.posInvoice.findUniqueOrThrow({ where: { idempotencyKey: idem } });
+
+    // تراز کردن: سند معکوس سند مبدأ + بازگرداندن انبار مبدأ + متادیتای اصلاحیه — همه در یک tx
+    const sourceEntry = await this.prisma.journalEntry.findFirst({
+      where: { sourceType: "pos_invoice", sourceId: source.id },
+      include: { lines: { include: { account: { select: { code: true } } } } },
+    });
+    await this.prisma.$transaction(async (tx) => {
+      if (sourceEntry) {
+        await this.journal.postOrNotifyInTx(tx, {
+          description: `اصلاحیهٔ فروش POS ${source.number} → ${corrected.number} — معکوس سند ${sourceEntry.number}. دلیل: ${input.reason}`,
+          sourceType: "pos_correction",
+          sourceId: corrected.id,
+          actorId: cashierId,
+          lines: sourceEntry.lines.map((l) => ({
+            accountCode: l.account.code,
+            debit: Number(l.credit),
+            credit: Number(l.debit),
+          })),
+        });
+      }
+      // انبار مبدأ برگردد (SALE معکوس = OPENING-مانند CORRECTION in)
+      for (const item of source.items) {
+        await this.inventory.moveInTx(tx, {
+          warehouseId: source.warehouseId,
+          variantSku: item.variantSku,
+          type: "CORRECTION",
+          qty: item.qty,
+          refType: "pos_correction",
+          refId: corrected.id,
+          idempotencyKey: `pos-correction-in:${corrected.id}:${item.variantSku}`,
+          actorId: cashierId,
+          note: `برگشت اقلام فاکتور مبدأ ${source.number}`,
+        });
+      }
+      await tx.posInvoice.update({
+        where: { id: corrected.id },
+        data: { revision: source.revision + 1, correctsId: source.id },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: cashierId,
+          action: "pos.invoice.correct",
+          entity: "PosInvoice",
+          entityId: source.id,
+          oldValues: { number: source.number, grandTotal: source.grandTotal.toString(), revision: source.revision } as never,
+          newValues: { number: corrected.number, grandTotal: corrected.grandTotal.toString(), revision: source.revision + 1, reason: input.reason } as never,
+        },
+      });
+    });
+    return { number: corrected.number, grandTotal: corrected.grandTotal, id: corrected.id, corrects: source.number };
   }
 }

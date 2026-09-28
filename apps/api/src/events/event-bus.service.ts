@@ -208,6 +208,46 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
         this.logger.log(`PriceChanged: level=${String(payload.level)} count=${String(payload.count)}`);
         return;
       }
+      // ---------------- فاز ۱۰ — بخش ۸: POS_SALE_COMPLETED (provider-agnostic) ----------------
+      case "POS_SALE_COMPLETED": {
+        // پیامک مشتری فقط از طریق لایهٔ Notification صف می‌شود؛ provider پیامک (Kavenegar/…) در POS
+        // hard-code نیست. بدون credential فروش fail نمی‌شود — ردیف در صف می‌ماند و شکست آن
+        // قابل مشاهده/auditable است (الگوی موجود OrderPaid، بند ۱۱۱).
+        const mobile = payload.customerMobile ? String(payload.customerMobile) : "";
+        if (mobile && /^09\d{9}$/.test(mobile)) {
+          const cfgSetting = await this.prisma.setting.findUnique({ where: { key: "sms" } });
+          const cfg = (cfgSetting?.value ?? {}) as { posSaleNotify?: boolean };
+          if (cfg.posSaleNotify !== false) {
+            const dup = await this.prisma.notification.findFirst({
+              where: { channel: "SMS", templateKey: `pos-sale-sms:${String(payload.invoiceId)}` },
+            });
+            if (!dup && process.env.KAVENEGAR_API_KEY) {
+              await this.prisma.notification.create({
+                data: {
+                  channel: "SMS",
+                  templateKey: `pos-sale-sms:${String(payload.invoiceId)}`,
+                  to: mobile,
+                  payload: {
+                    invoiceNumber: String(payload.invoiceNumber),
+                    amount: String(payload.grandTotal),
+                    customerName: payload.customerName ? String(payload.customerName) : null,
+                    date: String(payload.createdAt),
+                    // لینک امن مشاهده فاکتور — اگر future: token-based؛ فعلاً بدون لینک
+                  } as object,
+                },
+              });
+            }
+            // بدون credential: هیچ پیام فیک «ارسال‌شده» ساخته نمی‌شود؛ رویداد DISPATCHED می‌شود
+          }
+        }
+        await this.notifyAdmin(
+          `pos-sale:${String(payload.invoiceId)}`,
+          `فروش POS ${String(payload.invoiceNumber)} — ${String(payload.grandTotal)} تومان`,
+          payload,
+        );
+        this.logger.log(`POS_SALE_COMPLETED: invoice=${String(payload.invoiceNumber)} amount=${String(payload.grandTotal)} sms=${mobile ? (process.env.KAVENEGAR_API_KEY ? "queued" : "no-credential") : "no-mobile"}`);
+        return;
+      }
       // ---------------- فاز ۹ — Wave 2: مصرف‌کننده‌های دامنهٔ چک ----------------
       case "CheckCleared": {
         await this.notifyAdmin(

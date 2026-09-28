@@ -31,6 +31,27 @@ export class ChecksController {
   }
 
   /** گذار عمومی lifecycle — بهStatus هر مقداری که allow-list اجازه دهد */
+  /** فاز ۱۰ — بخش ۱۱: ثبت چک مستقل (دریافتی/صادره) با مشتری/تامین‌کننده */
+  @Post()
+  @RequirePermission("checks.manage")
+  create(
+    @Req() req: Request,
+    @Body() body: {
+      direction: "RECEIVED" | "ISSUED";
+      number: string; bankName: string; amount: number; dueDate: string; issueDate?: string;
+      branch?: string; accountNo?: string; drawer?: string; payee?: string;
+      customerId?: string; supplierId?: string; notes?: string;
+    },
+  ) {
+    return this.checks.create({
+      ...body,
+      dueDate: new Date(body.dueDate),
+      issueDate: body.issueDate ? new Date(body.issueDate) : undefined,
+      idempotencyKey: `manual-check:${body.direction}:${body.number}:${body.amount}:${Date.now()}`,
+      actorId: this.actor(req),
+    });
+  }
+
   @Post(":id/transition")
   @RequirePermission("checks.manage")
   transition(

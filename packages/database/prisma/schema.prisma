@@ -1902,6 +1902,10 @@ model PosInvoice {
   notes          String?
   idempotencyKey String          @unique
   finalizedAt    DateTime?
+  // فاز ۱۰ — اصلاحیهٔ کنترل‌شده: FINALIZED هرگز overwrite نمی‌شود؛
+  // هر اصلاح یک سند جدید revision+1 با ارجاع به فاکتور مبدأ است.
+  revision       Int             @default(1)
+  correctsId     String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
@@ -1913,8 +1917,11 @@ model PosInvoice {
   payments       PosPayment[]
   attempts       PaymentAttempt[]
   returnRequests ReturnRequest[]
+  corrects       PosInvoice?      @relation("PosInvoiceCorrection", fields: [correctsId], references: [id])
+  corrections    PosInvoice[]     @relation("PosInvoiceCorrection")
 
   @@index([shiftId])
+  @@index([correctsId])
 }
 
 model PosInvoiceItem {

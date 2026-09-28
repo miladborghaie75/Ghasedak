@@ -225,6 +225,110 @@ export class JournalService {
     return this.prisma.$transaction(async (tx) => this.createEntryInTx(tx, input, prepared));
   }
 
+  /**
+   * فاز ۱۰ — بخش ۱۳: ثبت سند دستی با state DRAFT/FINAL.
+   * سند FINAL همان قواعد سخت post را دارد؛ DRAFT هنوز در تراز کلان اثر مالی ندارد ولی
+   * برای بازبینی ذخیره می‌شود و finalize بعدی همان prepareLines را دوباره اجرا می‌کند.
+   * واجبات: حداقل ۲ ردیف، هر ردیف فقط Dr یا Cr مثبت، Dr=Cr، حساب فعال، سال مالی باز (بخش ۱۳).
+   */
+  async postManual(input: PostEntryInput & { state?: "DRAFT" | "FINAL" }): Promise<{ id: string; number: string; state: string }> {
+    const state = input.state === "DRAFT" ? "DRAFT" : "FINAL";
+    // اعتبارسنجی مشترک (برای DRAFT هم اجرا می‌شود تا سند معیوب ذخیره نشود)
+    const prepared = this.prepareLines(input.lines);
+    // حساب فعال — فقط برای دستی (رویدادهای سیستمی روی حساب‌های شناخته‌شده‌اند)
+    const codes = [...new Set(prepared.map((l) => l.accountCode))];
+    const accounts = await this.prisma.account.findMany({ where: { code: { in: codes } } });
+    const byCode = new Map(accounts.map((a) => [a.code, a]));
+    for (const code of codes) {
+      const acc = byCode.get(code);
+      if (!acc) {
+        throw new BadRequestException({ code: "ACCOUNT_NOT_FOUND", message: `حساب ${code} یافت نشد.` });
+      }
+      if (!acc.isActive) {
+        throw new BadRequestException({ code: "ACCOUNT_INACTIVE", message: `حساب ${acc.code} — ${acc.name} غیرفعال است.` });
+      }
+    }
+    const entry = await this.prisma.$transaction(async (tx) => {
+      const year = await tx.fiscalYear.findFirst({ where: { state: "OPEN" } });
+      if (!year) {
+        throw new BadRequestException({ code: "NO_OPEN_FISCAL_YEAR", message: "سال مالی بازی وجود ندارد." });
+      }
+      const inputDate = input.date ?? new Date();
+      if (inputDate < year.startsAt || inputDate > year.endsAt) {
+        throw new BadRequestException({ code: "FISCAL_PERIOD_INVALID", message: "تاریخ سند در بازهٔ سال مالی باز نیست." });
+      }
+      // شماره‌گذاری اتمیک — همان قاعدهٔ createEntryInTx (بند ۴۵/۸۲)
+      const series = await tx.$queryRaw<{ nextNumber: number }[]>`
+        SELECT "nextNumber" FROM "NumberSeries" WHERE scope = 'journal' FOR UPDATE`;
+      let seq = 1;
+      if (series.length === 0) {
+        await tx.numberSeries.create({ data: { scope: "journal", prefix: "JE", nextNumber: 2, padding: 5 } });
+      } else {
+        seq = series[0].nextNumber;
+        await tx.numberSeries.update({ where: { scope: "journal" }, data: { nextNumber: seq + 1 } });
+      }
+      const number = `JE-${String(seq).padStart(5, "0")}`;
+      return tx.journalEntry.create({
+        data: {
+          number,
+          fiscalYearId: year.id,
+          date: inputDate,
+          description: input.description,
+          sourceType: input.sourceType ?? "manual",
+          sourceId: input.sourceId,
+          state: state as never,
+          actorId: input.actorId,
+          lines: {
+            create: prepared.map((l) => ({
+              accountId: byCode.get(l.accountCode)!.id,
+              debit: BigInt(l.debit.amount),
+              credit: BigInt(l.credit.amount),
+              partyType: l.partyType,
+              partyId: l.partyId,
+            })),
+          },
+        },
+        select: { id: true, number: true, state: true },
+      });
+    });
+    return entry;
+  }
+
+  /** فاز ۱۰ — نهایی‌سازی سند DRAFT: همان اعتبارسنجی، سپس FINAL (auditable) */
+  async finalize(entryId: string, actorId?: string): Promise<{ id: string; number: string; state: string }> {
+    const entry = await this.prisma.journalEntry.findUnique({
+      where: { id: entryId },
+      include: { lines: { include: { account: { select: { code: true } } } } },
+    });
+    if (!entry) throw new BadRequestException({ code: "NOT_FOUND", message: "سند یافت نشد." });
+    if (entry.state !== "DRAFT") {
+      throw new BadRequestException({ code: "NOT_DRAFT", message: "فقط سند پیش‌نویس قابل نهایی‌سازی است." });
+    }
+    // بازبینی اعتبار با کد حساب‌ها — سند نهایی باید متوازن بماند
+    const byId = new Map(entry.lines.map((l) => [l.accountId, l.account.code]));
+    this.prepareLines(entry.lines.map((l) => ({
+      accountCode: byId.get(l.accountId)!,
+      debit: Number(l.debit),
+      credit: Number(l.credit),
+    })));
+    const updated = await this.prisma.journalEntry.update({
+      where: { id: entry.id },
+      data: { state: "FINAL" },
+      select: { id: true, number: true, state: true },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: actorId ?? null,
+        action: "accounting.journal.finalize",
+        entity: "JournalEntry",
+        entityId: entry.id,
+        oldValues: { state: "DRAFT", number: entry.number } as never,
+        newValues: { state: "FINAL" } as never,
+      },
+    });
+    return updated;
+  }
+
   /** تراز آزمایشی — از منبع حقیقت Ledger (بند ۱۰۶/۱۰۷) */
   async trialBalance(): Promise<Array<{ code: string; name: string; debit: string; credit: string }>> {
     const rows = await this.prisma.journalLine.groupBy({
@@ -254,5 +358,126 @@ export class JournalService {
     const d = agg._sum.debit ?? 0n;
     const c = agg._sum.credit ?? 0n;
     return { balanced: d === c, debit: d.toString(), credit: c.toString() };
+  }
+
+  /**
+   * فاز ۱۰ — بخش ۱۴: درخت حساب‌ها از Account.parentAccountId/children موجود (بند: سیستم موازی ممنوع).
+   * توازن هر حساب = مستقیم از Ledger (منبع حقیقت) — محاسبه موازی UI وجود ندارد.
+   */
+  async accountTree(): Promise<unknown> {
+    const [accounts, agg, directLines] = await Promise.all([
+      this.prisma.account.findMany({ orderBy: { code: "asc" } }),
+      this.prisma.journalLine.groupBy({ by: ["accountId"], _sum: { debit: true, credit: true } }),
+      this.prisma.journalLine.groupBy({
+        by: ["accountId"],
+        where: { account: { level: { gte: 1 } } },
+        _sum: { debit: true, credit: true },
+      }),
+    ]);
+    const directByAccount = new Map(directLines.map((l) => [l.accountId, l]));
+    const byId = new Map(accounts.map((a) => [a.id, a as typeof accounts[number] & { children?: unknown[]; balanceDr: bigint; balanceCr: bigint }]));
+    const roots: Array<typeof byId extends Map<string, infer V> ? V : never> = [];
+    for (const a of byId.values()) {
+      a.balanceDr = 0n;
+      a.balanceCr = 0n;
+    }
+    // مبالغ مستقیم (خطوط جورنال روی خود حساب)
+    for (const l of agg) {
+      const a = byId.get(l.accountId);
+      if (!a) continue;
+      a.balanceDr += l._sum.debit ?? 0n;
+      a.balanceCr += l._sum.credit ?? 0n;
+    }
+    // توازن تجمعی والد = مستقیم + همه فرزندان (شاخه‌ای)
+    const subtree = (aId: string): { dr: bigint; cr: bigint } => {
+      const a = byId.get(aId);
+      if (!a) return { dr: 0n, cr: 0n };
+      let dr = a.balanceDr;
+      let cr = a.balanceCr;
+      for (const child of byId.values()) {
+        if (child.parentAccountId === aId) {
+          const s = subtree(child.id);
+          dr += s.dr;
+          cr += s.cr;
+        }
+      }
+      return { dr, cr };
+    };
+    for (const a of byId.values()) {
+      if (!a.parentAccountId) {
+        const s = subtree(a.id);
+        a.balanceDr = s.dr;
+        a.balanceCr = s.cr;
+      }
+    }
+    const toNode = (a: (typeof accounts)[number] & { balanceDr: bigint; balanceCr: bigint }): Record<string, unknown> => ({
+      id: a.id,
+      code: a.code,
+      name: a.name,
+      type: a.type,
+      level: a.level,
+      isActive: a.isActive,
+      balanceDr: a.balanceDr.toString(),
+      balanceCr: a.balanceCr.toString(),
+      children: accounts.filter((c) => c.parentAccountId === a.id).map((c) => toNode(byId.get(c.id)!)),
+    });
+    const dr = new Map(agg.map((l) => [l.accountId, l._sum.debit ?? 0n]));
+    void directByAccount; void dr;
+    return {
+      items: accounts.filter((a) => !a.parentAccountId).map((a) => toNode(byId.get(a.id)!)),
+    };
+  }
+
+  /** فاز ۱۰ — بخش ۱۴: ایجاد حساب فرزند (کد یکتا، level+1، فعال) با audit */
+  async createChildAccount(
+    parentId: string,
+    input: { code: string; name: string },
+    actorId?: string,
+  ): Promise<{ id: string; code: string; name: string; level: number }> {
+    const code = input.code?.trim();
+    const name = input.name?.trim();
+    if (!code || !name) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "کد و نام حساب الزامی است." });
+    const parent = await this.prisma.account.findUnique({ where: { id: parentId }, include: { children: true } });
+    if (!parent) throw new BadRequestException({ code: "NOT_FOUND", message: "حساب والد یافت نشد." });
+    const dup = await this.prisma.account.findUnique({ where: { code } });
+    if (dup) throw new BadRequestException({ code: "DUPLICATE_CODE", message: "کد حساب تکراری است." });
+    const created = await this.prisma.account.create({
+      data: { code, name, type: parent.type, parentAccountId: parent.id, level: parent.level + 1, isActive: true },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: actorId ?? "system",
+        action: "accounting.account.create",
+        entity: "Account",
+        entityId: created.id,
+        oldValues: null as never,
+        newValues: { code, name, parentCode: parent.code, level: parent.level + 1 } as never,
+      },
+    });
+    return { id: created.id, code: created.code, name: created.name, level: created.level };
+  }
+
+  /** فاز ۱۰ — بخش ۱۴: فعال/غیرفعال‌سازی حساب (بدون حذف — traceability) */
+  async setAccountActive(accountId: string, isActive: boolean, actorId?: string): Promise<{ id: string; isActive: boolean }> {
+    const account = await this.prisma.account.findUnique({ where: { id: accountId } });
+    if (!account) throw new BadRequestException({ code: "NOT_FOUND", message: "حساب یافت نشد." });
+    if (!isActive) {
+      const used = await this.prisma.journalLine.count({ where: { accountId } });
+      if (used > 0) throw new BadRequestException({ code: "ACCOUNT_IN_USE", message: "حساب سابقه تراکنش دارد — فقط غیرفعال می‌شود؛ برای غیبت کامل، والد آن را مدیریت کنید." });
+      const hasChildren = await this.prisma.account.count({ where: { parentAccountId: accountId } });
+      if (hasChildren > 0) throw new BadRequestException({ code: "HAS_CHILDREN", message: "حساب فرزند دارد." });
+    }
+    const updated = await this.prisma.account.update({ where: { id: accountId }, data: { isActive }, select: { id: true, isActive: true } });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: actorId ?? "system",
+        action: "accounting.account.setActive",
+        entity: "Account",
+        entityId: accountId,
+        oldValues: { isActive: account.isActive } as never,
+        newValues: { isActive } as never,
+      },
+    });
+    return updated;
   }
 }

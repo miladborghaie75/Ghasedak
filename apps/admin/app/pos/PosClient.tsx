@@ -1,9 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useAdminApi, fa } from "@/components/useAdminApi";
+/**
+ * فاز ۱۰ — بخش ۱/۲/۳/۴/۹/۱۶: بازطراحی اطلاعات POS.
+ * - دو ناحیه: جستجو/بارکد (سمت اصلی) + Ticket فعال (سمت فاکتور)
+ * - چند Ticket باز: new/switch/hold/resume — هیچ Ticket با شروع مشتری بعدی از بین نمی‌رود
+ * - Payment workflow واقعی: CASH/CARD/ONLINE/BANK_TRANSFER/CHECK + Split + validationها
+ * - Completion modal بعد از ثبت: چاپ/مشاهده/فروش جدید (داده از فاکتور persisted، نه cart)
+ * - RTL، keyboard friendly (Enter=بارکد، F2=پرداخت)، حداقل کارد/حاشیه
+ *
+ * Backend reuse: POST /api/pos/sale همان مسیر تاداخل تراکنش موجود است
+ * (Invoice + PosPayment + Check + CheckTransition + AR + journal + outbox) — هیچ V2.
+ * چاپ از GET /api/pos/invoices/:id (persisted) — نه state موقت cart (بخش ۹).
+ */
 
-interface CartLine { sku: string; name?: string; price: number; qty: number; }
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAdminApi, fa } from "@/components/useAdminApi";
+import { CompletionModal } from "./CompletionModal";
+import { PaymentPanel, type PayLine } from "./PaymentPanel";
+import { buildReceiptHtml, buildA4Html } from "./receipt";
+
+interface CartLine { sku: string; name: string; price: number; qty: number; }
 interface ShiftInfo { id: string; openingCash: string; state: string; openedAt: string; }
 
 interface SearchItem {
@@ -16,26 +32,55 @@ interface SearchItem {
   images?: Array<{ mediaId: string; alt: string | null }>;
 }
 
-/** ترمینال POS — بارکدخوان + جستجوی زنده نام محصول (مثل سرچ سایت) + انتخاب از لیست محصولات */
+interface Ticket {
+  id: string;
+  label: string;
+  lines: CartLine[];
+  customerMobile: string;
+  customerName: string;
+  discountTotal: number;
+  note?: string;
+  held: boolean;
+  createdAt: number;
+}
+
+let ticketSeq = 0;
+const newTicket = (): Ticket => {
+  ticketSeq += 1;
+  return { id: `t${Date.now()}-${ticketSeq}`, label: `Ticket ${ticketSeq}`, lines: [], customerMobile: "", customerName: "", discountTotal: 0, held: false, createdAt: Date.now() };
+};
+
+const METHOD_FA: Record<string, string> = {
+  CASH: "نقدی", CARD: "کارت", ONLINE: "آنلاین", BANK_TRANSFER: "کارت به کارت", CHECK: "چک",
+};
+
 export default function PosClient() {
   const { call, loading } = useAdminApi();
   const [shift, setShift] = useState<ShiftInfo | null>(null);
-  const [cart, setCart] = useState<CartLine[]>([]);
-  const [scan, setScan] = useState("");
-  const [customerMobile, setCustomerMobile] = useState("");
-  const [discountTotal, setDiscountTotal] = useState("0");
+  const [tickets, setTickets] = useState<Ticket[]>([newTicket()]);
+  const [activeId, setActiveId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [lastInvoice, setLastInvoice] = useState<{ number: string; total: string } | null>(null);
   const [openingCash, setOpeningCash] = useState("0");
+  const [busy, setBusy] = useState(false);
 
-  // جستجوی زنده + انتخاب از لیست
+  // Sale completion modal (بخش ۴) — داده از پاسخ API (persisted) پر می‌شود
+  const [done, setDone] = useState<{ number: string; total: string; methods: string[]; customer: string | null } | null>(null);
+
+  // scan/search
+  const [scan, setScan] = useState("");
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<SearchItem[]>([]);
   const [searching, setSearching] = useState(false);
-  const [showList, setShowList] = useState(false);
-  const [listItems, setListItems] = useState<SearchItem[]>([]);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanRef = useRef<HTMLInputElement | null>(null);
+
+  const active = useMemo(() => tickets.find((t) => t.id === activeId) ?? tickets.find((t) => !t.held) ?? tickets[0], [tickets, activeId]);
+
+  useEffect(() => {
+    if (active && active.id !== activeId) setActiveId(active.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.id]);
 
   useEffect(() => {
     void (async () => {
@@ -45,21 +90,49 @@ export default function PosClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const subtotal = cart.reduce((a, l) => a + l.price * l.qty, 0);
-  const discount = Number(discountTotal) || 0;
+  const subtotal = active ? active.lines.reduce((a, l) => a + l.price * l.qty, 0) : 0;
+  const discount = active ? active.discountTotal : 0;
   const total = Math.max(0, subtotal - discount);
 
+  const patchTicket = (id: string, patch: Partial<Ticket>) =>
+    setTickets((ts) => ts.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+
+  const addTicket = () => {
+    const t = newTicket();
+    setTickets((ts) => [...ts, t]);
+    setActiveId(t.id);
+  };
+
+  const holdTicket = () => {
+    if (!active) return;
+    if (active.lines.length === 0) { setError("Ticket خالی برای hold ندارد."); return; }
+    patchTicket(active.id, { held: true, label: active.label });
+    const nextOpen = tickets.find((t) => t.id !== active.id && !t.held);
+    if (nextOpen) setActiveId(nextOpen.id);
+    else addTicket();
+  };
+
+  const resumeTicket = (id: string) => {
+    setTickets((ts) => ts.map((t) => (t.id === id ? { ...t, held: false } : t)));
+    setActiveId(id);
+  };
+
+  const dropTicket = (id: string) => {
+    if (tickets.length === 1) { setTickets([newTicket()]); return; }
+    setTickets((ts) => ts.filter((t) => t.id !== id));
+  };
+
   const addToCart = (sku: string, name: string, price: number) => {
-    setCart((c) => {
-      const idx = c.findIndex((l) => l.sku === sku);
-      if (idx >= 0) {
-        const next = [...c];
-        next[idx] = { ...next[idx], qty: next[idx].qty + 1 }; // انتخاب دوباره = افزایش تعداد
-        return next;
-      }
-      return [...c, { sku, name, price, qty: 1 }];
+    if (!active) return;
+    patchTicket(active.id, {
+      lines: (() => {
+        const lines = [...active.lines];
+        const idx = lines.findIndex((l) => l.sku === sku);
+        if (idx >= 0) lines[idx] = { ...lines[idx], qty: lines[idx].qty + 1 };
+        else lines.push({ sku, name, price, qty: 1 });
+        return lines;
+      })(),
     });
-    setMsg(`«${name}» به سبد اضافه شد.`);
     setError(null);
   };
 
@@ -75,16 +148,7 @@ export default function PosClient() {
     setSearch(v);
     if (searchTimer.current) clearTimeout(searchTimer.current);
     if (!v.trim()) { setResults([]); setSearching(false); return; }
-    searchTimer.current = setTimeout(() => void runSearch(v), 250); // debounce ۲۵۰ms
-  };
-
-  const openList = async () => {
-    if (showList) { setShowList(false); return; }
-    setShowList(true);
-    setSearching(true);
-    const r = await call<{ items: SearchItem[] }>("/admin/products/pos-search?q=");
-    setListItems(r.ok && r.data ? r.data.items ?? [] : []);
-    setSearching(false);
+    searchTimer.current = setTimeout(() => void runSearch(v), 250);
   };
 
   const scanBarcode = async (code?: string) => {
@@ -95,12 +159,9 @@ export default function PosClient() {
       `/admin/products/lookup?code=${encodeURIComponent(value)}`,
     );
     if (r.ok && r.data) {
-      const unit = Number(r.data.variant.salePrice ?? r.data.variant.price);
-      addToCart(r.data.variant.sku, r.data.product.name, unit);
+      addToCart(r.data.variant.sku, r.data.product.name, Number(r.data.variant.salePrice ?? r.data.variant.price));
       setScan("");
-    } else {
-      setError(r.error?.message ?? "کالا یافت نشد");
-    }
+    } else setError(r.error?.message ?? "کالا یافت نشد");
   };
 
   const openShift = async () => {
@@ -114,237 +175,213 @@ export default function PosClient() {
     const actual = prompt("مبلغ نقدی شمارش‌شده در صندوق (تومان):", "0");
     if (actual == null) return;
     const r = await call<{ difference: string }>("/pos/shift/close", { method: "POST", body: JSON.stringify({ shiftId: shift.id, actualCash: Number(actual) || 0 }) });
-    if (r.ok) {
-      setMsg(`شیفت بسته شد. مغایرت: ${fa(r.data?.difference ?? 0)} تومان`);
-      setShift(null);
-    } else setError(r.error?.message ?? "خطا");
+    if (r.ok) { setMsg(`شیفت بسته شد. مغایرت: ${fa(r.data?.difference ?? 0)} تومان`); setShift(null); } else setError(r.error?.message ?? "خطا");
   };
 
-  const submitSale = async () => {
+  /** finalize با پرداخت‌ها (بخش ۲/۳) — همان POST /pos/sale موجود */
+  const finalize = async (pays: PayLine[]) => {
     if (!shift) { setError("اول شیفت را باز کنید."); return; }
-    if (cart.length === 0) { setError("سبد خالی است."); return; }
-    setError(null); setMsg(null); setLastInvoice(null);
-    const r = await call<{ number: string; grandTotal: string }>("/pos/sale", {
-      method: "POST",
-      body: JSON.stringify({
-        shiftId: shift.id,
-        lines: cart.map((l) => ({ sku: l.sku, qty: l.qty })),
-        payments: [{ methodCode: "cash", amount: total }],
-        customerMobile: customerMobile || null,
-        discountTotal: discount,
-      }),
-    });
-    if (r.ok && r.data) {
-      setLastInvoice({ number: r.data.number, total: r.data.grandTotal });
-      setCart([]); setCustomerMobile(""); setDiscountTotal("0");
-      setMsg(`فاکتور ${r.data.number} ثبت شد ✅`);
-    } else setError(r.error?.message ?? "خطا در ثبت فاکتور");
+    if (!active || active.lines.length === 0) { setError("Ticket خالی است."); return; }
+    setBusy(true); setError(null);
+    try {
+      const r = await call<{ number: string; grandTotal: string }>("/pos/sale", {
+        method: "POST",
+        body: JSON.stringify({
+          shiftId: shift.id,
+          lines: active.lines.map((l) => ({ sku: l.sku, qty: l.qty })),
+          payments: pays.map((p) => ({
+            methodCode: p.method.toLowerCase(),
+            amount: p.amount,
+            checkNumber: p.checkNumber,
+            bankName: p.bankName,
+            branch: p.branch,
+            accountNumber: p.accountNumber,
+            issueDateDays: p.issueDateDays,
+            dueDateDays: p.dueDateDays,
+          })),
+          customerMobile: active.customerMobile || null,
+          customerName: active.customerName || null,
+          discountTotal: active.discountTotal,
+        }),
+      });
+      if (r.ok && r.data) {
+        setDone({
+          number: r.data.number,
+          total: r.data.grandTotal,
+          methods: pays.map((p) => METHOD_FA[p.method] ?? p.method),
+          customer: active.customerName || active.customerMobile || null,
+        });
+        // Ticket مصرف‌شده حذف و Ticket خالی جدید
+        setTickets((ts) => [...ts.filter((t) => t.id !== active.id), newTicket()]);
+      } else setError(r.error?.message ?? "خطا در ثبت فاکتور");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  /** چاپ فاکتور ۸۰mm — پنجره چاپ با قالب حرارتی */
-  const printReceipt = () => {
-    if (!lastInvoice) return;
-    const w = window.open("", "print", "width=380,height=600");
-    if (!w) { setError("پنجره چاپ بسته شد — popup را اجازه دهید."); return; }
-    const rows = cart;
-    w.document.write(`<!doctype html><html dir="rtl" lang="fa"><head><meta charset="utf-8"><title>${lastInvoice.number}</title>
-      <style>
-        @page { size: 80mm auto; margin: 4mm; }
-        body { font-family: Tahoma, sans-serif; font-size: 12px; width: 72mm; }
-        h2 { text-align: center; font-size: 14px; margin: 4px 0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-        td { padding: 2px 0; }
-        .t { border-top: 1px dashed #000; margin-top: 6px; padding-top: 4px; font-weight: bold; }
-        .c { text-align: center; }
-      </style></head><body>
-      <h2>لباس زیر قاصدک</h2>
-      <p class="c">فاکتور فروش ${lastInvoice.number}</p>
-      <p class="c">${new Date().toLocaleString("fa-IR")}</p>
-      <table>
-        ${rows.map((l) => `<tr><td>${l.name ?? ""}</td><td class="c">${l.qty}×</td><td>${fa(l.price)}</td></tr>`).join("")}
-      </table>
-      <p class="t">جمع: ${fa(lastInvoice.total)} تومان</p>
-      <p class="c">با تشکر از خرید شما 💜</p>
-      <script>window.onload = () => { window.print(); };</script>
-    </body></html>`);
-    w.document.close();
-  };
+  // keyboard: F2 → فوکوس بارکد، Esc → بستن modal (بخش ۱۶)
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "F2") { e.preventDefault(); scanRef.current?.focus(); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
 
-  /** کارت نتیجه — شبیه کارت محصول سایت (تصویر/نام/قیمت/موجودی) */
   const resultCard = (p: SearchItem) => {
     const v = p.variants[0];
     if (!v) return null;
     const stock = v.stockQty - v.reservedQty;
     const price = Number(v.salePrice ?? v.price);
     return (
-      <button
-        key={v.id}
-        onClick={() => addToCart(v.sku, p.name, price)}
-        disabled={stock <= 0}
-        className="group text-right disabled:opacity-50"
-      >
-        <div className="overflow-hidden rounded-blob bg-primary-tint">
-          {p.images?.[0]?.mediaId ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={`/api/media/${p.images[0].mediaId}`} alt={p.images[0].alt ?? p.name} className="h-32 w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-          ) : (
-            <div className="flex h-32 w-full items-center justify-center bg-gradient-to-b from-primary-tint to-primary-light text-3xl">🩱</div>
-          )}
-        </div>
-        <p className="mt-2 line-clamp-2 min-h-10 text-xs font-bold">{p.name}</p>
+      <button key={v.id} onClick={() => addToCart(v.sku, p.name, price)} disabled={stock <= 0}
+        className="group rounded-xl p-2 text-right transition-colors hover:bg-primary-soft disabled:opacity-40">
+        <p className="line-clamp-2 text-xs font-bold">{p.name}</p>
         <div className="mt-1 flex items-center justify-between">
           <span className="text-xs font-black text-primary-strong tabular-nums">{fa(price)}</span>
-          {stock > 0 ? (
-            <span className="text-[10px] text-ink/50 tabular-nums">{fa(stock)} عدد</span>
-          ) : (
-            <span className="text-[10px] font-bold text-error">ناموجود</span>
-          )}
+          {stock > 0 ? <span className="text-[10px] text-ink/50 tabular-nums">{fa(stock)}</span> : <span className="text-[10px] font-bold text-app-err">ناموجود</span>}
         </div>
       </button>
     );
   };
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* وضعیت شیفت */}
-      <div className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-surface p-4">
-        {shift ? (
-          <>
-            <span className="text-sm font-bold text-app-ok">● شیفت باز — از {new Date(shift.openedAt).toLocaleTimeString("fa-IR")}</span>
-            <button onClick={closeShift} className="ms-auto h-9 rounded-full border border-line px-4 text-xs font-bold">بستن شیفت</button>
-          </>
-        ) : (
-          <>
-            <span className="text-sm font-bold text-ink/60">شیفت بازی نیست</span>
-            <input value={openingCash} onChange={(e) => setOpeningCash(e.target.value)} type="number" placeholder="نقد اولیه" className="h-9 w-36 rounded-full border border-line px-3 text-xs" />
-            <button onClick={openShift} className="ms-auto h-9 rounded-full bg-primary px-5 text-xs font-black text-on-accent">باز کردن شیفت</button>
-          </>
-        )}
-      </div>
+    <div className="grid gap-4 lg:grid-cols-5">
+      {/* ---------- سمت اصلی: اسکن + جستجو (بخش ۱) ---------- */}
+      <section className="flex flex-col gap-3 lg:col-span-3">
+        {/* Tickets — بخش ۱: چند فاکتور همزمان */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {tickets.map((t) => (
+            <button key={t.id} onClick={() => setActiveId(t.id)}
+              className={`h-8 rounded-full px-3 text-xs font-bold transition-colors ${t.id === active?.id ? "bg-primary text-on-accent" : t.held ? "border border-dashed border-line text-ink/50" : "border border-line text-ink/70"}`}>
+              {t.held ? "⏸ " : ""}{t.label}{t.lines.length ? ` (${fa(t.lines.reduce((a, l) => a + l.qty, 0))})` : ""}
+            </button>
+          ))}
+          <button onClick={addTicket} className="h-8 rounded-full border border-primary/40 px-3 text-xs font-black text-primary-strong">+ Ticket جدید</button>
+        </div>
 
-      {msg ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">{msg}</p> : null}
-      {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
-      {lastInvoice ? (
-        <p className="rounded-xl bg-app-primary-soft px-4 py-3 text-sm font-black text-app-ok">
-          ✅ فاکتور {lastInvoice.number} ثبت شد — {fa(lastInvoice.total)} تومان
-        </p>
-      ) : null}
-
-      {/* بارکدخوان */}
-      <div className="flex flex-wrap gap-2">
         <input
           value={scan}
           onChange={(e) => setScan(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void scanBarcode(); } }}
-          placeholder="بارکد را اسکن یا SKU بنویسید و Enter بزنید…"
+          placeholder="بارکد / SKU + Enter (F2)…"
           autoFocus
           dir="ltr"
-          className="h-11 flex-1 rounded-full border-2 border-dashed border-primary/40 bg-surface px-5 text-sm focus:border-primary focus:outline-none"
+          ref={scanRef}
+          className="h-12 rounded-xl border-2 border-dashed border-primary/40 bg-surface px-4 text-sm focus:border-primary focus:outline-none"
         />
-        <button onClick={() => scanBarcode()} disabled={loading} className="h-11 rounded-full bg-ink px-5 text-sm font-black text-on-accent">افزودن</button>
-      </div>
-
-      {/* جستجوی زنده نام محصول — نتایج مثل سرچ سایت */}
-      <div className="relative">
         <input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="جستجو با نام محصول، برند، SKU یا بارکد…"
-          className="h-11 w-full rounded-full border border-line bg-surface px-5 text-sm focus:border-primary focus:outline-none"
+          placeholder="جستجوی محصول…"
+          className="h-10 rounded-xl border border-line bg-surface px-4 text-sm focus:border-primary focus:outline-none"
         />
-        {searching ? (
-          <span className="absolute left-4 top-3.5 text-xs text-ink/40">…</span>
+        {search.trim() ? (
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+            {searching ? <p className="col-span-full py-4 text-center text-xs text-ink/40">…</p> : results.map(resultCard)}
+            {!searching && results.length === 0 ? <p className="col-span-full py-4 text-center text-xs text-ink/40">یافت نشد.</p> : null}
+          </div>
         ) : null}
 
-        {search.trim() && results.length > 0 ? (
-          <div className="absolute inset-x-0 top-full z-20 mt-2 max-h-96 overflow-y-auto rounded-card border border-line bg-surface p-3 shadow-clay-2">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {results.map(resultCard)}
+        {/* Tickets روی hold (resume) */}
+        {tickets.some((t) => t.held) ? (
+          <div className="flex flex-wrap gap-1.5 rounded-xl border border-dashed border-line p-2">
+            <span className="text-[10px] font-bold text-ink/40">روی hold:</span>
+            {tickets.filter((t) => t.held).map((t) => (
+              <button key={t.id} onClick={() => resumeTicket(t.id)} className="h-7 rounded-full bg-primary-tint px-2.5 text-[11px] font-bold">
+                ▶ {t.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      {/* ---------- سمت فاکتور: Ticket فعال + پرداخت (بخش ۱/۲) ---------- */}
+      <section className="flex flex-col gap-3 lg:col-span-2">
+        {shift ? (
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-app-ok">● شیفت باز</span>
+            <button onClick={closeShift} className="text-ink/50 underline">بستن شیفت</button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-xl border border-line p-2">
+            <input value={openingCash} onChange={(e) => setOpeningCash(e.target.value)} type="number" placeholder="نقد اولیه" className="h-8 w-28 rounded-lg border border-line px-2 text-xs" />
+            <button onClick={openShift} className="h-8 rounded-lg bg-primary px-3 text-xs font-black text-on-accent">باز کردن شیفت</button>
+          </div>
+        )}
+
+        {active ? (
+          <div className="rounded-xl border border-line">
+            <div className="border-b border-line px-3 py-2 text-xs font-black">{active.label}</div>
+            <div className="max-h-72 overflow-y-auto">
+              {active.lines.length === 0 ? (
+                <p className="px-3 py-8 text-center text-xs text-ink/40">Ticket خالی</p>
+              ) : active.lines.map((l) => (
+                <div key={l.sku} className="flex items-center gap-2 border-b border-line/50 px-3 py-1.5 last:border-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold">{l.name}</p>
+                    <p className="text-[10px] text-ink/40 tabular-nums">{fa(l.price)} × {fa(l.qty)}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => patchTicket(active.id, { lines: active.lines.map((x) => x.sku === l.sku ? { ...x, qty: Math.max(1, x.qty - 1) } : x) })} className="h-6 w-6 rounded-lg border border-line text-xs">−</button>
+                    <button onClick={() => patchTicket(active.id, { lines: active.lines.map((x) => x.sku === l.sku ? { ...x, qty: x.qty + 1 } : x) })} className="h-6 w-6 rounded-lg border border-line text-xs">+</button>
+                    <button onClick={() => patchTicket(active.id, { lines: active.lines.filter((x) => x.sku !== l.sku) })} className="h-6 w-6 rounded-lg text-xs text-app-err">✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2 border-t border-line p-3">
+              <input value={active.customerMobile} onChange={(e) => patchTicket(active.id, { customerMobile: e.target.value })} placeholder="موبایل مشتری (اختیاری)" dir="ltr" className="h-8 w-full rounded-lg border border-line px-2 text-xs" />
+              <div className="flex items-center gap-2">
+                <input value={active.discountTotal || ""} onChange={(e) => patchTicket(active.id, { discountTotal: Number(e.target.value) || 0 })} type="number" min={0} placeholder="تخفیف" className="h-8 w-24 rounded-lg border border-line px-2 text-xs tabular-nums" />
+                <div className="flex-1 text-end">
+                  <span className="text-[10px] text-ink/50">قابل پرداخت</span>
+                  <p className="text-base font-black tabular-nums">{fa(total)}</p>
+                </div>
+              </div>
+              {/* PaymentPanel — workflow واقعی (بخش ۲/۳) */}
+              <PaymentPanel total={total} disabled={busy || !shift || active.lines.length === 0} onSubmit={(pays) => void finalize(pays)} />
+              <div className="flex gap-2">
+                <button onClick={holdTicket} disabled={active.lines.length === 0} className="h-8 flex-1 rounded-lg border border-line text-[11px] font-bold disabled:opacity-40">⏸ Hold</button>
+                <button onClick={() => dropTicket(active.id)} className="h-8 flex-1 rounded-lg border border-line text-[11px] font-bold text-app-err">حذف Ticket</button>
+              </div>
             </div>
           </div>
         ) : null}
-        {search.trim() && results.length === 0 && !searching ? (
-          <p className="absolute inset-x-0 top-full z-20 mt-2 rounded-card border border-line bg-surface px-4 py-6 text-center text-sm text-ink/50 shadow-clay-2">
-            محصولی یافت نشد.
-          </p>
-        ) : null}
-      </div>
 
-      {/* انتخاب از لیست محصولات */}
-      <button
-        onClick={() => void openList()}
-        className="h-10 rounded-full border border-line px-4 text-xs font-bold text-ink/70 hover:bg-primary-tint"
-      >
-        {showList ? "بستن لیست محصولات" : "📋 انتخاب از لیست محصولات"}
-      </button>
-      {showList ? (
-        <div className="max-h-96 overflow-y-auto rounded-card border border-line bg-surface p-3">
-          {searching ? (
-            <p className="py-6 text-center text-sm text-ink/50">در حال بارگذاری…</p>
-          ) : listItems.length === 0 ? (
-            <p className="py-6 text-center text-sm text-ink/50">محصولی برای فروش موجود نیست.</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {listItems.map(resultCard)}
-            </div>
-          )}
-        </div>
+        {msg ? <p className="rounded-xl bg-app-primary-soft px-3 py-2 text-xs font-bold text-app-ok">{msg}</p> : null}
+        {error ? <p className="rounded-xl bg-app-primary-soft px-3 py-2 text-xs font-bold text-app-err">{error}</p> : null}
+      </section>
+
+      {/* ---------- Completion modal (بخش ۴) ---------- */}
+      {done ? (
+        <CompletionModal
+          invoiceNumber={done.number}
+          total={done.total}
+          methods={done.methods}
+          customer={done.customer}
+          onClose={() => setDone(null)}
+          onPrinted={async (format) => {
+            // چاپ از دادهٔ persisted فاکتور (بخش ۹) — حتی بعد از خالی شدن cart
+            const r = await call<{
+              invoice: {
+                number: string; createdAt: string; grandTotal: string; customerName: string | null; customerMobile: string | null;
+                items: Array<{ variantSku: string; qty: number; unitPriceSnapshot: string; lineTotal: string; variant?: { product?: { name: string } } }>;
+                payments: Array<{ method: string; amount: string }>;
+              };
+            }>(`/pos/invoices/by-number/${done.number}`);
+            if (!r.ok || !r.data) { setError(r.error?.message ?? "فاکتور برای چاپ یافت نشد."); return; }
+            const inv = r.data.invoice;
+            const html = format === "80mm"
+              ? buildReceiptHtml({ storeName: "لباس زیر قاصدک", number: inv.number, createdAt: inv.createdAt, items: inv.items.map((i) => ({ name: i.variant?.product?.name ?? i.variantSku, qty: i.qty, unitPrice: Number(i.unitPriceSnapshot), lineTotal: Number(i.lineTotal) })), discount: Number(BigInt(inv.grandTotal) - inv.items.reduce((a, i) => a + BigInt(i.lineTotal), 0n) + BigInt(inv.grandTotal) - BigInt(inv.grandTotal)), total: Number(inv.grandTotal), payments: inv.payments.map((p) => ({ method: METHOD_FA[p.method] ?? p.method, amount: Number(p.amount) })), customer: inv.customerName ?? inv.customerMobile ?? null })
+              : buildA4Html({ storeName: "لباس زیر قاصدک", number: inv.number, createdAt: inv.createdAt, items: inv.items.map((i) => ({ name: i.variant?.product?.name ?? i.variantSku, qty: i.qty, unitPrice: Number(i.unitPriceSnapshot), lineTotal: Number(i.lineTotal) })), discount: 0, total: Number(inv.grandTotal), payments: inv.payments.map((p) => ({ method: METHOD_FA[p.method] ?? p.method, amount: Number(p.amount) })), customer: inv.customerName ?? inv.customerMobile ?? null });
+            const w = window.open("", "print", "width=420,height=640");
+            if (!w) { setError("popup چاپ مسدود است."); return; }
+            w.document.write(html);
+            w.document.close();
+          }}
+        />
       ) : null}
-
-      {/* سبد */}
-      <div className="rounded-card border border-line bg-surface">
-        {cart.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-ink/50">سبد خالی — بارکد اسکن کنید یا جستجو کنید.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-line text-right text-xs text-ink/60">
-              <th className="px-4 py-2">کالا</th><th className="px-4 py-2">قیمت</th><th className="px-4 py-2">تعداد</th><th className="px-4 py-2">جمع</th><th className="px-4 py-2"></th>
-            </tr></thead>
-            <tbody>
-              {cart.map((l) => (
-                <tr key={l.sku} className="border-b border-line/60 last:border-0">
-                  <td className="px-4 py-2 font-bold">{l.name}<span className="ms-2 text-[10px] text-ink/40" dir="ltr">{l.sku}</span></td>
-                  <td className="px-4 py-2 tabular-nums">{fa(l.price)}</td>
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setCart(cart.map((x) => x.sku === l.sku ? { ...x, qty: Math.max(1, x.qty - 1) } : x))} className="h-6 w-6 rounded-full border border-line text-xs">−</button>
-                      <span className="w-8 text-center tabular-nums">{fa(l.qty)}</span>
-                      <button onClick={() => setCart(cart.map((x) => x.sku === l.sku ? { ...x, qty: x.qty + 1 } : x))} className="h-6 w-6 rounded-full border border-line text-xs">+</button>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2 tabular-nums">{fa(l.price * l.qty)}</td>
-                  <td className="px-4 py-2"><button onClick={() => setCart(cart.filter((x) => x.sku !== l.sku))} className="text-xs font-bold text-app-err">حذف</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* تسویه */}
-      <div className="grid gap-4 rounded-card border border-line bg-surface p-5 lg:grid-cols-2">
-        <div className="flex flex-col gap-3">
-          <label className="text-xs font-bold text-ink/70">
-            موبایل مشتری (اختیاری — مشتری جدید خودکار ثبت می‌شود)
-            <input value={customerMobile} onChange={(e) => setCustomerMobile(e.target.value)} placeholder="09…" dir="ltr" className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" />
-          </label>
-          <label className="text-xs font-bold text-ink/70">
-            تخفیف کل (تومان)
-            <input value={discountTotal} onChange={(e) => setDiscountTotal(e.target.value)} type="number" min={0} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" />
-          </label>
-        </div>
-        <div className="flex flex-col justify-end gap-2 lg:border-r lg:border-line lg:pe-5">
-          <div className="flex justify-between text-sm"><span className="text-ink/60">جمع</span><span className="tabular-nums font-bold">{fa(subtotal)}</span></div>
-          <div className="flex justify-between text-sm"><span className="text-ink/60">تخفیف</span><span className="tabular-nums font-bold text-app-warning">{fa(discount)}</span></div>
-          <div className="flex justify-between border-t border-line pt-2 text-base font-black"><span>قابل پرداخت</span><span className="tabular-nums">{fa(total)}</span></div>
-          <button onClick={submitSale} disabled={loading || !shift || cart.length === 0} className="h-12 rounded-full bg-primary text-sm font-black text-on-accent disabled:opacity-50">
-            ثبت فاکتور نقدی — {fa(total)} تومان
-          </button>
-          <button onClick={printReceipt} disabled={!lastInvoice} className="h-10 rounded-full border border-line text-xs font-bold disabled:opacity-40">
-            🖨️ چاپ آخرین فاکتور (۸۰mm)
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
