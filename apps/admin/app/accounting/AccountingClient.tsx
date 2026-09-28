@@ -15,6 +15,11 @@ interface BalanceSheet {
 }
 /** فاز ۱۱ (P3): گردش حساب */
 interface TurnoverRow { code: string; name: string; type: string; opening: string; debit: string; credit: string; closing: string; }
+/** فاز ۱۲ (گام ۳): جریان نقدینگی */
+interface CashFlow {
+  inflow: string; outflow: string; net: string;
+  monthly: Array<{ month: number; inflow: string; outflow: string }>;
+}
 interface EntryRow { id: string; number: string; date: string; description: string | null; lines: Array<{ account: { code: string; name: string }; debit: string; credit: string }>; }
 interface SaleRow { number: string; total: string; party: string; channel: string; kind: string; createdAt: string; }
 interface AccountRow { code: string; name: string; type: string; }
@@ -38,6 +43,7 @@ const TABS = [
   { key: "tree", label: "درخت حساب‌ها" },
   { key: "balancesheet", label: "ترازنامه" },
   { key: "turnover", label: "گردش حساب" },
+  { key: "cashflow", label: "جریان نقدینگی" },
   { key: "sales", label: "فاکتور فروش" },
   { key: "purchases", label: "فاکتور خرید" },
   { key: "payroll", label: "حقوق و دستمزد" },
@@ -60,6 +66,7 @@ export default function AccountingClient() {
   const [tree, setTree] = useState<TreeAccount[]>([]);
   const [bs, setBs] = useState<BalanceSheet | null>(null);
   const [turnover, setTurnover] = useState<TurnoverRow[]>([]);
+  const [cf, setCf] = useState<CashFlow | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [ledger, setLedger] = useState<{ account: { code: string; name: string; isActive: boolean }; items: AccountLedgerLine[] } | null>(null);
   const [childForm, setChildForm] = useState<{ parentId: string | null; code: string; name: string }>({ parentId: null, code: "", name: "" });
@@ -120,6 +127,9 @@ export default function AccountingClient() {
     } else if (t === "turnover") {
       const r = await call<{ items: TurnoverRow[] }>("/admin/accounting/account-turnover");
       if (r.ok && r.data) setTurnover(r.data.items); else setError(r.error?.message ?? "خطا");
+    } else if (t === "cashflow") {
+      const r = await call<CashFlow>("/admin/accounting/cash-flow");
+      if (r.ok && r.data) setCf(r.data); else setError(r.error?.message ?? "خطا");
     }
   };
 
@@ -555,6 +565,35 @@ export default function AccountingClient() {
               ))}
             </tbody>
           </table>
+        </div>
+      ) : null}
+
+      {/* فاز ۱۲ (گام ۳): جریان نقدینگی */}
+      {tab === "cashflow" ? (
+        <div className="flex flex-col gap-4">
+          {cf ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">ورودی نقدینگی</p><p className="mt-1 text-lg font-black tabular-nums text-app-ok">{fa(cf.inflow)}</p></div>
+                <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">خروجی نقدینگی</p><p className="mt-1 text-lg font-black tabular-nums text-app-err">{fa(cf.outflow)}</p></div>
+                <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">خالص نقدینگی</p><p className="mt-1 text-lg font-black tabular-nums">{fa(cf.net)}</p></div>
+              </div>
+              <div className="overflow-x-auto rounded-card border border-line bg-surface">
+                <table className="w-full text-sm">
+                  <thead className="bg-ink/5 text-xs text-ink/60"><tr><th className="px-4 py-2 text-start">ماه</th><th className="px-4 py-2 text-start">ورودی</th><th className="px-4 py-2 text-start">خروجی</th></tr></thead>
+                  <tbody>
+                    {cf.monthly.map((m) => (
+                      <tr key={m.month} className="border-t border-line/60">
+                        <td className="px-4 py-2">{MONTHS_FA[m.month - 1]}</td>
+                        <td className="px-4 py-2 tabular-nums text-app-ok">{Number(m.inflow) ? fa(m.inflow) : "—"}</td>
+                        <td className="px-4 py-2 tabular-nums text-app-err">{Number(m.outflow) ? fa(m.outflow) : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>

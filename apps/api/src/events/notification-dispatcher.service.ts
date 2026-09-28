@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { backgroundWorkersEnabled } from "../common/background-workers";
 
 /**
  * فاز ۱۱ (P2-B) — Notification Dispatcher
@@ -25,6 +26,11 @@ export class NotificationDispatcherService implements OnModuleInit, OnModuleDest
 
   onModuleInit(): void {
     // هر ۳۰ ثانیه — سبک؛ در production می‌تواند با worker مستقل جایگزین شود
+    // فاز ۱۲ (گام ۵): با GHASEDAK_WORKERS=off خاموش
+    if (!backgroundWorkersEnabled()) {
+      this.logger.log("Background workers disabled (GHASEDAK_WORKERS=off) — NotificationDispatcher timer not started");
+      return;
+    }
     this.timer = setInterval(() => void this.dispatchOnce(), 30_000);
   }
 

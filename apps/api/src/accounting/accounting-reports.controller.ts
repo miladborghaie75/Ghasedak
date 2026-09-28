@@ -144,6 +144,44 @@ export class AccountingReportsController {
     return { from: from.toISOString(), to: to.toISOString(), items };
   }
 
+  /**
+   * فاز ۱۲ (گام ۳): جریان نقدینگی (Cash-flow) — مستقیم و ماهانه از JournalLine.
+   * ورودی/خروجی = تغییر مانده حساب‌های نقد (1000) و بانک (1100)؛ بدون محاسبه موازی.
+   */
+  @Get("cash-flow")
+  @RequirePermission("accounting.reports")
+  async cashFlow(@Query() q: { from?: string; to?: string }) {
+    const yearStart = new Date(new Date().getFullYear(), 0, 1);
+    const from = q.from ? new Date(q.from) : yearStart;
+    const to = q.to ? new Date(q.to) : new Date();
+    const cashAccounts = await this.prisma.account.findMany({
+      where: { code: { in: ['1000', '1100'] } },
+    });
+    const cashIds = new Set(cashAccounts.map((a) => a.id));
+    const lines = await this.prisma.journalLine.findMany({
+      where: { entry: { date: { gte: from, lte: to } } },
+      select: { accountId: true, debit: true, credit: true, entry: { select: { date: true } } },
+    });
+    const months: Array<{ month: number; inflow: bigint; outflow: bigint }> = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, inflow: 0n, outflow: 0n }));
+    let inflow = 0n;
+    let outflow = 0n;
+    for (const l of lines) {
+      if (!cashIds.has(l.accountId)) continue;
+      const delta = (l.debit ?? 0n) - (l.credit ?? 0n);
+      const m = l.entry.date.getMonth();
+      if (delta > 0n) { months[m].inflow += delta; inflow += delta; }
+      else { months[m].outflow += -delta; outflow += -delta; }
+    }
+    return {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      inflow: inflow.toString(),
+      outflow: outflow.toString(),
+      net: (inflow - outflow).toString(),
+      monthly: months.map((m) => ({ month: m.month, inflow: m.inflow.toString(), outflow: m.outflow.toString() })),
+    };
+  }
+
   /** روند ماهانه درآمد/هزینه — برای نمودار داشبورد */
   @Get("monthly")
   @RequirePermission("accounting.reports")

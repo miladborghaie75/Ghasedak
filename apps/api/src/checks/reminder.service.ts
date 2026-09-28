@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { backgroundWorkersEnabled } from "../common/background-workers";
 
 /**
  * فاز ۹ — Wave 2: یادآور سررسید چک (STEP 10)
@@ -88,6 +89,11 @@ export class ReminderService implements OnModuleInit, OnModuleDestroy {
    *  - خطا swallow نمی‌شود: log + lastRunDay به‌روز نمی‌شود → تیک بعدی دوباره تلاش می‌کند.
    */
   onModuleInit(): void {
+    // فاز ۱۲ (گام ۵): با GHASEDAK_WORKERS=off خاموش — شامل اولین اجرای فوری
+    if (!backgroundWorkersEnabled()) {
+      this.logger.log("Background workers disabled (GHASEDAK_WORKERS=off) — Reminder timer not started");
+      return;
+    }
     this.timer = setInterval(() => void this.runScheduled(), 60_000);
     // اولین تلاش بلافاصله بعد از بوت — اگر امروز هنوز اجرا نشده، اجرا می‌شود (idempotent)
     void this.runScheduled();

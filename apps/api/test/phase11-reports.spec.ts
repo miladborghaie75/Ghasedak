@@ -93,4 +93,40 @@ describe("Phase 11 P3 — financial reports", () => {
     const cashNetAfter = await turnoverSum(from, new Date(Date.now() + 3_600_000));
     expect(cashNetAfter - cashNetBefore).toBe(10_000n);
   });
+
+  it("فاز ۱۲ (گام ۳): cash-flow — درآمد نقد سند دستی به inflow اضافه می‌شود؛ net = inflow − outflow", async () => {
+    // snapshot قبل
+    const yearStart = new Date(new Date().getFullYear(), 0, 1);
+    const to = new Date(Date.now() + 3_600_000);
+    const sumCash = async () => {
+      const rows = await prisma.journalLine.findMany({
+        where: { entry: { date: { gte: yearStart, lte: to } } },
+        select: { accountId: true, debit: true, credit: true },
+      });
+      const cashIds = new Set(
+        (await prisma.account.findMany({ where: { code: { in: ['1000', '1100'] } } })).map((a) => a.id),
+      );
+      let inflow = 0n;
+      let outflow = 0n;
+      for (const l of rows) {
+        if (!cashIds.has(l.accountId)) continue;
+        const delta = (l.debit ?? 0n) - (l.credit ?? 0n);
+        if (delta > 0n) inflow += delta; else outflow += -delta;
+      }
+      return { inflow, outflow };
+    };
+    const before = await sumCash();
+    await journal.postManual({
+      description: "تست cash-flow " + tag,
+      sourceType: "manual",
+      actorId: (await prisma.user.findFirstOrThrow()).id,
+      lines: [
+        { accountCode: '1000', debit: 7_000 },
+        { accountCode: '4000', credit: 7_000 },
+      ],
+    });
+    const after = await sumCash();
+    expect(after.inflow - before.inflow).toBe(7_000n);
+    expect(after.outflow).toBe(before.outflow);
+  });
 });

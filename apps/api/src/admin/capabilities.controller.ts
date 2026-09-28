@@ -403,4 +403,55 @@ export class CapabilitiesController {
   async notificationDispatch() {
     return this.dispatcher.dispatchOnce(100);
   }
+
+  // ================== فاز ۱۲ (گام ۴) — Outbox workspace ==================
+
+  /** خلاصهٔ outbox + ردیف‌ها — PENDING/FAILED مانیتورینگ، DISPATCHED اختیاری */
+  @Get("outbox")
+  @RequirePermission("settings.view")
+  async outboxList(@Query("state") state?: string, @Query("includeDispatched") includeDispatched?: string) {
+    const base = state && ["PENDING", "DISPATCHED", "FAILED"].includes(state)
+      ? { state: state as never }
+      : includeDispatched === "1" ? {} : { state: { not: "DISPATCHED" as never } };
+    const items = await this.prisma.domainEventOutbox.findMany({
+      where: base,
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      select: { id: true, name: true, state: true, attempts: true, lastError: true, availableAt: true, processedAt: true, createdAt: true },
+    });
+    const [pending, failed, dispatched] = await Promise.all([
+      this.prisma.domainEventOutbox.count({ where: { state: "PENDING" } }),
+      this.prisma.domainEventOutbox.count({ where: { state: "FAILED" } }),
+      this.prisma.domainEventOutbox.count({ where: { state: "DISPATCHED" } }),
+    ]);
+    return { items, summary: { pending, failed, dispatched } };
+  }
+
+  /** retention: حذف DISPATCHEDهای قدیمی‌تر از N روز (پیش‌فرض 30) — FAILEDها هرگز خودکار حذف نمی‌شوند */
+  @Post("outbox/prune")
+  @RequirePermission("settings.manage")
+  async outboxPrune(@Body() body: { olderThanDays?: number }) {
+    const days = Math.max(1, Math.min(365, Number(body?.olderThanDays ?? 30)));
+    const cutoff = new Date(Date.now() - days * 86_400_000);
+    const deleted = await this.prisma.domainEventOutbox.deleteMany({
+      where: { state: "DISPATCHED", processedAt: { lt: cutoff } },
+    });
+    return { deleted: deleted.count, cutoff: cutoff.toISOString(), olderThanDays: days };
+  }
+
+  /** retry رویداد FAILED — PENDING می‌شود تا drain بعدی مصرفش کند */
+  @Post("outbox/:id/retry")
+  @RequirePermission("settings.manage")
+  async outboxRetry(@Param("id") id: string) {
+    const ev = await this.prisma.domainEventOutbox.findUnique({ where: { id } });
+    if (!ev) throw new BadRequestException({ code: "NOT_FOUND", message: "رویداد یافت نشد." });
+    if (ev.state !== "FAILED") {
+      throw new BadRequestException({ code: "NOT_RETRYABLE", message: "فقط رویداد FAILED قابل retry است." });
+    }
+    const updated = await this.prisma.domainEventOutbox.update({
+      where: { id },
+      data: { state: "PENDING", availableAt: new Date(), lastError: null },
+    });
+    return { id: updated.id, state: updated.state };
+  }
 }

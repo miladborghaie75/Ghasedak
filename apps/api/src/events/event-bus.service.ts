@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import type { Prisma } from "@prisma/client";
+import { backgroundWorkersEnabled } from "../common/background-workers";
 
 /**
  * Event Bus — بند ۴۳/۴۴: Outbox pattern؛ رویداد در همان تراکنش دامنه نوشته و
@@ -19,6 +20,11 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     // هر ۵ ثانیه — در production می‌تواند با صف واقعی جایگزین شود (فاز AB)
+    // فاز ۱۲ (گام ۵): با GHASEDAK_WORKERS=off خاموش — بوت فقط‌خواندنی/worker جدا
+    if (!backgroundWorkersEnabled()) {
+      this.logger.log("Background workers disabled (GHASEDAK_WORKERS=off) — EventBus timer not started");
+      return;
+    }
     this.timer = setInterval(() => void this.drain(), 5_000);
   }
 
