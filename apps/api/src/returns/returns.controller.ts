@@ -74,6 +74,42 @@ export class ReturnsController {
     });
   }
 
+  /** فاز ۱۲: مرجوعی حضوری POS — گام ۱: بازکردن Refund PENDING + بازگشت انبار (مبنای PosInvoice) */
+  @Post("pos/:invoiceId/refund")
+  @RequirePermission("pos.sell")
+  posRefund(
+    @Param("invoiceId") invoiceId: string,
+    @Body() body: { lines: Array<{ variantSku: string; qty: number }>; method: "CASH" | "BANK" | "STORE_CREDIT"; reason?: string; idempotencyKey?: string },
+    @Identity() actor?: { userId: string },
+  ) {
+    return this.returns.posInvoiceRefund(
+      {
+        invoiceId,
+        lines: (body.lines ?? []).map((l) => ({ variantSku: String(l.variantSku), qty: Number(l.qty) })),
+        method: body.method,
+        reason: body.reason,
+        idempotencyKey: body.idempotencyKey,
+      },
+      actor?.userId,
+    );
+  }
+
+  /** فاز ۱۲: مرجوعی حضوری POS — گام ۲: نهایی‌کردن Refund (پول/سند/خزانه) — همان lifecycle فاز ۱۱ */
+  @Post("pos/refunds/:refundId/finalize")
+  @RequirePermission("pos.sell")
+  posFinalizeRefund(
+    @Param("refundId") refundId: string,
+    @Body() body: { idempotencyKey?: string; reason?: string },
+    @Identity() actor?: { userId: string },
+  ) {
+    const key = body.idempotencyKey ?? `pos-refund-finalize:${refundId}:${actor?.userId ?? "system"}`;
+    return this.returns.finalizeRefund(refundId, {
+      idempotencyKey: key,
+      actorId: actor?.userId,
+      reason: body.reason,
+    });
+  }
+
   /** فاز ۱۱ (P1-B): لغو بازگشت PENDING → CANCELLED (بدون اثر مالی — پول خارج نشده) */
   @Post("refunds/:refundId/cancel")
   @RequirePermission("orders.refund")

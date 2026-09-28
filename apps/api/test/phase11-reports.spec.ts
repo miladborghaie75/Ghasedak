@@ -66,25 +66,31 @@ describe("Phase 11 P3 — financial reports", () => {
     expect(after.assets - before.assets).toBe(25_000n); // نقد بیشتر شد
     expect(after.retained - before.retained).toBe(25_000n); // درآمد بیشتر شد
 
-    // گردش حساب: نقد باید بدهکار 25,000 دورهٔ امروز را ببیند؛ مانده پایانی = افتتاحیه + 25,000
+    // گردش حساب: delta حساب نقد قبل/بعد از ثبت = دقیقاً 25,000 بدهکار (snapshot-محور تا full-suite هم isolate بماند)
+    const turnoverSum = async (from: Date, to: Date) => {
+      const rows = await prisma.journalLine.groupBy({
+        by: ["accountId"],
+        where: { entry: { date: { gte: from, lte: to } } },
+        _sum: { debit: true, credit: true },
+      });
+      const cash = await prisma.account.findUniqueOrThrow({ where: { code: "1000" } });
+      const r = rows.find((x) => x.accountId === cash.id);
+      return (r?._sum.debit ?? 0n) - (r?._sum.credit ?? 0n);
+    };
     const from = new Date(Date.now() - 3_600_000);
     const to = new Date(Date.now() + 3_600_000);
-    const opening = await prisma.journalLine.groupBy({
-      by: ["accountId"],
-      where: { entry: { date: { lt: from } } },
-      _sum: { debit: true, credit: true },
+    const cashNetBefore = await turnoverSum(from, to);
+    expect(await balanceSheet(prisma)).toBeDefined();
+    await journal.postManual({
+      description: `تست گردش ${tag}`,
+      sourceType: "manual",
+      actorId: (await prisma.user.findFirstOrThrow()).id,
+      lines: [
+        { accountCode: "1000", debit: 10_000 },
+        { accountCode: "4000", credit: 10_000 },
+      ],
     });
-    const period = await prisma.journalLine.groupBy({
-      by: ["accountId"],
-      where: { entry: { date: { gte: from, lte: to } } },
-      _sum: { debit: true, credit: true },
-    });
-    const cash = await prisma.account.findUniqueOrThrow({ where: { code: "1000" } });
-    const o = opening.find((x) => x.accountId === cash.id);
-    const p = period.find((x) => x.accountId === cash.id);
-    const openingNet = (o?._sum.debit ?? 0n) - (o?._sum.credit ?? 0n);
-    const closing = openingNet + ((p?._sum.debit ?? 0n) - (p?._sum.credit ?? 0n));
-    expect((p?._sum.debit ?? 0n)).toBeGreaterThanOrEqual(25_000n);
-    expect(closing).toBe(openingNet + 25_000n);
+    const cashNetAfter = await turnoverSum(from, new Date(Date.now() + 3_600_000));
+    expect(cashNetAfter - cashNetBefore).toBe(10_000n);
   });
 });

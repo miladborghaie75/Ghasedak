@@ -58,6 +58,17 @@ const METHOD_FA: Record<string, string> = {
   CASH: "نقدی", CARD: "کارت", ONLINE: "آنلاین", BANK_TRANSFER: "کارت به کارت", CHECK: "چک",
 };
 
+/** فاز ۱۲ — مرجوعی حضوری: مدل جستجوی فاکتور برای بازکردن مرجوعی */
+interface RefundInvoice {
+  id: string;
+  number: string;
+  createdAt: string;
+  customerName: string | null;
+  customerMobile: string | null;
+  items: Array<{ variantSku: string; qty: number; unitPriceSnapshot: string; lineTotal: string; variant?: { product?: { name: string } } }>;
+}
+const REFUND_METHOD_FA: Record<string, string> = { CASH: "نقد از صندوق", BANK: "کارت به کارت/بانکی", STORE_CREDIT: "اعتبار فروشگاه" };
+
 export default function PosClient() {
   const { call, loading } = useAdminApi();
   const [shift, setShift] = useState<ShiftInfo | null>(null);
@@ -76,6 +87,15 @@ export default function PosClient() {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<SearchItem[]>([]);
   const [searching, setSearching] = useState(false);
+
+  // فاز ۱۲ — مرجوعی حضوری
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundQuery, setRefundQuery] = useState("");
+  const [refundHits, setRefundHits] = useState<RefundInvoice[]>([]);
+  const [refundInvoice, setRefundInvoice] = useState<RefundInvoice | null>(null);
+  const [refundQty, setRefundQty] = useState<Record<string, number>>({});
+  const [refundMethod, setRefundMethod] = useState<"CASH" | "BANK" | "STORE_CREDIT">("CASH");
+  const [refundBusy, setRefundBusy] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanRef = useRef<HTMLInputElement | null>(null);
 
@@ -264,6 +284,50 @@ export default function PosClient() {
     if (r.ok) { setMsg(`شیفت بسته شد. مغایرت: ${fa(r.data?.difference ?? 0)} تومان`); setShift(null); } else setError(r.error?.message ?? "خطا");
   };
 
+  // ---------- فاز ۱۲: مرجوعی حضوری ----------
+  const refundSearch = useCallback(async (q: string) => {
+    if (!q.trim()) { setRefundHits([]); return; }
+    const r = await call<{ items: RefundInvoice[] }>(`/pos/invoices/search?q=${encodeURIComponent(q)}`);
+    // فقط FINALIZED (فیلد state از API می‌آید؛ در صورت نبود، همه را نشان بده و در گام ۱ reject می‌شود)
+    setRefundHits((r.data?.items ?? []) as RefundInvoice[]);
+  }, [call]);
+
+  const openRefundForInvoice = async (inv: RefundInvoice) => {
+    // فاکتور کامل با اقلام را می‌گیریم (search خلاصه است)
+    const r = await call<{ invoice: RefundInvoice & { state: string } }>(`/pos/invoices/by-id/${inv.id}`);
+    if (!r.ok || !r.data) { setError(r.error?.message ?? "فاکتور یافت نشد."); return; }
+    if (r.data.invoice.state !== "FINALIZED") { setError("فقط فاکتور نهایی قابل مرجوع است."); return; }
+    setRefundInvoice(r.data.invoice);
+    setRefundQty({});
+  };
+
+  const submitRefund = async () => {
+    if (!refundInvoice) return;
+    const lines = Object.entries(refundQty)
+      .filter(([, q]) => q > 0)
+      .map(([sku, q]) => ({ variantSku: sku, qty: q }));
+    if (lines.length === 0) { setError("حداقل یک قلم انتخاب کنید."); return; }
+    setRefundBusy(true); setError(null);
+    try {
+      // گام ۱: بازکردن مرجوعی (انبار همان‌جا برمی‌گردد)
+      const r = await call<{ refund: { id: string; number: string; amount: string } }>(`/returns/pos/${refundInvoice.id}/refund`, {
+        method: "POST",
+        body: JSON.stringify({ lines, method: refundMethod, reason: "مرجوعی حضوری صندوق" }),
+      });
+      if (!r.ok || !r.data) { setError(r.error?.message ?? "خطا در بازکردن مرجوعی"); return; }
+      // گام ۲: نهایی‌کردن — پول + سند + خزانه (همان lifecycle فاز ۱۱)
+      const f = await call<{ number: string; amount: string; state: string }>(`/returns/pos/refunds/${r.data.refund.id}/finalize`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "مرجوعی حضوری صندوق" }),
+      });
+      if (!f.ok || !f.data) { setError(f.error?.message ?? "مرجوعی باز شد اما نهایی نشد — از لیست مرجوعی‌ها نهایی کنید."); return; }
+      setMsg(`مرجوعی ${f.data.number} ثبت شد — ${fa(f.data.amount)} تومان بازگشت داده شد.`);
+      setRefundOpen(false); setRefundInvoice(null); setRefundQty({}); setRefundQuery(""); setRefundHits([]);
+    } finally {
+      setRefundBusy(false);
+    }
+  };
+
   /** finalize با پرداخت‌ها (بخش ۲/۳) — همان POST /pos/sale موجود */
   const finalize = async (pays: PayLine[]) => {
     if (!shift) { setError("اول شیفت را باز کنید."); return; }
@@ -437,6 +501,7 @@ export default function PosClient() {
               <div className="flex gap-2">
                 <button onClick={holdTicket} disabled={active.lines.length === 0} className="h-8 flex-1 rounded-lg border border-line text-[11px] font-bold disabled:opacity-40">⏸ Hold</button>
                 <button onClick={() => dropTicket(active.id)} className="h-8 flex-1 rounded-lg border border-line text-[11px] font-bold text-app-err">حذف Ticket</button>
+                <button onClick={() => setRefundOpen(true)} className="h-8 flex-1 rounded-lg border border-primary/40 text-[11px] font-black text-primary-strong">↩ مرجوعی</button>
               </div>
             </div>
           </div>
@@ -445,6 +510,82 @@ export default function PosClient() {
         {msg ? <p className="rounded-xl bg-app-primary-soft px-3 py-2 text-xs font-bold text-app-ok">{msg}</p> : null}
         {error ? <p className="rounded-xl bg-app-primary-soft px-3 py-2 text-xs font-bold text-app-err">{error}</p> : null}
       </section>
+
+      {/* ---------- مودال مرجوعی حضوری (فاز ۱۲) ---------- */}
+      {refundOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!refundBusy) { setRefundOpen(false); setRefundInvoice(null); } }}>
+          <div className="w-full max-w-lg rounded-2xl bg-surface p-4 shadow-xl" onClick={(e) => e.stopPropagation()} dir="rtl">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-black">مرجوعی حضوری</h3>
+              <button onClick={() => { setRefundOpen(false); setRefundInvoice(null); }} className="text-ink/40 hover:text-ink">✕</button>
+            </div>
+            {!refundInvoice ? (
+              <>
+                <input
+                  value={refundQuery}
+                  onChange={(e) => { setRefundQuery(e.target.value); void refundSearch(e.target.value); }}
+                  placeholder="شماره فاکتور یا موبایل مشتری…"
+                  autoFocus
+                  className="h-10 w-full rounded-xl border border-line bg-bg px-3 text-sm"
+                />
+                <div className="mt-2 max-h-64 overflow-y-auto">
+                  {refundHits.map((h) => (
+                    <button key={h.id} onClick={() => void openRefundForInvoice(h)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-right text-xs hover:bg-primary-soft">
+                      <span className="font-bold">{h.number}</span>
+                      <span className="text-ink/50">{h.customerName ?? h.customerMobile ?? "—"}</span>
+                    </button>
+                  ))}
+                  {refundQuery.trim() && refundHits.length === 0 ? <p className="py-4 text-center text-xs text-ink/40">فاکتوری یافت نشد.</p> : null}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mb-2 flex items-center justify-between text-xs">
+                  <span className="font-black">فاکتور {refundInvoice.number}</span>
+                  <button onClick={() => setRefundInvoice(null)} className="text-ink/40 underline">تغییر فاکتور</button>
+                </div>
+                <div className="max-h-52 space-y-1 overflow-y-auto">
+                  {refundInvoice.items.map((it) => (
+                    <div key={it.variantSku} className="flex items-center gap-2 rounded-xl border border-line px-3 py-1.5 text-xs">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-bold">{it.variant?.product?.name ?? it.variantSku}</p>
+                        <p className="text-[10px] text-ink/40 tabular-nums">{fa(Number(it.unitPriceSnapshot))} × فروخته‌شده {fa(it.qty)}</p>
+                      </div>
+                      <input
+                        type="number" min={0} max={it.qty} value={refundQty[it.variantSku] ?? ""}
+                        onChange={(e) => setRefundQty((q) => ({ ...q, [it.variantSku]: Math.min(it.qty, Math.max(0, Number(e.target.value) || 0)) }))}
+                        placeholder="0"
+                        className="h-8 w-16 rounded-lg border border-line px-2 text-center tabular-nums"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3">
+                  <p className="mb-1 text-[10px] text-ink/50">روش بازگشت پول</p>
+                  <div className="flex gap-1.5">
+                    {(Object.keys(REFUND_METHOD_FA) as Array<"CASH" | "BANK" | "STORE_CREDIT">).map((m) => (
+                      <button key={m} onClick={() => setRefundMethod(m)}
+                        className={`h-8 flex-1 rounded-lg text-[11px] font-bold ${refundMethod === m ? "bg-primary text-on-accent" : "border border-line text-ink/70"}`}>
+                        {REFUND_METHOD_FA[m]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-xs text-ink/50">جمع بازگشت:</span>
+                  <span className="text-sm font-black tabular-nums">
+                    {fa(refundInvoice.items.reduce((s, it) => s + (refundQty[it.variantSku] ?? 0) * Number(it.unitPriceSnapshot), 0))} تومان
+                  </span>
+                </div>
+                <button onClick={() => void submitRefund()} disabled={refundBusy || Object.values(refundQty).every((q) => !q)}
+                  className="mt-3 h-10 w-full rounded-xl bg-primary text-sm font-black text-on-accent disabled:opacity-40">
+                  {refundBusy ? "در حال ثبت…" : "ثبت مرجوعی"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {/* ---------- Completion modal (بخش ۴) ---------- */}
       {done ? (
