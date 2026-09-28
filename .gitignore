@@ -17,6 +17,9 @@ next-env.d.ts
 coverage
 .freebuff
 
+# state محلی run-local.sh
+.run-local/
+
 # باینری‌های PostgreSQL محلی (Zonky) — از دیسک حذف نمی‌شوند، فقط از مخزن خارج
 infrastructure/pg/
 

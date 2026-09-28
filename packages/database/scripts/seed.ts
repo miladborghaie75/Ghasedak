@@ -5,6 +5,88 @@
 import { PrismaClient } from "@prisma/client";
 import { randomBytes, scryptSync } from "node:crypto";
 
+/**
+ * کپی کمینه از منطق رسمی InventoryService.moveInTx (apps/api/src/inventory/inventory.service.ts)
+ * — seed به apps/api وابستگی ندارد (مرز پکیج‌ها)؛ اما قواعد Ledger باید یکسان بماند:
+ * idempotency با کلید یکتا، تراز per-warehouse+sku از خود Ledger، projection از نتیجه ledger،
+ * CostLayer WAC روی ورودی بهایی (بند ۳۲)، موجودی منفی ممنوع (بند ۹۱).
+ */
+const IN_TYPES = new Set(["PURCHASE", "SALE_RETURN", "TRANSFER_IN", "OPENING", "ADJUSTMENT"]);
+
+/** نوع کلاینت تراکنش Prisma (همان PrismaTransaction در API) */
+type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
+
+async function ledgerMove(
+  tx: Tx,
+  input: {
+    warehouseId: string; variantSku: string; type: "OPENING"; qty: number;
+    unitCost?: bigint | null; refType?: string; refId?: string;
+    idempotencyKey: string; actorId?: string; note?: string;
+  },
+): Promise<{ id: string; balanceAfter: number }> {
+  const existing = await tx.stockLedgerEntry.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+  if (existing) return { id: existing.id, balanceAfter: existing.balanceAfter };
+
+  await tx.$queryRaw`SELECT "sku" FROM "ProductVariant" WHERE "sku" = ${input.variantSku} FOR UPDATE`;
+  const agg = await tx.stockLedgerEntry.aggregate({
+    where: { warehouseId: input.warehouseId, variantSku: input.variantSku },
+    _sum: { qtyIn: true, qtyOut: true },
+  });
+  const balanceBefore = (agg._sum.qtyIn ?? 0) - (agg._sum.qtyOut ?? 0);
+  const balanceAfter = balanceBefore + input.qty; // OPENING همیشه IN است
+  if (balanceAfter < 0) {
+    throw new Error(`INSUFFICIENT_STOCK: ${input.variantSku}`);
+  }
+  const entry = await tx.stockLedgerEntry.create({
+    data: {
+      warehouseId: input.warehouseId,
+      variantSku: input.variantSku,
+      type: input.type,
+      qtyIn: input.qty,
+      qtyOut: 0,
+      balanceBefore,
+      balanceAfter,
+      unitCost: input.unitCost ?? null,
+      refType: input.refType ?? null,
+      refId: input.refId ?? null,
+      idempotencyKey: input.idempotencyKey,
+      actorId: input.actorId ?? null,
+      note: input.note ?? null,
+    },
+  });
+  const variant = await tx.productVariant.findUnique({ where: { sku: input.variantSku } });
+  if (!variant) throw new Error(`VARIANT_NOT_FOUND: ${input.variantSku}`);
+  await tx.productVariant.update({
+    where: { sku: input.variantSku },
+    data: { stockQty: variant.stockQty + input.qty },
+  });
+  // CostLayer WAC — همان قاعدهٔ InventoryService (بند ۳۲)
+  if (input.unitCost != null) {
+    const layer = await tx.costLayer.findUnique({
+      where: { warehouseId_variantSku: { warehouseId: input.warehouseId, variantSku: input.variantSku } },
+    });
+    if (!layer) {
+      await tx.costLayer.create({
+        data: {
+          warehouseId: input.warehouseId, variantSku: input.variantSku,
+          quantity: input.qty, avgUnitCost: input.unitCost,
+        },
+      });
+    } else {
+      const totalQty = layer.quantity + input.qty;
+      const avg =
+        totalQty > 0
+          ? (layer.avgUnitCost * BigInt(layer.quantity) + input.unitCost * BigInt(input.qty)) / BigInt(totalQty)
+          : input.unitCost;
+      await tx.costLayer.update({
+        where: { warehouseId_variantSku: { warehouseId: input.warehouseId, variantSku: input.variantSku } },
+        data: { quantity: totalQty, avgUnitCost: avg },
+      });
+    }
+  }
+  return { id: entry.id, balanceAfter };
+}
+
 const prisma = new PrismaClient();
 
 /** argon2id نیست — هش dev با scrypt (پارامترهای کم)؛ در API از argon2id استفاده می‌شود.
@@ -277,20 +359,20 @@ async function main(): Promise<void> {
         brandId: brand.id,
         basePrice: 749_000n,
         publishedAt: new Date(),
-        variants: {
-          create: [
-            {
-              sku: "DEMO-BRA-75B-BLK",
-              price: 749_000n,
-              stockQty: 5,
-            },
-            {
-              sku: "DEMO-BRA-80B-BLK",
-              price: 749_000n,
-              stockQty: 3,
-            },
-          ],
-        },
+      variants: {
+        create: [
+          {
+            sku: "DEMO-BRA-75B-BLK",
+            price: 749_000n,
+            stockQty: 0, // موجودی واقعی از Ledger OPENING می‌آید (بند ۱۳۵)
+          },
+          {
+            sku: "DEMO-BRA-80B-BLK",
+            price: 749_000n,
+            stockQty: 0, // موجودی واقعی از Ledger OPENING می‌آید (بند ۱۳۵)
+          },
+        ],
+      },
       },
       include: { variants: true },
     });
@@ -301,6 +383,27 @@ async function main(): Promise<void> {
       });
       await prisma.variantBarcode.create({
         data: { variantSku: v.sku, barcode: `626DEMO${String(vi + 1).padStart(5, "0")}`, kind: "internal" },
+      });
+    }
+
+    // ---- موجودی اولیه از مسیر رسمی Ledger (بند ۱۲/۱۳۵) — نه UPDATE مستقیم stockQty.
+    // ledgerMove همان منطق InventoryService.moveInTx است: StockLedgerEntry + projection + CostLayer،
+    // idempotent با کلید `seed:opening:{sku}`؛ اجرای دوم seed دوباره اضافه نمی‌کند.
+    // توجه: تست‌های wave3 به موجودی واقعی (ledger) وابسته‌اند — projection تنها کافی نیست.
+    // actorId باید FK معتبر به User داشته باشد — از ادمین DEMO
+    const seedActor = await prisma.user.findUniqueOrThrow({ where: { email: "admin@ghasedak.demo" }, select: { id: true } });
+    for (const [vi, v] of product.variants.entries()) {
+      await ledgerMove(prisma, {
+        warehouseId: wh.id,
+        variantSku: v.sku,
+        type: "OPENING",
+        qty: [5, 3][vi],
+        unitCost: 300_000n,
+        refType: "opening",
+        refId: "seed",
+        idempotencyKey: `seed:opening:${v.sku}`,
+        actorId: seedActor.id,
+        note: "موجودی اولیه DEMO از مسیر رسمی Ledger",
       });
     }
     void web;

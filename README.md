@@ -16,6 +16,20 @@ infrastructure/   ← docker-compose (PG+Redis) و اسکریپت‌های PG م
 docs/             ← ۷ سند معماری + implementation-status.md
 ```
 
+## اجرای محلی با یک دستور
+
+```bash
+bash infrastructure/run-local.sh start   # PG + API + storefront + admin
+bash infrastructure/run-local.sh status  # وضعیت سرویس‌ها
+bash infrastructure/run-local.sh stop    # خاموشی کامل
+```
+
+- پورت‌ها: API ‏4000، storefront ‏3111، admin ‏3200 (قابل بازنویسی با `API_PORT`/`SF_PORT`/`ADMIN_PORT`)
+- دیتابیس: پیش‌فرض کلاستر تمرین `:55433/wave1rehearsal3` (اسکیمای هم‌راستا با کد + seed دمو).
+  با `GHASEDAK_DB=primary` روی دیتابیس اصلی `:5433/ghasedak` می‌رود — اگر مایگریشن‌های
+  جدید اجرا نشده باشند، ReminderService هنگام استارت با خطای `P2022` کرش می‌کند.
+- لاگ‌ها و pidها در `.run-local/` (gitignore شده).
+
 ## پیش‌نیازها
 
 - Node.js ≥ 20 + pnpm (`npx pnpm`)

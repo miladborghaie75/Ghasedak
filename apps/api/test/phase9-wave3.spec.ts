@@ -51,6 +51,13 @@ describe("Phase 9 Wave 3 — scheduler / CAS / cross-domain hardening", () => {
   /** بانک ایزوله با ماندهٔ اولیه صفر — projection این حساب فقط اثر تست‌های همین اجراست */
   let bank: { id: string; currentBalance: bigint };
 
+  /**
+   * Fixture ایزولهٔ محصول: واریانت اختصاصی همین اجرا با موجودی واقعی از Ledger (بند ۱۳۵).
+   * Scenarioهای A و C به این SKU صریح ارجاع می‌دهند — نه «اولین PUBLISHED» که به
+   * seed ordering و دادهٔ باقی‌ماندهٔ suiteهای دیگر وابسته است.
+   */
+  let fixtureSku: string;
+
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
@@ -68,6 +75,33 @@ describe("Phase 9 Wave 3 — scheduler / CAS / cross-domain hardening", () => {
       data: { id: `test-bank-${tag}-w3`, name: `بانک W3 ${tag}`, bankName: "بانک تست W3", accountNumber: "w3", glAccountId: glBank.id, currentBalance: 0n },
     });
     bank = { id: created.id, currentBalance: created.currentBalance };
+
+    // ---- fixture محصول/واریانت اختصاصی + موجودی واقعی از مسیر رسمی Ledger (OPENING)
+    const cat = await prisma.category.findFirstOrThrow();
+    const product = await prisma.product.create({
+      data: {
+        name: `محصول Wave3 ${tag}`,
+        slug: `w3-fixture-${tag}`,
+        status: "PUBLISHED",
+        categoryId: cat.id,
+        basePrice: 500_000n,
+        variants: { create: [{ sku: `W3-SKU-${tag}`, price: 500_000n }] },
+      },
+      include: { variants: true },
+    });
+    fixtureSku = product.variants[0].sku;
+    const whId = (await prisma.salesChannel.findUniqueOrThrow({ where: { slug: "pos" } })).defaultWarehouseId;
+    await inv.move({
+      warehouseId: whId!,
+      variantSku: fixtureSku,
+      type: "OPENING",
+      qty: 10,
+      unitCost: 100_000n,
+      refType: "opening",
+      refId: tag,
+      idempotencyKey: `w3-opening-${tag}`,
+      actorId: actor,
+    });
   });
 
   afterAll(async () => {
@@ -86,6 +120,11 @@ describe("Phase 9 Wave 3 — scheduler / CAS / cross-domain hardening", () => {
       await prisma.posInvoiceItem.deleteMany({ where: { invoiceId: invId } });
       await prisma.posInvoice.deleteMany({ where: { id: invId } });
       await prisma.journalEntry.deleteMany({ where: { sourceType: "pos_invoice", sourceId: invId } });
+      // projection را هم برگردان (SALE حذف شده = موجودی برمی‌گردد)
+      const removedMoves = await prisma.stockLedgerEntry.findMany({ where: { refType: "pos_invoice", refId: invId }, select: { variantSku: true, qtyOut: true } });
+      for (const m of removedMoves) {
+        await prisma.productVariant.update({ where: { sku: m.variantSku }, data: { stockQty: { increment: m.qtyOut } } });
+      }
       await prisma.stockLedgerEntry.deleteMany({ where: { refType: "pos_invoice", refId: invId } });
     }
     if (checkIds.length) {
@@ -102,18 +141,18 @@ describe("Phase 9 Wave 3 — scheduler / CAS / cross-domain hardening", () => {
     await prisma.bankStatementMatch.deleteMany({ where: { statement: { bankAccountId: bank.id } } }).catch(() => undefined);
     await prisma.bankStatement.deleteMany({ where: { bankAccountId: bank.id } }).catch(() => undefined);
     await prisma.bankAccount.deleteMany({ where: { id: bank.id } }).catch(() => undefined);
-    // فاکتورهای خرید این اجرا (تامین‌کنندهٔ tag-دار)
-    const sup = await prisma.supplier.findFirst({ where: { name: { startsWith: `تست-تامین-${tag}` } }, select: { id: true } });
-    if (sup) {
+    // فاکتورهای خرید این اجرا (هر تامین‌کنندهٔ tag-دار — شامل پسوندهای -sup/-B)
+    const sups = await prisma.supplier.findMany({ where: { name: { contains: tag } }, select: { id: true } });
+    for (const sup of sups) {
       const invoices = await prisma.purchaseInvoice.findMany({ where: { supplierId: sup.id }, select: { id: true } });
       for (const inv of invoices) {
-        await prisma.purchasePayment.deleteMany({ where: { invoiceId: inv.id } }).catch(() => undefined);
+        await prisma.purchasePayment.deleteMany({ where: { invoiceId: inv.id } });
         await prisma.accountsPayable.deleteMany({ where: { refType: "purchase_invoice", refId: inv.id } });
         await prisma.purchaseInvoiceItem.deleteMany({ where: { invoiceId: inv.id } });
         await prisma.purchaseInvoice.deleteMany({ where: { id: inv.id } });
       }
-      await prisma.supplierAccount.deleteMany({ where: { supplierId: sup.id } }).catch(() => undefined);
-      await prisma.supplier.deleteMany({ where: { id: sup.id } }).catch(() => undefined);
+      await prisma.supplierAccount.deleteMany({ where: { supplierId: sup.id } });
+      await prisma.supplier.deleteMany({ where: { id: sup.id } });
     }
     // نوتیفیکیشن‌های dispatch شده در همین اجرا
     await prisma.notification.deleteMany({ where: { createdAt: { gte: testStart }, templateKey: { startsWith: "check-cleared:" } } }).catch(() => undefined);
@@ -122,6 +161,19 @@ describe("Phase 9 Wave 3 — scheduler / CAS / cross-domain hardening", () => {
     for (const c of testCustomers) {
       await prisma.customerAccount.deleteMany({ where: { customerId: c.id } }).catch(() => undefined);
       await prisma.customer.deleteMany({ where: { id: c.id } }).catch(() => undefined);
+    }
+    // fixture محصول/واریانت این اجرا (بند STEP 3 — هیچ یتیمی نمی‌ماند)
+    // ledger این فیکسچر فقط OPENING خودش را دارد (POS فروشش حذف شد بالا)؛ CostLayer هم پاک می‌شود
+    const fixtureVariant = await prisma.productVariant.findUnique({ where: { sku: `W3-SKU-${tag}` }, select: { sku: true, productId: true } });
+    if (fixtureVariant) {
+      await prisma.stockLedgerEntry.deleteMany({ where: { variantSku: fixtureVariant.sku } });
+      await prisma.costLayer.deleteMany({ where: { variantSku: fixtureVariant.sku } });
+      await prisma.stockReservation.deleteMany({ where: { variantSku: fixtureVariant.sku } });
+      await prisma.variantPrice.deleteMany({ where: { variantSku: fixtureVariant.sku } });
+      await prisma.variantBarcode.deleteMany({ where: { variantSku: fixtureVariant.sku } });
+      await prisma.priceHistory.deleteMany({ where: { variantSku: fixtureVariant.sku } });
+      await prisma.productVariant.deleteMany({ where: { sku: fixtureVariant.sku } });
+      await prisma.product.deleteMany({ where: { id: fixtureVariant.productId } });
     }
     await prisma.$disconnect();
   });
@@ -410,13 +462,7 @@ describe("Phase 9 Wave 3 — scheduler / CAS / cross-domain hardening", () => {
   // ---------- STEP 5/6: Scenario A — POS check full chain ----------
 
   it("Scenario A: POS sale → check RECEIVED → match → clear — revenue یک‌بار، bank فقط در clear، سندها متوازن", async () => {
-    const whId = (await prisma.salesChannel.findUniqueOrThrow({ where: { slug: "pos" } })).defaultWarehouseId;
-    const variant = await prisma.productVariant.findFirstOrThrow({ where: { status: "PUBLISHED" }, select: { sku: true } });
-    const ledger = await prisma.stockLedgerEntry.findFirst({ where: { warehouseId: whId!, variantSku: variant.sku } });
-    if (!ledger) {
-      const inv = new InventoryService(prisma, new InventorySettingsService(prisma));
-      await inv.move({ warehouseId: whId!, variantSku: variant.sku, type: "ADJUSTMENT", qty: 10, unitCost: 100000n, refType: "manual", refId: tag, idempotencyKey: `w3-restock-${tag}`, actorId: actor });
-    }
+    const variant = { sku: fixtureSku }; // fixture ایزوله — نه «اولین PUBLISHED»
     const shift = await prisma.cashierShift.findFirst({ where: { userId: actor, state: "OPEN" } })
       ?? await pos.openShift({ userId: actor, registerName: `REG-${tag}`, openingCash: 0 });
     const customer = await makeCustomer();
@@ -475,7 +521,7 @@ describe("Phase 9 Wave 3 — scheduler / CAS / cross-domain hardening", () => {
   it("Scenario B: خرید → چک ISSUED → match → clear — صدور بانک را کم نمی‌کند؛ وصول کم می‌کند؛ AP درست؛ bounce effective-paid را اصلاح می‌کند", async () => {
     const sup = await purchasing.createSupplier({ name: `تست-تامین-${tag}-B`, actorId: actor });
     const invRow = await prisma.purchaseInvoice.create({
-      data: { number: `PINV-W3-${tag}-B`, supplierId: sup.id, state: "POSTED", subtotal: 700_000n, grandTotal: 700_000n, items: { create: [{ variantSku: (await prisma.productVariant.findFirstOrThrow({ where: { status: "PUBLISHED" }, select: { sku: true } })).sku, qty: 1, unitCost: 700_000n }] } },
+      data: { number: `PINV-W3-${tag}-B`, supplierId: sup.id, state: "POSTED", subtotal: 700_000n, grandTotal: 700_000n, items: { create: [{ variantSku: fixtureSku, qty: 1, unitCost: 700_000n }] } },
       select: { id: true },
     });
     await prisma.accountsPayable.create({ data: { accountPId: (await prisma.supplierAccount.findUniqueOrThrow({ where: { supplierId: sup.id } })).id, refType: "purchase_invoice", refId: invRow.id, amount: 700_000n } });
@@ -514,8 +560,7 @@ describe("Phase 9 Wave 3 — scheduler / CAS / cross-domain hardening", () => {
   // ---------- Scenario C — received bounce (before clear) ----------
 
   it("Scenario C: POS → RECEIVED → match → bounce — AR به TRADE، 1210/1220 متوازن، revenue دوباره ثبت نمی‌شود", async () => {
-    const whId = (await prisma.salesChannel.findUniqueOrThrow({ where: { slug: "pos" } })).defaultWarehouseId;
-    const variant = await prisma.productVariant.findFirstOrThrow({ where: { status: "PUBLISHED" }, select: { sku: true } });
+    const variant = { sku: fixtureSku }; // fixture ایزوله — نه «اولین PUBLISHED»
     const shift = await prisma.cashierShift.findFirst({ where: { userId: actor, state: "OPEN" } })
       ?? await pos.openShift({ userId: actor, registerName: `REG-${tag}-C`, openingCash: 0 });
     const customer = await makeCustomer();

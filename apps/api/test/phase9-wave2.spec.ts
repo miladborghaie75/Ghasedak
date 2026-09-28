@@ -70,6 +70,11 @@ describe("Phase 9 Wave 2 — Check domain", () => {
         await prisma.posInvoiceItem.deleteMany({ where: { invoiceId: { in: invIds } } });
         await prisma.posInvoice.deleteMany({ where: { id: { in: invIds } } });
         await prisma.journalEntry.deleteMany({ where: { sourceType: "pos_invoice", sourceId: { in: invIds } } });
+        // projection را هم برگردان (SALE حذف شده = موجودی برمی‌گردد)
+        const removedMoves = await prisma.stockLedgerEntry.findMany({ where: { refType: "pos_invoice", refId: { in: invIds } }, select: { variantSku: true, qtyOut: true } });
+        for (const m of removedMoves) {
+          await prisma.productVariant.update({ where: { sku: m.variantSku }, data: { stockQty: { increment: m.qtyOut } } });
+        }
         await prisma.stockLedgerEntry.deleteMany({ where: { refType: "pos_invoice", refId: { in: invIds } } });
       } else {
         await prisma.check.deleteMany({ where: { id: { in: checkIds } } });
@@ -77,9 +82,11 @@ describe("Phase 9 Wave 2 — Check domain", () => {
     }
     await prisma.reminder.deleteMany({ where: { relatedEntityType: "check", relatedEntityId: { in: checkIds.length ? checkIds : ["__none__"] } } });
     await prisma.journalEntry.deleteMany({ where: { sourceType: "check_transition", sourceId: { contains: tag } } }).catch(() => undefined);
-    // purchase fixtures
-    const sup = await prisma.supplier.findFirst({ where: { name: { startsWith: `تست-تامین-${tag}` } }, select: { id: true } });
-    if (sup) {
+    // purchase fixtures — همهٔ تامین‌کننده‌های tag-دار (چند sup با پسوند random می‌سازد)
+    // ترتیب FK: check.supplierId → purchaseInvoice → supplierAccount → supplier
+    const sups = await prisma.supplier.findMany({ where: { name: { contains: tag } }, select: { id: true } });
+    for (const sup of sups) {
+      await prisma.check.deleteMany({ where: { supplierId: sup.id } });
       const invoices = await prisma.purchaseInvoice.findMany({ where: { supplierId: sup.id }, select: { id: true } });
       for (const inv of invoices) {
         await prisma.purchasePayment.deleteMany({ where: { invoiceId: inv.id } });
@@ -87,8 +94,8 @@ describe("Phase 9 Wave 2 — Check domain", () => {
         await prisma.purchaseInvoiceItem.deleteMany({ where: { invoiceId: inv.id } });
         await prisma.purchaseInvoice.deleteMany({ where: { id: inv.id } });
       }
-      await prisma.supplierAccount.deleteMany({ where: { supplierId: sup.id } }).catch(() => undefined);
-      await prisma.supplier.deleteMany({ where: { id: sup.id } }).catch(() => undefined);
+      await prisma.supplierAccount.deleteMany({ where: { supplierId: sup.id } });
+      await prisma.supplier.deleteMany({ where: { id: sup.id } });
     }
     // customers/supplier accounts touched
     const testCustomers = await prisma.customer.findMany({ where: { name: { contains: tag } }, select: { id: true } });

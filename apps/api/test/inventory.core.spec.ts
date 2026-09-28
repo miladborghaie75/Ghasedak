@@ -70,8 +70,13 @@ describe("InventoryService (integration با DB dev)", () => {
       await prisma.damageRecord.deleteMany({ where: { variantSku: sku } });
       await prisma.costLayer.deleteMany({ where: { variantSku: sku } });
       await prisma.reorderPolicy.deleteMany({ where: { variantSku: sku } });
+      await prisma.priceHistory.deleteMany({ where: { variantSku: sku } });
+      await prisma.variantPrice.deleteMany({ where: { variantSku: sku } });
+      await prisma.variantBarcode.deleteMany({ where: { variantSku: sku } });
       await prisma.productVariant.deleteMany({ where: { sku } });
     }
+    // خود Productها هم پاک شوند — قبلاً یتیم می‌ماندند (STEP 4)
+    await prisma.product.deleteMany({ where: { slug: { startsWith: "test-inv-" } } });
     await prisma.stockTransfer.deleteMany({
       where: { OR: [{ fromWarehouseId: { in: [warehouseId, warehouse2Id] } }, { toWarehouseId: { in: [warehouseId, warehouse2Id] } }] },
     });

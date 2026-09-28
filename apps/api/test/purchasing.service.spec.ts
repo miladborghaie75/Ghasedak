@@ -69,30 +69,44 @@ describe("PurchasingService (integration با DB dev)", () => {
   });
 
   afterAll(async () => {
-    // پاکسازی به ترتیب وابستگی FK — فقط داده‌های TEST-PRC
+    // پاک‌سازی کامل به ترتیب وابستگی FK — بدون swallow: شکست پاک‌سازی = شکست تست
+    // (الگوی قبلی .catch(() => undefined) واریانت/محصول یتیم جا می‌گذاشت — STEP 4 ممنوع)
+    // ۱) فاکتورها: پرداخت‌ها + AP + پیوست‌ها + اقلام + خود فاکتور
     for (const id of createdInvoices) {
       await prisma.purchasePayment.deleteMany({ where: { invoiceId: id } });
       await prisma.accountsPayable.deleteMany({ where: { refType: "purchase_invoice", refId: id } });
+      await prisma.attachment.deleteMany({ where: { ownerType: "purchase_invoice", ownerId: id } });
       await prisma.purchaseInvoiceItem.deleteMany({ where: { invoiceId: id } });
-      await prisma.purchaseInvoice.deleteMany({ where: { id } }).catch(() => undefined);
+      await prisma.purchaseInvoice.deleteMany({ where: { id } });
     }
+    // ۲) Mediaهای پیوست تست (بعد از attachmentها — FK restrict)
+    await prisma.media.deleteMany({ where: { storageKey: { startsWith: "test-att-" } } });
+    // ۳) GRN و PO
+    await prisma.goodsReceiptItem.deleteMany({ where: { receiptId: grnId } });
+    await prisma.goodsReceipt.deleteMany({ where: { id: grnId } });
+    if (poId) {
+      await prisma.purchaseOrderItem.deleteMany({ where: { orderId: poId } });
+      await prisma.purchaseOrder.deleteMany({ where: { id: poId } });
+    }
+    // ۴) واریانت تستی: PriceHistory/VariantPrice/Barcode/Ledger/CostLayer همه FK restrict هستند
+    //    — همان دلیلی که delete قبلی (swallow شده) شکست می‌خورد و یتیم می‌گذاشت
     for (const sku of testSkus) {
+      await prisma.priceHistory.deleteMany({ where: { variantSku: sku } });
+      await prisma.variantPrice.deleteMany({ where: { variantSku: sku } });
+      await prisma.variantBarcode.deleteMany({ where: { variantSku: sku } });
+      await prisma.stockReservation.deleteMany({ where: { variantSku: sku } });
       await prisma.stockLedgerEntry.deleteMany({ where: { variantSku: sku } });
       await prisma.costLayer.deleteMany({ where: { variantSku: sku } });
     }
-    await prisma.goodsReceiptItem.deleteMany({ where: { receiptId: grnId } }).catch(() => undefined);
-    await prisma.goodsReceipt.deleteMany({ where: { id: grnId } }).catch(() => undefined);
-    if (poId) {
-      await prisma.purchaseOrderItem.deleteMany({ where: { orderId: poId } }).catch(() => undefined);
-      await prisma.purchaseOrder.deleteMany({ where: { id: poId } }).catch(() => undefined);
-    }
-    for (const sku of testSkus) {
-      await prisma.productVariant.deleteMany({ where: { sku } }).catch(() => undefined);
-    }
-    await prisma.supplierAccount.deleteMany({ where: { supplierId } }).catch(() => undefined);
-    await prisma.supplier.deleteMany({ where: { id: supplierId } }).catch(() => undefined);
-    await prisma.auditLog.deleteMany({ where: { actorId: "test", action: { startsWith: "purchasing." } } }).catch(() => undefined);
-    await prisma.journalEntry.deleteMany({ where: { sourceType: { in: ["purchase", "purchase_invoice", "purchase_payment"] } } }).catch(() => undefined);
+    // ۵) محصول تستی — بعد از حذف واریانت‌ها
+    await prisma.productVariant.deleteMany({ where: { sku: { in: testSkus } } });
+    await prisma.product.deleteMany({ where: { slug: { startsWith: "test-prc-" } } });
+    // ۶) تامین‌کننده
+    await prisma.supplierAccount.deleteMany({ where: { supplierId } });
+    await prisma.supplier.deleteMany({ where: { id: supplierId } });
+    // ۷) audit و journal این دامنه (خطاها swallow نمی‌شوند)
+    await prisma.auditLog.deleteMany({ where: { action: { startsWith: "purchasing." } } });
+    await prisma.journalEntry.deleteMany({ where: { sourceType: { in: ["purchase", "purchase_invoice", "purchase_payment"] } } });
     await prisma.$disconnect();
   });
 
@@ -190,7 +204,7 @@ describe("PurchasingService (integration با DB dev)", () => {
     d = await service.getInvoiceDetail(inv0);
     expect(d.attachments).toHaveLength(0);
 
-    await prisma.media.delete({ where: { id: media.id } }).catch(() => undefined);
+    await prisma.media.delete({ where: { id: media.id } });
     // audit attach/detach ثبت شده باشد
     const audits = await prisma.auditLog.findMany({ where: { entity: "PurchaseInvoice", entityId: inv0, action: { in: ["purchasing.invoice.attach", "purchasing.invoice.detach"] } } });
     expect(audits.length).toBeGreaterThanOrEqual(2);

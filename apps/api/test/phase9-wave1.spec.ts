@@ -67,6 +67,11 @@ describe("Phase 9 Wave 1 — R1/R3", () => {
       for (const id of ids) {
         await prisma.domainEventOutbox.deleteMany({ where: { name: "CheckCreated", payload: { path: ["invoiceId"], equals: id } as never } });
       }
+      // projection را هم برگردان (SALE حذف شده = موجودی برمی‌گردد) — وگرنه projection از ledger فاصله می‌گیرد
+      const removedMoves = await prisma.stockLedgerEntry.findMany({ where: { refType: "pos_invoice", refId: { in: ids } }, select: { variantSku: true, qtyOut: true } });
+      for (const m of removedMoves) {
+        await prisma.productVariant.update({ where: { sku: m.variantSku }, data: { stockQty: { increment: m.qtyOut } } });
+      }
       await prisma.stockLedgerEntry.deleteMany({ where: { refType: "pos_invoice", refId: { in: ids } } });
       await prisma.numberSeries.update({ where: { scope: "pos_invoice" }, data: { nextNumber: { decrement: ids.length } } }).catch(() => undefined);
     }
