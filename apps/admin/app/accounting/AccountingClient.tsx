@@ -7,6 +7,14 @@ interface TBRow { code: string; name: string; debit: string; credit: string; }
 interface Integrity { balanced: boolean; debit: string; credit: string; }
 interface PnL { revenue: string; cogs: string; grossProfit: string; expenses: string; netProfit: string; grossMargin: number | null; netMargin: number | null; }
 interface Monthly { month: number; revenue: string; expense: string; }
+/** فاز ۱۱ (P3): ترازنامه از GL */
+interface BalanceSheet {
+  assets: string; liabilities: string; equityBase: string; retainedEarnings: string; equity: string;
+  balanced: boolean; difference: string;
+  detail: Array<{ code: string; name: string; net: string }>;
+}
+/** فاز ۱۱ (P3): گردش حساب */
+interface TurnoverRow { code: string; name: string; type: string; opening: string; debit: string; credit: string; closing: string; }
 interface EntryRow { id: string; number: string; date: string; description: string | null; lines: Array<{ account: { code: string; name: string }; debit: string; credit: string }>; }
 interface SaleRow { number: string; total: string; party: string; channel: string; kind: string; createdAt: string; }
 interface AccountRow { code: string; name: string; type: string; }
@@ -28,6 +36,8 @@ const TABS = [
   { key: "entries", label: "اسناد" },
   { key: "manual", label: "سند دستی" },
   { key: "tree", label: "درخت حساب‌ها" },
+  { key: "balancesheet", label: "ترازنامه" },
+  { key: "turnover", label: "گردش حساب" },
   { key: "sales", label: "فاکتور فروش" },
   { key: "purchases", label: "فاکتور خرید" },
   { key: "payroll", label: "حقوق و دستمزد" },
@@ -48,6 +58,8 @@ export default function AccountingClient() {
   const [sales, setSales] = useState<SaleRow[]>([]);
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [tree, setTree] = useState<TreeAccount[]>([]);
+  const [bs, setBs] = useState<BalanceSheet | null>(null);
+  const [turnover, setTurnover] = useState<TurnoverRow[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [ledger, setLedger] = useState<{ account: { code: string; name: string; isActive: boolean }; items: AccountLedgerLine[] } | null>(null);
   const [childForm, setChildForm] = useState<{ parentId: string | null; code: string; name: string }>({ parentId: null, code: "", name: "" });
@@ -102,6 +114,12 @@ export default function AccountingClient() {
     } else if (t === "purchases") {
       const r = await call<{ items: unknown[] }>("/admin/accounting/purchase-invoices");
       if (!r.ok) setError(r.error?.message ?? "خطا");
+    } else if (t === "balancesheet") {
+      const r = await call<BalanceSheet>("/admin/accounting/balance-sheet");
+      if (r.ok && r.data) setBs(r.data); else setError(r.error?.message ?? "خطا");
+    } else if (t === "turnover") {
+      const r = await call<{ items: TurnoverRow[] }>("/admin/accounting/account-turnover");
+      if (r.ok && r.data) setTurnover(r.data.items); else setError(r.error?.message ?? "خطا");
     }
   };
 
@@ -485,6 +503,59 @@ export default function AccountingClient() {
           </div>
           <button type="submit" className="mt-4 h-10 rounded-full bg-primary px-6 text-sm font-black text-on-accent">ثبت سند حقوق</button>
         </form>
+      ) : null}
+
+      {/* فاز ۱۱ (P3): ترازنامه از GL */}
+      {tab === "balancesheet" ? (
+        <div className="flex flex-col gap-4">
+          {bs ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">دارایی‌ها</p><p className="mt-1 text-lg font-black tabular-nums">{fa(bs.assets)}</p></div>
+                <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">بدهی‌ها</p><p className="mt-1 text-lg font-black tabular-nums">{fa(bs.liabilities)}</p></div>
+                <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">حقوق صاحبان سهام</p><p className="mt-1 text-lg font-black tabular-nums">{fa(bs.equity)}</p><p className="text-[10px] text-ink/50">سرمایه: {fa(bs.equityBase)} + سود جاری: {fa(bs.retainedEarnings)}</p></div>
+              </div>
+              <div className={`rounded-card border p-3 text-sm font-bold ${bs.balanced ? "border-app-ok/30 bg-app-ok/5 text-app-ok" : "border-app-err/30 bg-app-err/5 text-app-err"}`}>
+                {bs.balanced ? "تراز برقرار است ✓" : `عدم توازن: ${fa(bs.difference)}`}
+              </div>
+              <div className="overflow-x-auto rounded-card border border-line bg-surface">
+                <table className="w-full text-sm">
+                  <thead className="bg-ink/5 text-xs text-ink/60"><tr><th className="px-4 py-2 text-start">کد</th><th className="px-4 py-2 text-start">حساب</th><th className="px-4 py-2 text-start">مانده</th></tr></thead>
+                  <tbody>
+                    {bs.detail.map((d) => (
+                      <tr key={d.code} className="border-t border-line/60"><td className="px-4 py-2 font-mono text-xs">{d.code}</td><td className="px-4 py-2">{d.name}</td><td className="px-4 py-2 tabular-nums">{fa(d.net)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* فاز ۱۱ (P3): گردش حساب */}
+      {tab === "turnover" ? (
+        <div className="overflow-x-auto rounded-card border border-line bg-surface">
+          <table className="w-full text-sm">
+            <thead className="bg-ink/5 text-xs text-ink/60"><tr>
+              <th className="px-4 py-2 text-start">کد</th><th className="px-4 py-2 text-start">حساب</th>
+              <th className="px-4 py-2 text-start">افتتاحیه</th><th className="px-4 py-2 text-start">بدهکار دوره</th>
+              <th className="px-4 py-2 text-start">بستانکار دوره</th><th className="px-4 py-2 text-start">مانده پایان</th>
+            </tr></thead>
+            <tbody>
+              {turnover.map((t) => (
+                <tr key={t.code} className="border-t border-line/60">
+                  <td className="px-4 py-2 font-mono text-xs">{t.code}</td>
+                  <td className="px-4 py-2">{t.name}</td>
+                  <td className="px-4 py-2 tabular-nums">{fa(t.opening)}</td>
+                  <td className="px-4 py-2 tabular-nums">{fa(t.debit)}</td>
+                  <td className="px-4 py-2 tabular-nums">{fa(t.credit)}</td>
+                  <td className="px-4 py-2 tabular-nums font-bold">{fa(t.closing)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : null}
     </div>
   );

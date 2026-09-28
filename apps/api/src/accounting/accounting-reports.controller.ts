@@ -52,6 +52,98 @@ export class AccountingReportsController {
     };
   }
 
+  /**
+   * فاز ۱۱ (P3): ترازنامه — از همان JournalLine (بدون محاسبه موازی):
+   * دارایی = Dr−Cr؛ بدهی/سرمایه = Cr−Dr؛ سود انباشته جاری = درآمد−بهای تمام‌شده−هزینه
+   * (تا قبل از بستن حساب‌ها، توازن: دارایی = بدهی + سرمایه + سود جاری)
+   */
+  @Get("balance-sheet")
+  @RequirePermission("accounting.reports")
+  async balanceSheet(@Query() _q: Record<string, string>) {
+    const accounts = await this.prisma.account.findMany();
+    const byId = new Map(accounts.map((a) => [a.id, a]));
+    const lines = await this.prisma.journalLine.findMany({
+      select: { accountId: true, debit: true, credit: true },
+    });
+    const nets: Record<string, bigint> = { ASSET: 0n, LIABILITY: 0n, EQUITY: 0n, REVENUE: 0n, COGS: 0n, EXPENSE: 0n };
+    const perAccount = new Map<string, { code: string; name: string; net: bigint }>();
+    for (const l of lines) {
+      const a = byId.get(l.accountId);
+      if (!a) continue;
+      const net = a.type === "ASSET" || a.type === "COGS" || a.type === "EXPENSE"
+        ? (l.debit ?? 0n) - (l.credit ?? 0n)
+        : (l.credit ?? 0n) - (l.debit ?? 0n);
+      nets[a.type] = (nets[a.type] ?? 0n) + net;
+      if (a.type === "ASSET" || a.type === "LIABILITY" || a.type === "EQUITY") {
+        const cur = perAccount.get(a.id) ?? { code: a.code, name: a.name, net: 0n };
+        cur.net += net;
+        perAccount.set(a.id, cur);
+      }
+    }
+    const retained = (nets.REVENUE ?? 0n) - (nets.COGS ?? 0n) - (nets.EXPENSE ?? 0n);
+    const assets = nets.ASSET ?? 0n;
+    const liabilities = nets.LIABILITY ?? 0n;
+    const equity = (nets.EQUITY ?? 0n) + retained;
+    const detail = [...perAccount.values()]
+      .map((x) => ({ code: x.code, name: x.name, net: x.net.toString() }))
+      .sort((x, y) => x.code.localeCompare(y.code));
+    return {
+      assets: assets.toString(),
+      liabilities: liabilities.toString(),
+      equityBase: (nets.EQUITY ?? 0n).toString(),
+      retainedEarnings: retained.toString(),
+      equity: equity.toString(),
+      balanced: assets === liabilities + equity,
+      difference: (assets - (liabilities + equity)).toString(),
+      detail,
+    };
+  }
+
+  /**
+   * فاز ۱۱ (P3): گردش حساب هر حساب در بازه — مانده ابتدای دوره، بدهکار/بستانکار دوره،
+   * مانده پایان دوره؛ همه از JournalLine با فیلتر تاریخ سند.
+   */
+  @Get("account-turnover")
+  @RequirePermission("accounting.reports")
+  async accountTurnover(@Query() q: { from?: string; to?: string }) {
+    const from = q.from ? new Date(q.from) : new Date(new Date().getFullYear(), 0, 1);
+    const to = q.to ? new Date(q.to) : new Date();
+    const accounts = await this.prisma.account.findMany({ orderBy: { code: "asc" } });
+    const opening = await this.prisma.journalLine.groupBy({
+      by: ["accountId"],
+      where: { entry: { date: { lt: from } } },
+      _sum: { debit: true, credit: true },
+    });
+    const period = await this.prisma.journalLine.groupBy({
+      by: ["accountId"],
+      where: { entry: { date: { gte: from, lte: to } } },
+      _sum: { debit: true, credit: true },
+    });
+    const openMap = new Map(opening.map((o) => [o.accountId, o]));
+    const periodMap = new Map(period.map((o) => [o.accountId, o]));
+    const items = accounts.map((a) => {
+      const o = openMap.get(a.id);
+      const p = periodMap.get(a.id);
+      const openDr = o?._sum.debit ?? 0n;
+      const openCr = o?._sum.credit ?? 0n;
+      const dr = p?._sum.debit ?? 0n;
+      const cr = p?._sum.credit ?? 0n;
+      const nature = a.type === "ASSET" || a.type === "COGS" || a.type === "EXPENSE" ? 1n : -1n;
+      const openingNet = (openDr - openCr) * nature;
+      const closingNet = openingNet + (dr - cr) * nature;
+      return {
+        code: a.code,
+        name: a.name,
+        type: a.type,
+        opening: openingNet.toString(),
+        debit: dr.toString(),
+        credit: cr.toString(),
+        closing: closingNet.toString(),
+      };
+    });
+    return { from: from.toISOString(), to: to.toISOString(), items };
+  }
+
   /** روند ماهانه درآمد/هزینه — برای نمودار داشبورد */
   @Get("monthly")
   @RequirePermission("accounting.reports")
