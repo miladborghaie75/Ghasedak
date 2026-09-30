@@ -8,9 +8,10 @@ import { AdminPanelController } from "./admin-panel.controller";
 import { PublicThemeController } from "./public-theme.controller";
 import { CapabilitiesController } from "./capabilities.controller";
 import { MediaServeController } from "./media-serve.controller";
+import { CredentialsController } from "./credentials.controller";
 
 @Module({
   imports: [PrismaModule, InventoryModule, AccountingModule, PricingModule, EventsModule],
-  controllers: [AdminPanelController, PublicThemeController, CapabilitiesController, MediaServeController],
+  controllers: [AdminPanelController, PublicThemeController, CapabilitiesController, MediaServeController, CredentialsController],
 })
 export class AdminPanelModule {}

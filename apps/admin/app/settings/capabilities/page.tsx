@@ -11,16 +11,23 @@ interface CapabilityStatus {
   tax: { config: { rate?: number; enabled?: boolean } };
 }
 
+interface CredItem { configured: boolean; masked: string | null; source: string }
+interface CredStatus { items: Record<string, CredItem> }
+
 /** تنظیمات قابلیت‌ها — وضعیت credential واقعی؛ بدون پیام فیک (بند ۱۱۱) */
 export default function CapabilitiesSettings() {
   const { call, loading } = useAdminApi();
   const [st, setSt] = useState<CapabilityStatus | null>(null);
   const [msg, setMsg] = useState("");
   const [testMobile, setTestMobile] = useState("");
+  const [creds, setCreds] = useState<CredStatus | null>(null);
+  const [credDraft, setCredDraft] = useState<Record<string, string>>({});
 
   const load = async () => {
     const r = await call<CapabilityStatus>("/admin/capabilities/status");
     if (r.ok && r.data) setSt(r.data);
+    const c = await call<CredStatus>("/admin/capabilities/credentials");
+    if (c.ok && c.data) setCreds(c.data);
   };
   useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -33,6 +40,30 @@ export default function CapabilitiesSettings() {
   const testSms = async () => {
     const r = await call<{ ok: boolean }>("/admin/capabilities/sms/test", { method: "POST", body: JSON.stringify({ mobile: testMobile }) });
     setMsg(r.ok ? "پیام آزمایشی ارسال شد ✅" : r.error?.message ?? "خطا");
+    setTimeout(() => setMsg(""), 4000);
+  };
+
+  const saveCreds = async () => {
+    const payload: Record<string, string> = {};
+    for (const [k, v] of Object.entries(credDraft)) {
+      if (v !== "" && v !== undefined) payload[k] = v; // فقط فیلدهای پرشده ارسال می‌شوند
+    }
+    if (Object.keys(payload).length === 0) { setMsg("چیزی برای ذخیره وارد نشده است."); return; }
+    const r = await call<{ written: string[] }>("/admin/capabilities/credentials", { method: "POST", body: JSON.stringify(payload) });
+    if (r.ok) {
+      setCredDraft({});
+      setMsg("کلیدها ذخیره شد ✅ — برای اعمال کامل، API را ری‌استارت کنید.");
+      await load();
+    } else {
+      setMsg(r.error?.message ?? "خطا در ذخیرهٔ کلید");
+    }
+    setTimeout(() => setMsg(""), 6000);
+  };
+
+  const clearCred = async (key: string) => {
+    const r = await call(`/admin/capabilities/credentials`, { method: "POST", body: JSON.stringify({ [key]: "" }) });
+    setMsg(r.ok ? `${key} پاک شد.` : r.error?.message ?? "خطا");
+    if (r.ok) await load();
     setTimeout(() => setMsg(""), 4000);
   };
 
@@ -50,6 +81,61 @@ export default function CapabilitiesSettings() {
   return (
     <div className="space-y-6">
       {msg && <div className="rounded-card border border-line bg-surface px-4 py-2 text-sm">{msg}</div>}
+
+      {/* کلیدهای API (credential) — بند ۴۵: هرگز در DB، هرگز در پاسخ کامل */}
+      <section className="rounded-card border border-line bg-surface p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <h3 className="font-display text-base font-bold text-ink">کلیدهای API (credential)</h3>
+        </div>
+        <p className="mb-3 text-xs leading-6 text-muted">
+          کلیدها در فایل محلی <code className="rounded bg-bg px-1">apps/api/.env.local</code> (خارج از git) نوشته می‌شوند و در دیتابیس ذخیره نمی‌گردند؛ هیچ مقدار کامل هرگز در پنل نمایش داده نمی‌شود. پس از ذخیره، API را ری‌استارت کنید.
+        </p>
+        {creds ? (
+          <div className="overflow-x-auto rounded-card border border-line">
+            <table className="w-full text-xs">
+              <thead className="bg-ink/5 text-muted"><tr><th className="px-3 py-2 text-start">کلید</th><th className="px-3 py-2 text-start">وضعیت</th><th className="px-3 py-2 text-start">مقدار فعلی (ماسک)</th><th className="px-3 py-2 text-start">مقدار جدید</th><th className="px-3 py-2"></th></tr></thead>
+              <tbody>
+                {Object.entries(creds.items).map(([k, it]) => (
+                  <tr key={k} className="border-t border-line/60">
+                    <td className="px-3 py-2 font-mono text-[11px]" dir="ltr">{k}</td>
+                    <td className="px-3 py-2">
+                      {it.configured
+                        ? <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-ok">تنظیم شده ({it.source === "env" ? "env" : "فایل"})</span>
+                        : <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-err">تنظیم نشده</span>}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-[11px] text-muted" dir="ltr">{it.masked ?? "—"}</td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="password"
+                        autoComplete="off"
+                        value={credDraft[k] ?? ""}
+                        onChange={(e) => setCredDraft((d) => ({ ...d, [k]: e.target.value }))}
+                        placeholder={it.configured ? "(بدون تغییر اگر خالی بماند)" : "کلید را وارد کنید"}
+                        className="w-56 rounded-lg border border-line bg-bg px-2 py-1.5 font-mono text-[11px]"
+                        dir="ltr"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      {it.configured ? (
+                        <button onClick={() => void clearCred(k)} className="rounded-lg border border-app-err/40 px-2 py-1 text-[11px] font-bold text-app-err">پاک‌کردن</button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-xs text-muted">در حال بارگذاری وضعیت کلیدها…</p>
+        )}
+        <button
+          onClick={() => void saveCreds()}
+          disabled={loading}
+          className="mt-3 rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-accent disabled:opacity-40"
+        >
+          ذخیرهٔ کلیدهای واردشده
+        </button>
+      </section>
 
       {/* SMS */}
       <section className="rounded-card border border-line bg-surface p-5">

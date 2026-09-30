@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -163,7 +164,86 @@ export class CapabilitiesController {
   @RequirePermission("media.view")
   async listMedia() {
     const items = await this.prisma.media.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
-    return { items: items.map((m) => ({ ...m, url: `/api/media/${m.storageKey}` })) };
+    // sizeBytes از نوع BigInt است — قبل از JSON.stringify به number تبدیل می‌شود
+    return {
+      items: items.map((m) => ({
+        id: m.id, kind: m.kind, storageKey: m.storageKey, mime: m.mime,
+        sizeBytes: Number(m.sizeBytes), width: m.width, height: m.height,
+        alt: m.alt, title: m.title, caption: m.caption, createdAt: m.createdAt,
+        url: `/api/media/${m.storageKey}`,
+      })),
+    };
+  }
+
+  /** فاز ۱۲ — جزئیات کامل یک فایل رسانه‌ای + رفرنس‌های استفاده */
+  @Get("media/:id")
+  @RequirePermission("media.view")
+  async mediaDetail(@Param("id") id: string) {
+    const m = await this.prisma.media.findUnique({ where: { id } });
+    if (!m) throw new BadRequestException({ code: "NOT_FOUND", message: "فایل یافت نشد." });
+    const [inProducts, inBrands, inCategories] = await Promise.all([
+      this.prisma.productImage.count({ where: { mediaId: id } }),
+      this.prisma.brand.count({ where: { logoId: id } }),
+      this.prisma.category.count({ where: { imageId: id } }),
+    ]);
+    return {
+      id: m.id, kind: m.kind, storageKey: m.storageKey, mime: m.mime,
+      sizeBytes: Number(m.sizeBytes), width: m.width, height: m.height,
+      alt: m.alt, title: m.title, caption: m.caption, createdAt: m.createdAt,
+      url: `/api/media/${m.storageKey}`,
+      usage: { products: inProducts, brands: inBrands, categories: inCategories, total: inProducts + inBrands + inCategories },
+    };
+  }
+
+  /** فاز ۱۲ — ویرایش متادیتا (alt/عنوان/توضیحات) */
+  @Patch("media/:id")
+  @RequirePermission("media.manage")
+  async mediaUpdate(@Param("id") id: string, @Body() body: { alt?: string; title?: string; caption?: string }) {
+    const m = await this.prisma.media.findUnique({ where: { id } });
+    if (!m) throw new BadRequestException({ code: "NOT_FOUND", message: "فایل یافت نشد." });
+    const data: { alt?: string | null; title?: string | null; caption?: string | null } = {};
+    for (const k of ["alt", "title", "caption"] as const) {
+      if (body[k] !== undefined) data[k] = String(body[k] ?? "").slice(0, 500) || null;
+    }
+    const updated = await this.prisma.media.update({ where: { id }, data });
+    return { id: updated.id, alt: updated.alt, title: updated.title, caption: updated.caption, ok: true };
+  }
+
+  /** فاز ۱۲ — جایگزینی فایل: فایل جدید با key جدید (immutable) و ردیف همان id به‌روز می‌شود؛
+   *  فایل قبلی بعد از موفقیت حذف می‌شود (هیچ لینک دائمی به key قبلی لازم نیست — UI همیشه url فعلی ردیف را می‌گیرد). */
+  @Post("media/:id/replace")
+  @RequirePermission("media.manage")
+  async mediaReplace(@Param("id") id: string, @Body() body: { filename: string; mime: string; dataBase64: string }) {
+    const m = await this.prisma.media.findUnique({ where: { id } });
+    if (!m) throw new BadRequestException({ code: "NOT_FOUND", message: "فایل یافت نشد." });
+    if (!body.dataBase64 || !body.mime || !ALLOWED.has(body.mime)) {
+      throw new BadRequestException({ code: "MEDIA_TYPE", message: "فرمت مجاز: jpg/png/webp/pdf" });
+    }
+    const buf = Buffer.from(body.dataBase64, "base64");
+    if (buf.length === 0 || buf.length > MAX_UPLOAD) {
+      throw new BadRequestException({ code: "MEDIA_SIZE", message: "حجم فایل حداکثر ۱۰ مگابایت." });
+    }
+    const spec = ALLOWED.get(body.mime)!;
+    for (let i = 0; i < spec.magic.length; i++) {
+      if (buf[i] !== spec.magic[i]) {
+        throw new BadRequestException({ code: "MEDIA_MAGIC", message: "محتوای فایل با فرمت اعلام‌شده هم‌خوان نیست." });
+      }
+    }
+    fs.mkdirSync(MEDIA_DIR, { recursive: true });
+    const newKey = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}${spec.ext}`;
+    const safeNew = path.resolve(MEDIA_DIR, newKey);
+    if (!safeNew.startsWith(MEDIA_DIR)) throw new BadRequestException({ code: "PATH", message: "مسیر نامعتبر." });
+    fs.writeFileSync(safeNew, buf);
+    const updated = await this.prisma.media.update({
+      where: { id },
+      data: { storageKey: newKey, mime: body.mime, kind: body.mime === "application/pdf" ? "doc" : "image", sizeBytes: BigInt(buf.length) },
+    });
+    // حذف فایل قدیمی — بعد از موفقیت آپدیت (اگر وسطش crash شود فقط فایل یتیم می‌ماند، ردیف خراب نمی‌شود)
+    const oldSafe = path.resolve(MEDIA_DIR, m.storageKey);
+    if (oldSafe.startsWith(MEDIA_DIR) && m.storageKey !== newKey && fs.existsSync(oldSafe)) {
+      try { fs.unlinkSync(oldSafe); } catch { /* فایل قبلی مهم نیست */ }
+    }
+    return { id: updated.id, url: `/api/media/${newKey}`, key: newKey, ok: true };
   }
 
   @Delete("media/:id")
