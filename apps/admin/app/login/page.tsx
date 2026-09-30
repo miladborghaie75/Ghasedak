@@ -34,11 +34,11 @@ async function loginAction(formData: FormData): Promise<void> {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; reset?: string }>;
 }) {
   const me = await getIdentity();
   if (me) redirect("/");
-  const { error } = await searchParams;
+  const { error, reset } = await searchParams;
   return (
     <div className="flex min-h-dvh items-center justify-center p-6">
       <form action={loginAction} className="w-full max-w-sm rounded-3xl border border-line bg-surface p-8">
@@ -49,6 +49,11 @@ export default async function LoginPage({
         {error ? (
           <div role="alert" className="mb-4 rounded-xl bg-err/10 px-3 py-2 text-sm text-err">
             ایمیل یا رمز نادرست است.
+          </div>
+        ) : null}
+        {reset ? (
+          <div role="status" className="mb-4 rounded-xl bg-ok/10 px-3 py-2 text-sm text-ok">
+            رمز با موفقیت تغییر کرد — با رمز جدید وارد شوید.
           </div>
         ) : null}
         <label className="mb-1 block text-sm text-ink" htmlFor="email">
@@ -79,6 +84,9 @@ export default async function LoginPage({
         >
           ورود
         </button>
+        <a href="/forgot-password" className="mt-3 block text-center text-xs text-muted hover:underline">
+          رمز عبور را فراموش کرده‌اید؟
+        </a>
         <p className="mt-4 rounded-xl bg-primary-soft px-3 py-2 text-[11px] leading-5 text-deep">
           حساب‌های توسعه (DEMO): <span dir="ltr">admin@ghasedak.demo</span> · رمز:{" "}
           <span dir="ltr">Ghasedak#Demo1</span>
