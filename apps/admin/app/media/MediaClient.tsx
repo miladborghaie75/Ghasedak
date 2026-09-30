@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAdminApi } from "@/components/useAdminApi";
 
 interface MediaRow {
@@ -16,12 +16,26 @@ interface MediaDetail extends MediaRow {
 const fa = (n: number | string) => Number(n).toLocaleString("fa-IR");
 const faDate = (iso: string) => new Date(iso).toLocaleString("fa-IR");
 
-/** Media Library — آپلود/جزئیات/ویرایش/جایگزینی/حذف (بند ۳۵/۱۱۰) */
+/** حجم خوانا — فاز ۱۴ شکاف رسانه */
+const humanSize = (b: number) => {
+  if (b >= 1024 * 1024) return `${(b / (1024 * 1024)).toLocaleString("fa-IR", { maximumFractionDigits: 1 })} مگابایت`;
+  if (b >= 1024) return `${(b / 1024).toLocaleString("fa-IR", { maximumFractionDigits: 0 })} کیلوبایت`;
+  return `${fa(b)} بایت`;
+};
+
+const KIND_TABS: Array<{ kind: string; label: string; icon: string }> = [
+  { kind: "image", label: "تصاویر", icon: "🖼️" },
+  { kind: "video", label: "ویدیو", icon: "🎬" },
+  { kind: "doc", label: "اسناد", icon: "📄" },
+];
+
+/** Media Library — آپلود/فیلتر نوع/دانلود/کپی لینک/جزئیات/جایگزینی/حذف (بند ۳۵/۱۱۰ + فاز ۱۴ شکاف رسانه) */
 export default function MediaLibrary() {
   const { call, loading } = useAdminApi();
   const [items, setItems] = useState<MediaRow[]>([]);
   const [msg, setMsg] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [filter, setFilter] = useState<string>("all");
   const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [altDraft, setAltDraft] = useState("");
@@ -30,6 +44,7 @@ export default function MediaLibrary() {
   const [busy, setBusy] = useState(false);
   const [replaceFile, setReplaceFile] = useState<File | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const load = async () => {
     const r = await call<{ items: MediaRow[] }>("/admin/capabilities/media");
@@ -37,8 +52,18 @@ export default function MediaLibrary() {
   };
   useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** فاز ۱۴: تب‌های فیلتر نوع — از دادهٔ واقعی، با شمارش */
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: items.length };
+    for (const m of items) c[m.kind] = (c[m.kind] ?? 0) + 1;
+    return c;
+  }, [items]);
+  const visibleKinds = KIND_TABS.filter((t) => counts[t.kind] > 0);
+  const filtered = filter === "all" ? items : items.filter((m) => m.kind === filter);
+
   const openDetail = async (id: string) => {
     setMsg("");
+    setCopied(false);
     const r = await call<MediaDetail>(`/admin/capabilities/media/${id}`);
     if (r.ok && r.data) {
       setDetail(r.data);
@@ -91,6 +116,33 @@ export default function MediaLibrary() {
     if (r.ok) await load();
   };
 
+  /** فاز ۱۴: دانلود مستقیم — endpoint با Content-Disposition: attachment */
+  const downloadUrl = detail ? `/api/admin/capabilities/media/${detail.id}/download` : "#";
+
+  /** فاز ۱۴: کپی لینک عمومی (آدرس مطلق از سرور) */
+  const copyLink = async () => {
+    if (!detail) return;
+    const r = await call<{ absolute: string; url: string }>(`/admin/capabilities/media/${detail.id}/link`);
+    if (r.ok && r.data) {
+      const text = r.data.absolute || r.data.url;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        // fallback مرورگرهای قدیمی
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+      }
+      setCopied(true);
+      setMsg("لینک کپی شد ✅");
+    } else {
+      setMsg(r.error?.message ?? "خطا در گرفتن لینک");
+    }
+  };
+
   const doReplace = async () => {
     if (!detail || !replaceFile) return;
     setBusy(true);
@@ -135,7 +187,7 @@ export default function MediaLibrary() {
       <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed border-line bg-surface p-8 text-center transition-colors hover:border-primary">
         <span className="text-2xl">🖼️</span>
         <span className="text-sm font-bold text-ink">{uploading ? "در حال آپلود…" : "فایل را انتخاب کنید یا بکشید"}</span>
-        <span className="text-[11px] text-muted">JPG / PNG / WebP / PDF — حداکثر ۱۰MB (اعتبارسنجی محتوا انجام می‌شود)</span>
+        <span className="text-[11px] text-muted">JPG / PNG / WebP / PDF — حداکثر ۱۰MB (ابعاد تصویر خودکار ثبت می‌شود)</span>
         <input
           type="file"
           accept="image/jpeg,image/png,image/webp,application/pdf"
@@ -144,11 +196,36 @@ export default function MediaLibrary() {
         />
       </label>
 
-      {items.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted">هنوز فایلی آپلود نشده است.</p>
+      {/* ---------- فاز ۱۴: تب‌های فیلتر نوع فایل ---------- */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => setFilter("all")}
+          className={`h-8 rounded-full border px-3 text-xs font-bold transition-colors ${
+            filter === "all" ? "border-primary bg-primary text-on-accent" : "border-line bg-surface text-ink/70 hover:border-primary/50"
+          }`}
+        >
+          همه ({fa(counts.all ?? 0)})
+        </button>
+        {visibleKinds.map((t) => (
+          <button
+            key={t.kind}
+            onClick={() => setFilter(t.kind)}
+            className={`h-8 rounded-full border px-3 text-xs font-bold transition-colors ${
+              filter === t.kind ? "border-primary bg-primary text-on-accent" : "border-line bg-surface text-ink/70 hover:border-primary/50"
+            }`}
+          >
+            {t.icon} {t.label} ({fa(counts[t.kind] ?? 0)})
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted">
+          {filter === "all" ? "هنوز فایلی آپلود نشده است." : "در این دسته فایلی نیست."}
+        </p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
-          {items.map((m) => (
+          {filtered.map((m) => (
             <button
               key={m.id}
               onClick={() => void openDetail(m.id)}
@@ -159,7 +236,7 @@ export default function MediaLibrary() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={m.url} alt={m.alt ?? ""} className="h-28 w-full object-cover" />
               ) : (
-                <div className="flex h-28 items-center justify-center text-3xl">📄</div>
+                <div className="flex h-28 items-center justify-center text-3xl">{m.kind === "video" ? "🎬" : "📄"}</div>
               )}
               <p className="truncate px-2 py-1 text-[10px] text-muted">{m.alt ?? m.mime}</p>
             </button>
@@ -184,15 +261,19 @@ export default function MediaLibrary() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={detail.url} alt={detail.alt ?? ""} className="max-h-56 rounded object-contain" />
               ) : (
-                <div className="flex h-40 items-center justify-center text-5xl">📄</div>
+                <div className="flex h-40 items-center justify-center text-5xl">{detail.kind === "video" ? "🎬" : "📄"}</div>
               )}
             </div>
 
             <dl className="mb-3 space-y-1.5 text-xs">
               <div className="flex justify-between gap-2"><dt className="text-muted">نام فایل:</dt><dd className="truncate font-mono text-[11px]" dir="ltr">{detail.storageKey}</dd></div>
               <div className="flex justify-between"><dt className="text-muted">نوع فایل:</dt><dd dir="ltr">{detail.mime}</dd></div>
-              <div className="flex justify-between"><dt className="text-muted">حجم:</dt><dd className="tabular-nums">{fa(detail.sizeBytes)} بایت</dd></div>
-              {detail.width ? <div className="flex justify-between"><dt className="text-muted">ابعاد:</dt><dd className="tabular-nums" dir="ltr">{fa(detail.width)}×{fa(detail.height ?? 0)}</dd></div> : null}
+              <div className="flex justify-between"><dt className="text-muted">حجم:</dt><dd className="tabular-nums">{humanSize(detail.sizeBytes)} ({fa(detail.sizeBytes)} بایت)</dd></div>
+              {detail.width ? (
+                <div className="flex justify-between"><dt className="text-muted">ابعاد:</dt><dd className="tabular-nums" dir="ltr">{fa(detail.width)}×{fa(detail.height ?? 0)}</dd></div>
+              ) : detail.kind === "image" ? (
+                <div className="flex justify-between"><dt className="text-muted">ابعاد:</dt><dd className="text-muted">ثبت نشده (فایل قدیمی)</dd></div>
+              ) : null}
               <div className="flex justify-between"><dt className="text-muted">تاریخ:</dt><dd className="tabular-nums">{faDate(detail.createdAt)}</dd></div>
               <div className="flex justify-between">
                 <dt className="text-muted">در حال استفاده:</dt>
@@ -204,7 +285,30 @@ export default function MediaLibrary() {
               </div>
             </dl>
 
-            <a href={detail.url} target="_blank" rel="noreferrer" className="mb-3 block text-xs font-bold text-primary hover:underline">توزیع در جدید ↗</a>
+            {/* ---------- فاز ۱۴: اقدامات — گشایش/کپی لینک/دانلود ---------- */}
+            <div className="mb-3 grid grid-cols-3 gap-2">
+              <a
+                href={detail.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-9 items-center justify-center rounded-lg border border-line text-xs font-bold hover:border-primary/60"
+              >
+                گشایش در تب جدید ↗
+              </a>
+              <button
+                onClick={() => void copyLink()}
+                className="h-9 rounded-lg border border-line text-xs font-bold hover:border-primary/60"
+              >
+                {copied ? "کپی شد ✓" : "کپی لینک"}
+              </button>
+              <a
+                href={downloadUrl}
+                className="flex h-9 items-center justify-center rounded-lg bg-primary text-xs font-bold text-on-accent"
+                download
+              >
+                دانلود ⬇
+              </a>
+            </div>
 
             <div className="mb-3 space-y-2">
               <label className="block text-xs font-bold">متن جایگزین (alt)</label>
