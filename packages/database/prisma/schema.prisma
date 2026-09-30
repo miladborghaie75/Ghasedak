@@ -48,7 +48,8 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  adminSessions AdminSession[]
+  adminSessions      AdminSession[]
+  passwordResetTokens PasswordResetToken[]
   orders        Order[]
   reviews       Review[]
   auditLogs     AuditLog[]
@@ -81,6 +82,24 @@ model AdminSession {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// بند ۳ — بازیابی رمز: توکن یک‌بارمصرف هش‌شده، منقضی‌شدنی، مصرف‌شدنی
+model PasswordResetToken {
+  id           String   @id @default(cuid())
+  userId       String
+  tokenHash    String   @unique
+  purpose      String   @default("admin") // admin | customer
+  channel      String   @default("email") // email | sms
+  sentTo       String // ایمیل/شمارهٔ مقصد واقعی برای audit
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Permission {
