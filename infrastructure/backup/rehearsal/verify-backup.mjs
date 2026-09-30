@@ -5,7 +5,7 @@
  * usage: node verify-backup.mjs <backupDir>
  */
 import { createHash } from "node:crypto";
-import { readFileSync, statSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 const dir = process.argv[2];
@@ -50,4 +50,21 @@ console.log(`rows (manifest): ${totalRows}`);
 if (problems.length) console.log(`PROBLEMS:\n- ` + problems.join("\n- "));
 const verdict = manifestOk && bad === 0;
 console.log(verdict ? "BACKUP_VERIFY_PASSED" : "BACKUP_VERIFY_FAILED");
+
+// امضای نتیجه کنار manifest — منبعِ نشان «تأییدشده» در endpoint وضعیت و پنل ادمین (بند ۴)
+try {
+  writeFileSync(
+    join(dir, "verify.json"),
+    JSON.stringify({
+      ok: verdict,
+      at: new Date().toISOString(),
+      files: `${ok}/${Object.keys(raw.tables ?? {}).length}`,
+      rows: totalRows,
+      manifestSha256Valid: manifestOk,
+      tool: "verify-backup.mjs v2",
+    }, null, 2),
+  );
+} catch (e) {
+  console.error(`verify.json write skipped: ${e.message}`);
+}
 process.exit(verdict ? 0 : 1);
