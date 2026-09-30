@@ -181,9 +181,15 @@ describe("Phase 9 Wave 1 — R1/R3", () => {
       const dr = lines.filter((l) => l.debit > 0n).reduce((a, l) => a + l.debit, 0n);
       const cr = lines.filter((l) => l.credit > 0n).reduce((a, l) => a + l.credit, 0n);
       expect(dr).toBe(cr); // متوازن
-      expect(dr).toBe(BigInt(amount));
       expect(lines.find((l) => l.account.code === "1220")?.debit).toBe(BigInt(amount));
       expect(lines.find((l) => l.account.code === "4000")?.credit).toBe(BigInt(amount));
+      // بند ۱: سند فروش شامل COGS (Dr 5000/Cr 1200 به بهای تمام‌شده) — جمع سند = فروش + COGS
+      const cogs = dr - BigInt(amount);
+      const dr5000 = lines.filter((l) => l.account.code === "5000").reduce((a, l) => a + l.debit, 0n);
+      const cr1200 = lines.filter((l) => l.account.code === "1200").reduce((a, l) => a + l.credit, 0n);
+      expect(dr5000).toBe(cogs);
+      expect(cr1200).toBe(cogs);
+      expect(dr).toBe(BigInt(amount) + cogs);
 
       const outbox = await prisma.domainEventOutbox.findFirst({ where: { name: "CheckCreated", payload: { path: ["invoiceId"], equals: invoice.id } as never } });
       expect(outbox).toBeTruthy();
