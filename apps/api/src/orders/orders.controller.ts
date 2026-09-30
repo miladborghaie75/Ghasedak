@@ -22,6 +22,31 @@ export class OrdersController {
     return { ok: true };
   }
 
+  /** ویرایش حرفه‌ای سفارش پرداخت‌نشده — بند ۶ فاز ۱۴: محاسبه دوباره + تاریخچه بازبینی */
+  @Post(":id/edit")
+  @RequirePermission("orders.update")
+  async edit(
+    @Param("id") id: string,
+    @Body() body: {
+      lines?: Array<{ sku: string; qty: number }>;
+      guestName?: string; guestMobile?: string;
+      address?: {
+        province: string; city: string; address: string; plaque: string; unit?: string; postalCode: string;
+      };
+      shippingMethodId?: string; reason?: string;
+    },
+    @Identity() actor?: { userId: string },
+  ) {
+    return this.orders.editOrder({ orderId: id, actorId: actor?.userId, ...body });
+  }
+
+  /** تاریخچهٔ بازبینی سفارش */
+  @Get(":id/revisions")
+  @RequirePermission("orders.view")
+  async revisions(@Param("id") id: string) {
+    return this.orders.orderRevisions(id);
+  }
+
   @Get()
   @RequirePermission("orders.view")
   list(@Query() q: { page?: string; limit?: string; status?: string }) {
