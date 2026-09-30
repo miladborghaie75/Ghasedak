@@ -14,8 +14,8 @@
   --color-ink: #29232f;
   --color-muted: #756a7b;
   --color-line: #e3dce8;
-  --color-primary: #a67dea;
-  --color-primary-strong: #8f64d0;
+  --color-primary: #8a5bc9;
+  --color-primary-strong: #7a4ab8;
   --color-primary-soft: #eee6f8;
   --color-deep: #3b2948;
   --color-ok: #3f8a68;
@@ -86,6 +86,7 @@
   --color-app-info: var(--app-info);
   --color-app-overlay: var(--app-overlay);
   --color-app-focus-ring: var(--app-focus-ring);
+  --color-on-accent: var(--app-on-accent);
 }
 
 /* سوییچ تم در بدنه <html> — کلاس‌های پایه (@theme) هم در شب بازنگری می‌شوند

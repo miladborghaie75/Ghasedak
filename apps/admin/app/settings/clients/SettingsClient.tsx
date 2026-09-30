@@ -13,7 +13,7 @@ interface ThemeSettings {
 }
 
 const DEFAULT_THEME: ThemeSettings = {
-  primary: "#A67DEA",
+  primary: "#8A5BC9",
   ink: "#1f1a2e",
   bg: "#faf7f2",
   fontHeading: "Vazirmatn",
@@ -69,7 +69,7 @@ export default function SettingsClient() {
   };
 
   const presets = [
-    { name: "بنفش قاصدک", primary: "#A67DEA", ink: "#1f1a2e", bg: "#faf7f2" },
+    { name: "بنفش قاصدک", primary: "#8A5BC9", ink: "#1f1a2e", bg: "#faf7f2" },
     { name: "صورتی گلبهی", primary: "#E5799A", ink: "#2d1f26", bg: "#fdf6f4" },
     { name: "زرشکی لاکچری", primary: "#9E3B54", ink: "#2a1a1f", bg: "#fbf5f4" },
     { name: "نیلی مدرن", primary: "#5B6FE6", ink: "#181c2e", bg: "#f5f6fb" },

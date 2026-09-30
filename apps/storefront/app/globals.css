@@ -16,8 +16,8 @@
   --color-muted: #756a7b;
   --color-line: #e3dce8;
   --color-plum: #3b2948;
-  --color-primary: #a67dea;
-  --color-primary-hover: #8f64d0;
+  --color-primary: #8a5bc9;
+  --color-primary-hover: #7a4ab8;
   --color-primary-strong: #6e46b8;
   --color-primary-light: #eee6f8;
   --color-primary-tint: #f6f1fc;
@@ -114,6 +114,7 @@
   --color-app-info: var(--app-info);
   --color-app-overlay: var(--app-overlay);
   --color-app-focus-ring: var(--app-focus-ring);
+  --color-on-accent: var(--app-on-accent);
 }
 
 /* اعداد فارسی جدولی برای قیمت‌ها */
@@ -222,6 +223,7 @@ html[data-theme="dark"] {
   --color-muted: #a99ec0;
   --color-line: #453855;
   --color-plum: #d9c8f2;
+  --color-primary: #c3a4f2;
   --color-primary-hover: #d0b7f5;
   --color-primary-strong: #c3a4f2;
   --color-primary-light: #443757;
