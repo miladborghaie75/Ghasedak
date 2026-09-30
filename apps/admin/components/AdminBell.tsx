@@ -40,7 +40,7 @@ export function AdminBell() {
         )}
       </button>
       {open && (
-        <div className="absolute end-0 top-10 z-50 w-72 rounded-card border border-line bg-surface p-2 shadow-clay-2">
+        <div className="absolute end-0 top-10 z-50 w-72 max-w-[calc(100vw-1.5rem)] rounded-card border border-line bg-surface p-2 shadow-clay-2">
           <p className="px-2 py-1 text-[11px] font-bold text-muted">۲۴ ساعت اخیر</p>
           {items.length === 0 ? (
             <p className="px-2 py-3 text-xs text-muted">اعلان جدیدی نیست.</p>

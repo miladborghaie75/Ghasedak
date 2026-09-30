@@ -65,7 +65,7 @@ export default function BrandsClient() {
       </form>
 
       <div className="overflow-x-auto rounded-card border border-line bg-surface">
-        <table className="w-full text-sm">
+        <div className="admin-table-wrap"><table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-right text-xs text-ink/60">
               <th className="px-4 py-3">نام</th><th className="px-4 py-3">وب‌سایت</th><th className="px-4 py-3">محصولات</th><th className="px-4 py-3">ترتیب</th><th className="px-4 py-3">وضعیت</th><th className="px-4 py-3"></th>
@@ -90,7 +90,7 @@ export default function BrandsClient() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   );

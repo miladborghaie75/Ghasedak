@@ -299,7 +299,7 @@ export default function AccountingClient() {
 
       {tab === "balance" ? (
         <div className="overflow-x-auto rounded-card border border-line bg-surface">
-          <table className="w-full text-sm">
+          <div className="admin-table-wrap"><table className="w-full text-sm">
             <thead><tr className="border-b border-line text-right text-xs text-ink/60">
               <th className="px-4 py-3">کد</th><th className="px-4 py-3">حساب</th><th className="px-4 py-3">بدهکار</th><th className="px-4 py-3">بستانکار</th>
             </tr></thead>
@@ -313,7 +313,7 @@ export default function AccountingClient() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
       ) : null}
 
@@ -367,7 +367,7 @@ export default function AccountingClient() {
                   <button onClick={() => reverse(e.id)} className="rounded-full border border-line px-3 py-1 text-[10px] font-bold text-ink/60">سند معکوس</button>
                 </div>
               </div>
-              <table className="mt-2 w-full text-xs">
+              <div className="admin-table-wrap"><table className="mt-2 w-full text-xs">
                 <tbody>
                   {e.lines.map((l, i) => (
                     <tr key={i}>
@@ -377,7 +377,7 @@ export default function AccountingClient() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           ))}
         </div>
@@ -385,7 +385,7 @@ export default function AccountingClient() {
 
       {tab === "sales" ? (
         <div className="overflow-x-auto rounded-card border border-line bg-surface">
-          <table className="w-full text-sm">
+          <div className="admin-table-wrap"><table className="w-full text-sm">
             <thead><tr className="border-b border-line text-right text-xs text-ink/60">
               <th className="px-4 py-3">شماره</th><th className="px-4 py-3">نوع</th><th className="px-4 py-3">طرف حساب</th><th className="px-4 py-3">کانال</th><th className="px-4 py-3">مبلغ</th><th className="px-4 py-3">تاریخ</th>
             </tr></thead>
@@ -401,7 +401,7 @@ export default function AccountingClient() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
       ) : null}
 
@@ -470,14 +470,14 @@ export default function AccountingClient() {
             </div>
           ) : null}
           <div className="overflow-x-auto rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead><tr className="border-b border-line text-right text-xs text-ink/60">
                 <th className="px-4 py-3">کد</th><th className="px-4 py-3">حساب</th><th className="px-4 py-3">نوع</th><th className="px-4 py-3">بدهکار</th><th className="px-4 py-3">بستانکار</th><th className="px-4 py-3">عملیات</th>
               </tr></thead>
               <tbody>
                 {tree.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-ink/50">حسابی ثبت نشده است.</td></tr> : tree.map((n) => renderNode(n, 0))}
               </tbody>
-            </table>
+            </table></div>
           </div>
           {ledger ? (
             <div className="rounded-card border border-line bg-surface p-4">
@@ -485,7 +485,7 @@ export default function AccountingClient() {
                 <h4 className="text-sm font-black" dir="ltr">{ledger.account.code} — {ledger.account.name} {!ledger.account.isActive ? <span className="text-[10px] text-app-err">(غیرفعال)</span> : null}</h4>
                 <button onClick={() => setLedger(null)} className="text-xs font-bold text-ink/50">بستن ✕</button>
               </div>
-              <table className="mt-3 w-full text-xs">
+              <div className="admin-table-wrap"><table className="mt-3 w-full text-xs">
                 <tbody>
                   {ledger.items.length === 0 ? <tr><td className="py-3 text-ink/50">گردشی ثبت نشده است.</td></tr> : ledger.items.map((l) => (
                     <tr key={`${l.entryId}-${l.debit}-${l.credit}`} className="border-b border-line/50 last:border-0">
@@ -496,7 +496,7 @@ export default function AccountingClient() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           ) : null}
         </div>
@@ -529,14 +529,14 @@ export default function AccountingClient() {
                 {bs.balanced ? "تراز برقرار است ✓" : `عدم توازن: ${fa(bs.difference)}`}
               </div>
               <div className="overflow-x-auto rounded-card border border-line bg-surface">
-                <table className="w-full text-sm">
+                <div className="admin-table-wrap"><table className="w-full text-sm">
                   <thead className="bg-ink/5 text-xs text-ink/60"><tr><th className="px-4 py-2 text-start">کد</th><th className="px-4 py-2 text-start">حساب</th><th className="px-4 py-2 text-start">مانده</th></tr></thead>
                   <tbody>
                     {bs.detail.map((d) => (
                       <tr key={d.code} className="border-t border-line/60"><td className="px-4 py-2 font-mono text-xs">{d.code}</td><td className="px-4 py-2">{d.name}</td><td className="px-4 py-2 tabular-nums">{fa(d.net)}</td></tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </div>
             </>
           ) : null}
@@ -546,7 +546,7 @@ export default function AccountingClient() {
       {/* فاز ۱۱ (P3): گردش حساب */}
       {tab === "turnover" ? (
         <div className="overflow-x-auto rounded-card border border-line bg-surface">
-          <table className="w-full text-sm">
+          <div className="admin-table-wrap"><table className="w-full text-sm">
             <thead className="bg-ink/5 text-xs text-ink/60"><tr>
               <th className="px-4 py-2 text-start">کد</th><th className="px-4 py-2 text-start">حساب</th>
               <th className="px-4 py-2 text-start">افتتاحیه</th><th className="px-4 py-2 text-start">بدهکار دوره</th>
@@ -564,7 +564,7 @@ export default function AccountingClient() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
       ) : null}
 
@@ -579,7 +579,7 @@ export default function AccountingClient() {
                 <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">خالص نقدینگی</p><p className="mt-1 text-lg font-black tabular-nums">{fa(cf.net)}</p></div>
               </div>
               <div className="overflow-x-auto rounded-card border border-line bg-surface">
-                <table className="w-full text-sm">
+                <div className="admin-table-wrap"><table className="w-full text-sm">
                   <thead className="bg-ink/5 text-xs text-ink/60"><tr><th className="px-4 py-2 text-start">ماه</th><th className="px-4 py-2 text-start">ورودی</th><th className="px-4 py-2 text-start">خروجی</th></tr></thead>
                   <tbody>
                     {cf.monthly.map((m) => (
@@ -590,7 +590,7 @@ export default function AccountingClient() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </div>
             </>
           ) : null}

@@ -175,7 +175,7 @@ export default function TreasuryClient() {
         <section className="space-y-3">
           <h2 className="font-bold">صندوق‌های نقد</h2>
           <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead className="bg-[var(--muted)]/40">
                 <tr><th className="p-2 text-right">نام</th><th className="p-2 text-right">نوع</th><th className="p-2 text-right">GL</th><th className="p-2 text-right">مانده جاری</th><th className="p-2 text-right">مانده دفتری</th><th className="p-2"></th></tr>
               </thead>
@@ -192,7 +192,7 @@ export default function TreasuryClient() {
                 ))}
                 {(accounts?.cash ?? []).length === 0 && <tr><td className="p-3 text-[var(--muted)]" colSpan={6}>صندوقی ثبت نشده است.</td></tr>}
               </tbody>
-            </table>
+            </table></div>
           </div>
           {/* عملیات حساب انتخاب‌شده */}
           {sel?.type === "cash" && (
@@ -207,7 +207,7 @@ export default function TreasuryClient() {
         <section className="space-y-3">
           <h2 className="font-bold">حساب‌های بانکی</h2>
           <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead className="bg-[var(--muted)]/40">
                 <tr><th className="p-2 text-right">نام</th><th className="p-2 text-right">بانک</th><th className="p-2 text-right">شماره حساب</th><th className="p-2 text-right">GL</th><th className="p-2 text-right">مانده جاری</th><th className="p-2 text-right">مانده دفتری</th><th className="p-2"></th></tr>
               </thead>
@@ -225,7 +225,7 @@ export default function TreasuryClient() {
                 ))}
                 {(accounts?.bank ?? []).length === 0 && <tr><td className="p-3 text-[var(--muted)]" colSpan={7}>حساب بانکی ثبت نشده است.</td></tr>}
               </tbody>
-            </table>
+            </table></div>
           </div>
 
           {sel?.type === "bank" && (
@@ -258,7 +258,7 @@ export default function TreasuryClient() {
                   </div>
                 )}
                 <div className="max-h-48 overflow-y-auto rounded-lg border border-[var(--border)]">
-                  <table className="w-full text-xs">
+                  <div className="admin-table-wrap"><table className="w-full text-xs">
                     <thead className="sticky top-0 bg-[var(--muted)]/40">
                       <tr><th className="p-1.5 text-right">تاریخ</th><th className="p-1.5 text-right">مبلغ</th><th className="p-1.5 text-right">شرح</th><th className="p-1.5 text-right">تطبیق</th></tr>
                     </thead>
@@ -273,7 +273,7 @@ export default function TreasuryClient() {
                       ))}
                       {(stmts ?? []).length === 0 && <tr><td className="p-2 text-[var(--muted)]" colSpan={4}>ردیفی ثبت نشده.</td></tr>}
                     </tbody>
-                  </table>
+                  </table></div>
                 </div>
                 {/* فاز ۹ — Wave 3: تأیید وصول چک از صورتحساب (Match ≠ Clear) */}
                 {sel && <StatementChecks bankAccountId={sel.id} />}

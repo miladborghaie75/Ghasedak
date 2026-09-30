@@ -162,7 +162,7 @@ export default function LabelPrintClient() {
         {rows.length === 0 ? (
           <p className="mt-2 text-xs text-muted">از نتایج بالا واریانت اضافه کنید. بارکد هر واریانت باید EAN-13 معتبر باشد.</p>
         ) : (
-          <table className="mt-3 w-full text-sm">
+          <div className="admin-table-wrap"><table className="mt-3 w-full text-sm">
             <thead>
               <tr className="border-b border-line text-right text-xs text-ink/60">
                 <th className="py-2">کالا</th><th className="py-2">SKU</th><th className="py-2">بارکد</th><th className="py-2">تعداد کپی</th><th></th>
@@ -187,7 +187,7 @@ export default function LabelPrintClient() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
 

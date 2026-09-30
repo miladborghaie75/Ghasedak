@@ -29,7 +29,7 @@ export default function AuditClient() {
     <div className="flex flex-col gap-4">
       {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
       <div className="overflow-x-auto rounded-card border border-line bg-surface">
-        <table className="w-full text-sm">
+        <div className="admin-table-wrap"><table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-right text-xs text-ink/60">
               <th className="px-4 py-3">زمان</th><th className="px-4 py-3">عملیات</th><th className="px-4 py-3">موجودیت</th>
@@ -50,7 +50,7 @@ export default function AuditClient() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
       {pages > 1 ? (
         <div className="flex items-center justify-center gap-2">

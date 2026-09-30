@@ -188,7 +188,7 @@ export default function PricingClient() {
 
       {/* جدول واریانت‌ها */}
       <div className="overflow-x-auto rounded-card border border-line bg-surface">
-        <table className="w-full text-sm">
+        <div className="admin-table-wrap"><table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-right text-xs text-ink/60">
               {canManage && <th className="px-3 py-3"></th>}
@@ -233,7 +233,7 @@ export default function PricingClient() {
             ))}
             {rows.length === 0 && <tr><td colSpan={canManage ? 7 : 6} className="px-4 py-8 text-center text-ink/50">واریانتی یافت نشد.</td></tr>}
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       {/* تاریخچه */}
@@ -247,7 +247,7 @@ export default function PricingClient() {
               بستن
             </button>
           </div>
-          <table className="w-full text-xs">
+          <div className="admin-table-wrap"><table className="w-full text-xs">
             <thead>
               <tr className="border-b border-line text-right text-ink/60">
                 <th className="py-2">قبلی</th>
@@ -267,7 +267,7 @@ export default function PricingClient() {
               ))}
               {history.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-ink/50">تغییری ثبت نشده است.</td></tr>}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
     </div>

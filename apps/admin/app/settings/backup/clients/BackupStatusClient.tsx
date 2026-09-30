@@ -115,7 +115,7 @@ export default function BackupStatusClient() {
       <section className="rounded-card border border-line bg-surface p-5">
         <h3 className="mb-3 font-display text-base font-bold text-ink">تاریخچهٔ اخیر</h3>
         <div className="overflow-hidden rounded-card border border-line">
-          <table className="w-full text-xs">
+          <div className="admin-table-wrap"><table className="w-full text-xs">
             <thead className="bg-ink/5 text-muted">
               <tr><th className="px-3 py-2 text-start">پوشه</th><th className="px-3 py-2">شروع</th><th className="px-3 py-2">ردیف‌ها</th><th className="px-3 py-2">وضعیت</th></tr>
             </thead>
@@ -132,7 +132,7 @@ export default function BackupStatusClient() {
               ))}
               {st.history.length === 0 && <tr><td colSpan={4} className="p-4 text-center text-muted">تاریخچه‌ای نیست.</td></tr>}
             </tbody>
-          </table>
+          </table></div>
         </div>
         <p className="mt-2 text-[11px] text-muted">
           بکاپ‌گیری و بازیابی فقط با ابزار رسمی انجام می‌شود؛ این صفحه فقط وضعیت واقعی را نشان می‌دهد. راهنما: docs/backup-recovery-guide.md

@@ -92,7 +92,7 @@ export default function OrdersClient() {
       {msg ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">{msg}</p> : null}
       {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
       <div className="overflow-x-auto rounded-card border border-line bg-surface">
-        <table className="w-full text-sm">
+        <div className="admin-table-wrap"><table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-right text-xs text-ink/60">
               <th className="px-4 py-3">شماره</th><th className="px-4 py-3">مشتری</th><th className="px-4 py-3">موبایل</th>
@@ -126,7 +126,7 @@ export default function OrdersClient() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       {/* دیالوگ ویرایش */}

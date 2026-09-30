@@ -3,11 +3,15 @@ import { MENU } from "@/lib/menu";
 import { can, type AdminMe } from "@/lib/session";
 import { AdminBell } from "@/components/AdminBell";
 import { AdminThemeToggle } from "@/components/ThemeToggle";
+import { MobileNav } from "@/components/MobileNav";
 
 export function Shell({ me, children }: { me: AdminMe; children: React.ReactNode }) {
+  const role = roleFa(me.role);
+  const displayName = me.name ?? me.email ?? "—";
   return (
     <div className="flex min-h-dvh">
-      <aside className="w-60 shrink-0 border-l border-line bg-surface p-4">
+      {/* سایدبار ثابت — فقط دسکتاپ (lg+) */}
+      <aside className="hidden w-60 shrink-0 border-l border-line bg-surface p-4 lg:block">
         <div className="mb-6">
           <div className="text-lg font-bold text-deep">قاصدک</div>
           <div className="text-xs text-muted">پنل مدیریت</div>
@@ -39,30 +43,35 @@ export function Shell({ me, children }: { me: AdminMe; children: React.ReactNode
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center justify-between border-b border-line bg-surface px-6">
-          <div className="text-sm text-muted">
-            {me.name ?? me.email} · نقش: <span className="font-medium text-ink">{roleFa(me.role)}</span>
+        {/* هدر — موبایل: همبرگر + لوگو + آیکن‌ها؛ دسکتاپ: اطلاعات کاربر + دکمه‌ها */}
+        <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 border-b border-line bg-surface px-3 sm:px-4 lg:px-6">
+          <div className="flex min-w-0 items-center gap-2">
+            <MobileNav name={displayName} roleFa={role} permissions={me.permissions} />
+            <span className="min-w-0 truncate text-sm text-muted lg:block">
+              {displayName}
+              <span className="hidden sm:inline"> · نقش: <span className="font-medium text-ink">{role}</span></span>
+            </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <AdminThemeToggle />
             <AdminBell />
             <a
               href="/"
-              className="rounded-lg border border-line px-3 py-1.5 text-sm text-ink transition-colors hover:bg-bg"
+              className="hidden rounded-lg border border-line px-3 py-1.5 text-sm text-ink transition-colors hover:bg-bg lg:inline-block"
             >
               ← داشبورد
             </a>
             <form action="/logout" method="post">
               <button
                 type="submit"
-                className="rounded-lg border border-line px-3 py-1.5 text-sm text-ink transition-colors hover:bg-bg"
+                className="hidden rounded-lg border border-line px-3 py-1.5 text-sm text-ink transition-colors hover:bg-bg lg:inline-block"
               >
                 خروج
               </button>
             </form>
           </div>
         </header>
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 p-3 sm:p-4 lg:p-6">{children}</main>
       </div>
     </div>
   );

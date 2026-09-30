@@ -65,7 +65,7 @@ export default function WarehousesClient() {
       )}
 
       <div className="overflow-x-auto rounded-card border border-line bg-surface">
-        <table className="w-full text-sm">
+        <div className="admin-table-wrap"><table className="w-full text-sm">
           <thead><tr className="border-b border-line text-right text-xs text-ink/60">
             <th className="px-4 py-3">کد</th><th className="px-4 py-3">نام</th><th className="px-4 py-3">نوع</th>
             <th className="px-4 py-3">مسئول</th><th className="px-4 py-3">پیش‌فرض</th><th className="px-4 py-3">وضعیت</th><th className="px-4 py-3">اقدام</th>
@@ -95,7 +95,7 @@ export default function WarehousesClient() {
             ))}
             {rows.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-ink/50">انباری ثبت نشده است.</td></tr>}
           </tbody>
-        </table>
+        </table></div>
       </div>
       <p className="text-xs text-muted">تعداد: {fa(rows.length)}</p>
     </div>

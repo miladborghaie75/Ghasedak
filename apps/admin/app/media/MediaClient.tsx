@@ -224,7 +224,7 @@ export default function MediaLibrary() {
           {filter === "all" ? "هنوز فایلی آپلود نشده است." : "در این دسته فایلی نیست."}
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {filtered.map((m) => (
             <button
               key={m.id}
@@ -250,7 +250,7 @@ export default function MediaLibrary() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           onClick={() => { if (!busy) { setDetailOpen(false); setDetail(null); } }}
         >
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-4 shadow-xl" onClick={(e) => e.stopPropagation()} dir="rtl">
+          <div className="admin-modal-panel max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-3 shadow-xl sm:p-4" onClick={(e) => e.stopPropagation()} dir="rtl">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-black">جزئیات فایل</h3>
               <button onClick={() => { setDetailOpen(false); setDetail(null); }} className="text-ink/40 hover:text-ink">✕</button>

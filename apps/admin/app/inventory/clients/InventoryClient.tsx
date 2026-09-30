@@ -237,7 +237,7 @@ export default function InventoryClient() {
       {tab === "stock" && (
         <>
           <div className="flex gap-2">
-            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load(q)} placeholder="جستجو: نام محصول / SKU / بارکد…" className="h-10 w-72 rounded-full border border-line bg-surface px-4 text-sm" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load(q)} placeholder="جستجو: نام محصول / SKU / بارکد…" className="h-10 w-full max-w-72 rounded-full border border-line bg-surface px-4 text-sm" />
             <button onClick={() => load(q)} disabled={loading} className="h-10 rounded-full bg-ink px-5 text-sm font-black text-on-accent disabled:opacity-60">جستجو</button>
           </div>
 
@@ -256,7 +256,7 @@ export default function InventoryClient() {
           )}
 
           <div className="overflow-x-auto rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line text-right text-xs text-ink/60">
                   <th className="px-4 py-3"><input type="checkbox" checked={selected.size === rows.length && rows.length > 0} onChange={selectAll} /></th>
@@ -286,7 +286,7 @@ export default function InventoryClient() {
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}
@@ -308,7 +308,7 @@ export default function InventoryClient() {
                 </div>
               </div>
               <div className="max-h-96 overflow-y-auto">
-                <table className="w-full text-xs">
+                <div className="admin-table-wrap"><table className="w-full text-xs">
                   <thead><tr className="border-b border-line text-ink/60">
                     <th className="p-2 text-right">کالا</th><th className="p-2">SKU</th><th className="p-2">سیستم</th><th className="p-2">شمارش</th><th className="p-2">اختلاف</th><th className="p-2"></th>
                   </tr></thead>
@@ -332,13 +332,13 @@ export default function InventoryClient() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </div>
             </div>
           )}
 
           <div className="overflow-hidden rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-ink/60">
                 <th className="p-3 text-right">شماره</th><th className="p-3">وضعیت</th><th className="p-3">ردیف‌ها</th><th className="p-3">تاریخ</th><th className="p-3"></th>
               </tr></thead>
@@ -357,7 +357,7 @@ export default function InventoryClient() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}
@@ -389,7 +389,7 @@ export default function InventoryClient() {
             </div>
           </div>
           <div className="overflow-hidden rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-ink/60">
                 <th className="p-3 text-right">شماره</th><th className="p-3">مبدأ → مقصد</th><th className="p-3">ردیف‌ها</th><th className="p-3">وضعیت</th><th className="p-3">اقدام</th>
               </tr></thead>
@@ -410,7 +410,7 @@ export default function InventoryClient() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}
@@ -424,7 +424,7 @@ export default function InventoryClient() {
             <button onClick={() => void holdQuarantine()} disabled={loading} className="h-9 rounded-full bg-primary px-4 text-xs font-bold text-on-accent">جداسازی</button>
           </div>
           <div className="overflow-hidden rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-ink/60">
                 <th className="p-3 text-right">شماره</th><th className="p-3">کالا</th><th className="p-3">تعداد</th><th className="p-3">دلیل</th><th className="p-3">وضعیت</th><th className="p-3">اقدام</th>
               </tr></thead>
@@ -447,7 +447,7 @@ export default function InventoryClient() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}
@@ -467,7 +467,7 @@ export default function InventoryClient() {
             <button onClick={() => void reportDamage()} disabled={loading} className="h-9 rounded-full bg-primary px-4 text-xs font-bold text-on-accent">ثبت</button>
           </div>
           <div className="overflow-hidden rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-ink/60">
                 <th className="p-3 text-right">شماره</th><th className="p-3">کالا</th><th className="p-3">نوع</th><th className="p-3">تعداد</th><th className="p-3">بها</th><th className="p-3">وضعیت</th><th className="p-3">اقدام</th>
               </tr></thead>
@@ -491,14 +491,14 @@ export default function InventoryClient() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}
 
       {tab === "approvals" && (
         <div className="overflow-hidden rounded-card border border-line bg-surface">
-          <table className="w-full text-sm">
+          <div className="admin-table-wrap"><table className="w-full text-sm">
             <thead><tr className="border-b border-line text-xs text-ink/60">
               <th className="p-3 text-right">انبارگردانی</th><th className="p-3">ردیف‌های نیازمند تایید</th><th className="p-3">تاریخ</th><th className="p-3">اقدام</th>
             </tr></thead>
@@ -517,13 +517,13 @@ export default function InventoryClient() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
 
       {tab === "settings" && (
         <div className="overflow-hidden rounded-card border border-line bg-surface">
-          <table className="w-full text-sm">
+          <div className="admin-table-wrap"><table className="w-full text-sm">
             <thead><tr className="border-b border-line text-xs text-ink/60">
               <th className="p-3 text-right">کلید</th><th className="p-3">مقدار</th><th className="p-3">توضیح</th><th className="p-3"></th>
             </tr></thead>
@@ -547,7 +547,7 @@ export default function InventoryClient() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
     </div>

@@ -150,7 +150,7 @@ export default function NotificationsClient() {
       {msg && <div className="rounded-lg border border-line bg-surface p-3 text-sm">{msg}</div>}
 
       <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-        <table className="w-full text-sm">
+        <div className="admin-table-wrap"><table className="w-full text-sm">
           <thead className="bg-ink/5 text-xs text-ink/60">
             <tr>
               <th className="px-4 py-2 text-start">کانال</th>
@@ -199,13 +199,13 @@ export default function NotificationsClient() {
               <tr><td colSpan={8} className="px-4 py-8 text-center text-ink/40">ردیفی نیست.</td></tr>
             )}
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       {/* ================== فاز ۱۲ (گام ۴) — Outbox workspace ================== */}
       <div className="border-t border-line pt-4">
         <h3 className="mb-3 text-sm font-bold">صف رویدادها (Outbox)</h3>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-line bg-surface p-4">
             <div className="text-xs text-ink/60">در انتظار (PENDING)</div>
             <div className="text-2xl font-bold tabular-nums">{ob?.summary.pending ?? "—"}</div>
@@ -245,7 +245,7 @@ export default function NotificationsClient() {
         </div>
 
         <div className="mt-3 overflow-x-auto rounded-xl border border-line bg-surface">
-          <table className="w-full text-sm">
+          <div className="admin-table-wrap"><table className="w-full text-sm">
             <thead className="bg-ink/5 text-xs text-ink/60">
               <tr>
                 <th className="px-4 py-2 text-start">رویداد</th>
@@ -281,7 +281,7 @@ export default function NotificationsClient() {
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-ink/40">رویدادی نیست.</td></tr>
               )}
             </tbody>
-          </table>
+          </table></div>
         </div>
       </div>
     </div>

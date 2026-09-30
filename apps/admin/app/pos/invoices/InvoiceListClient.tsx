@@ -85,7 +85,7 @@ export default function InvoiceListClient() {
       {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
 
       <div className="overflow-x-auto rounded-xl border border-line">
-        <table className="w-full text-xs">
+        <div className="admin-table-wrap"><table className="w-full text-xs">
           <thead className="bg-primary-tint/60"><tr className="text-ink/60">
             <th className="p-2 text-right">شماره</th><th>تاریخ</th><th>مشتری</th><th>روش‌ها</th><th>کاشیر</th><th>وضعیت</th><th>مبلغ</th>
           </tr></thead>
@@ -106,7 +106,7 @@ export default function InvoiceListClient() {
             ))}
             {rows.length === 0 ? <tr><td colSpan={7} className="p-6 text-center text-ink/40">فاکتوری در این بازه نیست.</td></tr> : null}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   );

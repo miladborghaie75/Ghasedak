@@ -182,7 +182,7 @@ export default function CapabilitiesClient() {
         </p>
         {creds ? (
           <div className="overflow-x-auto rounded-card border border-line">
-            <table className="w-full text-xs">
+            <div className="admin-table-wrap"><table className="w-full text-xs">
               <thead className="bg-ink/5 text-muted"><tr><th className="px-3 py-2 text-start">کلید</th><th className="px-3 py-2 text-start">وضعیت</th><th className="px-3 py-2 text-start">مقدار فعلی (ماسک)</th><th className="px-3 py-2 text-start">مقدار جدید</th><th className="px-3 py-2"></th></tr></thead>
               <tbody>
                 {Object.entries(creds.items).map(([k, it]) => (
@@ -213,7 +213,7 @@ export default function CapabilitiesClient() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         ) : (
           <p className="text-xs text-muted">در حال بارگذاری وضعیت کلیدها…</p>

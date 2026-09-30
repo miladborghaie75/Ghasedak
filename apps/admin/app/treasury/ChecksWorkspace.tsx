@@ -196,7 +196,7 @@ export default function ChecksWorkspace() {
       {error && <div className="mb-2 text-xs font-bold text-app-err">{error}</div>}
 
       <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-        <table className="w-full text-xs">
+        <div className="admin-table-wrap"><table className="w-full text-xs">
           <thead className="bg-[var(--muted)]/40">
             <tr>
               <th className="p-2 text-right">شماره</th>
@@ -247,7 +247,7 @@ export default function ChecksWorkspace() {
               <tr><td className="p-3 text-[var(--muted)]" colSpan={7}>چکی در این وضعیت نیست.</td></tr>
             )}
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       {history && (

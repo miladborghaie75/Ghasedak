@@ -100,7 +100,7 @@ export default function MarketingClient() {
           </section>
 
           <div className="overflow-hidden rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead><tr className="border-b border-line bg-bg text-xs text-muted">
                 <th className="p-3 text-start">کد</th><th className="p-3">نوع</th><th className="p-3">مقدار</th>
                 <th className="p-3">استفاده</th><th className="p-3">سقف</th><th className="p-3">وضعیت</th><th className="p-3"></th>
@@ -126,7 +126,7 @@ export default function MarketingClient() {
                 ))}
                 {coupons.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-muted">هنوز کد تخفیفی ساخته نشده است.</td></tr>}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}

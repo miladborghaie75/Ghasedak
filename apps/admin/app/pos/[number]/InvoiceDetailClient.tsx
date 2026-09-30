@@ -128,7 +128,7 @@ export default function InvoiceDetailClient({ invoiceNumber }: { invoiceNumber: 
 
       <section className="rounded-xl border border-line">
         <h3 className="border-b border-line px-4 py-2 text-xs font-black">اقلام</h3>
-        <table className="w-full text-xs">
+        <div className="admin-table-wrap"><table className="w-full text-xs">
           <thead><tr className="border-b border-line text-ink/50"><th className="p-2 text-right">کالا</th><th>SKU</th><th>تعداد</th><th>قیمت واحد</th><th>جمع</th></tr></thead>
           <tbody>
             {inv.items.map((i) => (
@@ -141,7 +141,7 @@ export default function InvoiceDetailClient({ invoiceNumber }: { invoiceNumber: 
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">

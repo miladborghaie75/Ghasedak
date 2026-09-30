@@ -100,7 +100,7 @@ export default function InvoiceDetailClient() {
     <div className="flex flex-col gap-5">
       {/* سربرگ چاپ اختصاصی سند — روی صفحه مخفی، فقط در چاپ */}
       <div className="print-only" dir="rtl">
-        <table style={{ width: "100%", border: "none", borderBottom: "2px solid #000" }}>
+        <div className="admin-table-wrap"><table style={{ width: "100%", border: "none", borderBottom: "2px solid #000" }}>
           <tbody>
             <tr>
               <td style={{ border: "none", textAlign: "right" }}>
@@ -112,8 +112,8 @@ export default function InvoiceDetailClient() {
               </td>
             </tr>
           </tbody>
-        </table>
-        <table style={{ width: "100%", border: "none", marginTop: "6px", fontSize: "9.5pt" }}>
+        </table></div>
+        <div className="admin-table-wrap"><table style={{ width: "100%", border: "none", marginTop: "6px", fontSize: "9.5pt" }}>
           <tbody>
             <tr>
               <td style={{ border: "none" }}>شماره سند: <b dir="ltr">{invoice.number}</b></td>
@@ -121,7 +121,7 @@ export default function InvoiceDetailClient() {
               <td style={{ border: "none" }}>وضعیت: <b>{STATE_FA[invoice.state] ?? invoice.state}</b></td>
             </tr>
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       {/* نوار اقدام — در چاپ پنهان */}
@@ -169,7 +169,7 @@ export default function InvoiceDetailClient() {
       {/* ردیف‌ها */}
       <section className="overflow-hidden rounded-card border border-line bg-surface">
         <h3 className="border-b border-line p-4 text-sm font-black text-ink">ردیف‌ها ({fa(lines.length)})</h3>
-        <table className="w-full text-sm">
+        <div className="admin-table-wrap"><table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-right text-xs text-ink/60">
               <th className="px-4 py-2">کالا</th><th className="px-4 py-2">SKU/بارکد</th>
@@ -195,7 +195,7 @@ export default function InvoiceDetailClient() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
         <div className="flex flex-col gap-1 p-4 text-sm">
           <div className="flex justify-between"><span className="text-muted">جمع ردیف‌ها</span><span className="font-bold tabular-nums">{fa(invoice.subtotal)}</span></div>
           {Number(invoice.discountTotal) > 0 ? <div className="flex justify-between"><span className="text-muted">تخفیف</span><span className="tabular-nums text-app-err">−{fa(invoice.discountTotal)}</span></div> : null}
@@ -209,7 +209,7 @@ export default function InvoiceDetailClient() {
 
       {/* امضای طرفین — فقط چاپ */}
       <div className="print-only" dir="rtl">
-        <table style={{ width: "100%", border: "none", marginTop: "18px" }}>
+        <div className="admin-table-wrap"><table style={{ width: "100%", border: "none", marginTop: "18px" }}>
           <tbody>
             <tr>
               <td style={{ border: "none", textAlign: "center", fontSize: "9.5pt" }}>مهر و امضای تامین‌کننده</td>
@@ -217,14 +217,14 @@ export default function InvoiceDetailClient() {
               <td style={{ border: "none", textAlign: "center", fontSize: "9.5pt" }}>مهر و امضای انبار / حسابداری قاصدک</td>
             </tr>
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       {/* پرداخت‌ها + فرم پرداخت */}
       <section className="rounded-card border border-line bg-surface p-5 print:hidden">
         <h3 className="text-sm font-black text-ink">پرداخت‌ها ({fa(payments.length)})</h3>
         {payments.length > 0 ? (
-          <table className="mt-3 w-full text-sm">
+          <div className="admin-table-wrap"><table className="mt-3 w-full text-sm">
             <thead><tr className="border-b border-line text-right text-xs text-ink/60"><th className="py-2">مبلغ</th><th className="py-2">روش</th><th className="py-2">تاریخ</th></tr></thead>
             <tbody>
               {payments.map((p) => (
@@ -235,7 +235,7 @@ export default function InvoiceDetailClient() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         ) : <p className="mt-2 text-xs text-muted">پرداختی ثبت نشده است.</p>}
         {canPay && totals.balance > 0 ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -255,7 +255,7 @@ export default function InvoiceDetailClient() {
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-card border border-line bg-surface p-5">
           <h3 className="text-sm font-black text-ink">اثر انبار (GRN → Ledger + WAC)</h3>
-          <table className="mt-3 w-full text-xs">
+          <div className="admin-table-wrap"><table className="mt-3 w-full text-xs">
             <thead><tr className="border-b border-line text-right text-ink/60"><th className="py-2">SKU</th><th className="py-2">تعداد</th><th className="py-2">بها</th><th className="py-2">سربه‌دار</th></tr></thead>
             <tbody>
               {inventoryImpact.map((i) => (
@@ -268,7 +268,7 @@ export default function InvoiceDetailClient() {
               ))}
               {inventoryImpact.length === 0 ? <tr><td colSpan={4} className="py-3 text-center text-muted">بدون اثر انبار</td></tr> : null}
             </tbody>
-          </table>
+          </table></div>
         </section>
         <section className="rounded-card border border-line bg-surface p-5">
           <h3 className="text-sm font-black text-ink">اسناد حسابداری</h3>
@@ -276,7 +276,7 @@ export default function InvoiceDetailClient() {
             <div key={j.id} className="mt-3 rounded-xl border border-line p-3">
               <p className="text-xs font-bold" dir="ltr">{j.number}</p>
               <p className="text-[11px] text-muted">{j.description ?? ""} · {new Date(j.date).toLocaleDateString("fa-IR")}</p>
-              <table className="mt-2 w-full text-[11px]">
+              <div className="admin-table-wrap"><table className="mt-2 w-full text-[11px]">
                 <tbody>
                   {j.lines.map((l, i) => (
                     <tr key={i}>
@@ -285,7 +285,7 @@ export default function InvoiceDetailClient() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           )) : <p className="mt-2 text-xs text-muted">سند حسابداری ثبت نشده.</p>}
         </section>

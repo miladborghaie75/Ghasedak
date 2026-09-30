@@ -149,7 +149,7 @@ export default function StatementChecks({ bankAccountId }: { bankAccountId: stri
         <div className="text-xs text-[var(--muted)]">هیچ ردیف صورتحسابی به چک تطبیق داده نشده — تطبیق فقط association است و خودش چک را وصول نمی‌کند.</div>
       ) : (
         <div className="rounded-lg border border-[var(--border)] overflow-x-auto">
-          <table className="w-full text-xs">
+          <div className="admin-table-wrap"><table className="w-full text-xs">
             <thead className="bg-[var(--muted)]/40">
               <tr>
                 <th className="p-1.5 text-right">تاریخ صورتحساب</th>
@@ -190,7 +190,7 @@ export default function StatementChecks({ bankAccountId }: { bankAccountId: stri
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
     </div>

@@ -19,9 +19,9 @@ export default async function PageShell({
   if (!can(me.permissions, permission)) redirect("/");
   return (
     <Shell me={me}>
-      <h1 className="mb-1 text-lg font-black text-ink">{title}</h1>
-      {subtitle && <p className="mb-6 text-xs text-muted">{subtitle}</p>}
-      {!subtitle && <div className="mb-6" />}
+      <h1 className="mb-1 text-base font-black text-ink sm:text-lg">{title}</h1>
+      {subtitle && <p className="mb-4 text-xs text-muted sm:mb-6">{subtitle}</p>}
+      {!subtitle && <div className="mb-4 sm:mb-6" />}
       {children}
     </Shell>
   );

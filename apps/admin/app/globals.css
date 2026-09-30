@@ -351,3 +351,27 @@ body {
     max-width: 100%;
   }
 }
+
+/* ============================================================
+   فاز ۱۴ — ریسپانسیو پنل مدیریت (الگوی نمونهٔ موبایل)
+   ============================================================ */
+
+/* جدول‌ها: زیر sm در ظرف افقی اسکرول می‌شوند تا صفحه نریزد */
+@media (max-width: 639.98px) {
+  .admin-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius-card, 0.75rem);
+  }
+  .admin-table-wrap table {
+    min-width: 40rem; /* 640px — ستون‌ها حفظ می‌شوند، کاربر افقی می‌کشد */
+  }
+}
+
+/* مودال‌ها: در موبایل تمام-عرض با حاشیهٔ کم و ارتفاع مناسب */
+@media (max-width: 639.98px) {
+  .admin-modal-panel {
+    max-width: calc(100vw - 1rem);
+    max-height: 92dvh;
+  }
+}

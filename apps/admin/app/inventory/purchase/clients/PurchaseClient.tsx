@@ -154,7 +154,7 @@ export default function PurchaseClient() {
             </div>
           )}
           <div className="overflow-hidden rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-ink/60">
                 <th className="p-3 text-right">نام</th><th className="p-3">تلفن</th><th className="p-3">شناسه مالیاتی</th><th className="p-3">مانده بدهی (AP)</th>
               </tr></thead>
@@ -169,7 +169,7 @@ export default function PurchaseClient() {
                 ))}
                 {suppliers.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-ink/50">تامین‌کننده‌ای ثبت نشده است.</td></tr>}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}
@@ -198,7 +198,7 @@ export default function PurchaseClient() {
             </div>
           )}
           <div className="overflow-hidden rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-ink/60">
                 <th className="p-3 text-right">شماره</th><th className="p-3">تامین‌کننده</th><th className="p-3">ردیف‌ها</th><th className="p-3">وضعیت</th><th className="p-3">اقدام</th>
               </tr></thead>
@@ -219,7 +219,7 @@ export default function PurchaseClient() {
                 ))}
                 {pos.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-ink/50">سفارش خریدی ثبت نشده است.</td></tr>}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}
@@ -258,7 +258,7 @@ export default function PurchaseClient() {
             </div>
           )}
           <div className="overflow-hidden rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-ink/60">
                 <th className="p-3 text-right">شماره</th><th className="p-3">تامین‌کننده</th><th className="p-3">انبار</th><th className="p-3">PO</th><th className="p-3">ردیف‌ها</th><th className="p-3">تاریخ</th>
               </tr></thead>
@@ -275,7 +275,7 @@ export default function PurchaseClient() {
                 ))}
                 {grns.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-ink/50">دریافتی ثبت نشده است.</td></tr>}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}
@@ -292,7 +292,7 @@ export default function PurchaseClient() {
             </div>
           )}
           <div className="overflow-hidden rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-ink/60">
                 <th className="p-3 text-right">شماره</th><th className="p-3">تامین‌کننده</th><th className="p-3">GRN</th><th className="p-3">مبلغ کل</th><th className="p-3">وضعیت</th><th className="p-3">ارسال به تامین‌کننده</th><th className="p-3">پرداخت / جزئیات</th>
               </tr></thead>
@@ -325,7 +325,7 @@ export default function PurchaseClient() {
                 ))}
                 {invoices.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-ink/50">فاکتوری ثبت نشده است.</td></tr>}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}

@@ -90,7 +90,7 @@ export default function CustomersClient() {
 
       {tab === "customers" && (
         <div className="overflow-x-auto rounded-card border border-line bg-surface">
-          <table className="w-full text-sm">
+          <div className="admin-table-wrap"><table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-right text-xs text-ink/60">
                 <th className="px-4 py-3">موبایل</th>
@@ -137,7 +137,7 @@ export default function CustomersClient() {
               ))}
               {rows.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-ink/50">مشتری‌ای یافت نشد — با اولین سفارش/فروش POS ثبت می‌شود.</td></tr>}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
 
@@ -147,7 +147,7 @@ export default function CustomersClient() {
             سبدِ فعالی که بیش از {fa(delayMinutes)} دقیقه از آخرین تغییرش گذشته و آیتم دارد — محاسبه زنده از سبد سروری.
           </p>
           <div className="overflow-x-auto rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line text-right text-xs text-ink/60">
                   <th className="px-4 py-3">توکن سبد</th>
@@ -176,7 +176,7 @@ export default function CustomersClient() {
                   <tr><td colSpan={4} className="px-4 py-8 text-center text-ink/50">سبد رهاشده‌ای در آستانه {fa(delayMinutes)} دقیقه نیست.</td></tr>
                 )}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}

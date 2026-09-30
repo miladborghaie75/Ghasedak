@@ -82,7 +82,7 @@ export default function ReportsClient() {
             ارزش کل موجودی: {fa(valuation.total)} تومان
           </div>
           <div className="max-h-[32rem] overflow-auto rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead className="sticky top-0 bg-surface"><tr className="border-b border-line text-xs text-ink/60">
                 <th className="p-3 text-right">انبار</th><th className="p-3">کالا</th><th className="p-3">SKU</th><th className="p-3">موجودی</th><th className="p-3">میانگین بها</th><th className="p-3">ارزش</th>
               </tr></thead>
@@ -99,7 +99,7 @@ export default function ReportsClient() {
                 ))}
                 {valuation.rows.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-ink/50">موجودی‌ای برای ارزش‌گذاری نیست.</td></tr>}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}
@@ -108,7 +108,7 @@ export default function ReportsClient() {
         <>
           <p className="text-xs text-muted">کالاهای بدون هیچ خروجی در {fa(dead.days)} روز گذشته (از تنظیمات انبار خوانده می‌شود).</p>
           <div className="max-h-[32rem] overflow-auto rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead className="sticky top-0 bg-surface"><tr className="border-b border-line text-xs text-ink/60">
                 <th className="p-3 text-right">کالا</th><th className="p-3">SKU</th><th className="p-3">موجودی</th><th className="p-3">آخرین خروج</th><th className="p-3">روز از آخرین خروج</th><th className="p-3">ارزش راکد</th>
               </tr></thead>
@@ -125,7 +125,7 @@ export default function ReportsClient() {
                 ))}
                 {dead.rows.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-ink/50">کالای راکی یافت نشد ✅</td></tr>}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}
@@ -134,7 +134,7 @@ export default function ReportsClient() {
         <>
           <p className="text-xs text-muted">پرفروش‌ها در {fa(fastSlow.days)} روز گذشته.</p>
           <div className="max-h-[32rem] overflow-auto rounded-card border border-line bg-surface">
-            <table className="w-full text-sm">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead className="sticky top-0 bg-surface"><tr className="border-b border-line text-xs text-ink/60">
                 <th className="p-3 text-right">کالا</th><th className="p-3">SKU</th><th className="p-3">فروش</th><th className="p-3">موجودی</th><th className="p-3">رتبه</th>
               </tr></thead>
@@ -152,7 +152,7 @@ export default function ReportsClient() {
                 ))}
                 {fastSlow.rows.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-ink/50">فروشی در این بازه نبوده است.</td></tr>}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}
@@ -176,7 +176,7 @@ export default function ReportsClient() {
 
       {tab === "adjustments" && adjustments && (
         <div className="max-h-[32rem] overflow-auto rounded-card border border-line bg-surface">
-          <table className="w-full text-sm">
+          <div className="admin-table-wrap"><table className="w-full text-sm">
             <thead className="sticky top-0 bg-surface"><tr className="border-b border-line text-xs text-ink/60">
               <th className="p-3 text-right">تاریخ</th><th className="p-3">انبار</th><th className="p-3">کالا</th><th className="p-3">ورود</th><th className="p-3">خروج</th><th className="p-3">عامل</th><th className="p-3">توضیح</th>
             </tr></thead>
@@ -194,13 +194,13 @@ export default function ReportsClient() {
               ))}
               {adjustments.items.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-ink/50">تعدیلی ثبت نشده است.</td></tr>}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
 
       {tab === "variance" && variance && (
         <div className="overflow-hidden rounded-card border border-line bg-surface">
-          <table className="w-full text-sm">
+          <div className="admin-table-wrap"><table className="w-full text-sm">
             <thead><tr className="border-b border-line text-xs text-ink/60">
               <th className="p-3 text-right">انبارگردانی</th><th className="p-3">مازاد</th><th className="p-3">کسری</th><th className="p-3">ارزش مازاد</th><th className="p-3">ارزش کسری</th><th className="p-3">تاریخ بستن</th>
             </tr></thead>
@@ -217,7 +217,7 @@ export default function ReportsClient() {
               ))}
               {variance.rows.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-ink/50">انبارگردانی بسته‌شده‌ای نیست.</td></tr>}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
     </div>
