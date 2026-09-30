@@ -7,6 +7,7 @@ import "reflect-metadata";
 import { BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../src/prisma/prisma.service";
 import { NotificationDispatcherService } from "../src/events/notification-dispatcher.service";
+import { SmsProvidersService } from "../src/events/sms-providers.service";
 
 jest.setTimeout(120_000);
 
@@ -18,7 +19,7 @@ describe("Phase 11 — P2-B (notification dispatcher)", () => {
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-    dispatcher = new NotificationDispatcherService(prisma);
+    dispatcher = new NotificationDispatcherService(prisma, new SmsProvidersService(prisma));
   });
 
   afterAll(async () => {

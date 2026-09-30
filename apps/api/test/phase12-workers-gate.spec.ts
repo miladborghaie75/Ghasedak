@@ -7,6 +7,7 @@ import "reflect-metadata";
 import { PrismaService } from "../src/prisma/prisma.service";
 import { EventBusService } from "../src/events/event-bus.service";
 import { NotificationDispatcherService } from "../src/events/notification-dispatcher.service";
+import { SmsProvidersService } from "../src/events/sms-providers.service";
 
 jest.setTimeout(120_000);
 
@@ -27,7 +28,7 @@ describe("Phase 12 step 5 — background workers gate", () => {
 
   it("با WORKERS=off: هیچ تایمری استارت نمی‌شود ولی drain دستی هنوز کار می‌کند", async () => {
     const bus = new EventBusService(prisma);
-    const dispatcher = new NotificationDispatcherService(prisma);
+    const dispatcher = new NotificationDispatcherService(prisma, new SmsProvidersService(prisma));
 
     bus.onModuleInit();
     dispatcher.onModuleInit();
