@@ -49,7 +49,7 @@ describe("Phase 9 Wave 2 — Check domain", () => {
     treasury = new TreasuryService(prisma, journal);
     const inv = new InventoryService(prisma, new InventorySettingsService(prisma));
     bus = new EventBusService(prisma);
-    purchasing = new PurchasingService(prisma, inv, bus, treasury, checks);
+    purchasing = new PurchasingService(prisma, inv, bus, treasury, checks, journal);
     pos = new PosService(prisma, inv, journal, new PricingService(prisma, bus), treasury, checks);
     actor = (await prisma.user.findFirstOrThrow()).id;
   });

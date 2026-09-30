@@ -140,6 +140,11 @@ export class InventoryService {
   }
 
   /** WAC جاری از CostLayer؛ در نبود لایه از میانگین ورودی‌های بهایی Ledger */
+  /** فاز ۱۴ بند ۱ — خواندن میانگین بدون تراکنش (برای سند فروش آنلاین پس از پرداخت) */
+  async wac(warehouseId: string, variantSku: string): Promise<bigint | null> {
+    return this.prisma.$transaction((tx) => this.wacInTx(tx, warehouseId, variantSku));
+  }
+
   async wacInTx(tx: PrismaTransaction, warehouseId: string, variantSku: string): Promise<bigint | null> {
     const layer = await tx.costLayer.findUnique({
       where: { warehouseId_variantSku: { warehouseId, variantSku } },

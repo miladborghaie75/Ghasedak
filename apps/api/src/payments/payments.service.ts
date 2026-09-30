@@ -303,12 +303,13 @@ export class PaymentsService implements OnModuleInit {
     return order.warehouseId;
   }
 
-  /** سند فروش: Dr صندوق/بانک، Cr فروش — ردیف کالاها با SKU/بارکد در توضیح */
+  /** سند فروش: Dr صندوق/بانک، Cr فروش + (فاز ۱۴ بند ۱) Dr بهای تمام‌شده / Cr موجودی کالا — ردیف کالاها با SKU/بارکد در توضیح */
   private async postSaleJournal(orderId: string, amount: number, actorId?: string): Promise<void> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       select: {
         code: true,
+        warehouseId: true,
         items: { select: { qty: true, titleSnapshot: true, variant: { select: { sku: true, barcode: true } } } },
       },
     });
@@ -316,15 +317,30 @@ export class PaymentsService implements OnModuleInit {
     const itemLines = order.items
       .map((it) => `${it.qty}× ${it.titleSnapshot} [${it.variant?.sku ?? ""}${it.variant?.barcode ? ` | بارکد ${it.variant.barcode}` : ""}]`)
       .join(" ، ");
+    const lines: Array<{ accountCode: string; debit?: number; credit?: number }> = [
+      { accountCode: "1100", debit: amount },
+      { accountCode: "4000", credit: amount },
+    ];
+    // فاز ۱۴ — بند ۱: بهای تمام‌شدهٔ فروش آنلاین در همان سند فروش (Dr 5000 / Cr 1200).
+    // میانگین انبارِ سفارش؛ بدون بهای ثبت‌شده → سند COGS زده نمی‌شود (صادقانه).
+    if (order.warehouseId) {
+      let cogsTotal = 0n;
+      for (const it of order.items) {
+        if (!it.variant?.sku) continue;
+        const wac = await this.inventory.wac(order.warehouseId, it.variant.sku);
+        if (wac != null && wac > 0n) cogsTotal += wac * BigInt(it.qty);
+      }
+      if (cogsTotal > 0n) {
+        lines.push({ accountCode: "5000", debit: Number(cogsTotal) });
+        lines.push({ accountCode: "1200", credit: Number(cogsTotal) });
+      }
+    }
     await this.journal.postOrNotify({
       description: `فروش سفارش ${order.code} — ${itemLines}`,
       sourceType: "order",
       sourceId: orderId,
       actorId,
-      lines: [
-        { accountCode: "1100", debit: amount },
-        { accountCode: "4000", credit: amount },
-      ],
+      lines,
     });
   }
 }

@@ -752,7 +752,7 @@ export class TreasuryService {
    */
   async creditForRefundInTx(
     tx: Prisma.TransactionClient,
-    input: { method: string; amount: number; refundId: string; refundNumber: string; actorId?: string },
+    input: { method: string; amount: number; refundId: string; refundNumber: string; actorId?: string; cogsReturn?: bigint | null },
   ): Promise<void> {
     const amount = Math.round(Number(input.amount));
     if (!Number.isSafeInteger(amount) || amount <= 0) return;
@@ -775,6 +775,21 @@ export class TreasuryService {
         { accountCode: glCode, credit: amount },
       ],
     });
+    // فاز ۱۴ بند ۱: برگشت بهای تمام‌شدهٔ کالای مرجوعی — Dr 1200 / Cr 5000 (در همان سند بازپرداخت نمی‌گذاریم
+    // چون بهای ممکن است صفر باشد؛ سند جدا فقط وقتی بهای واقعی دارد — صادقانه).
+    const cogsReturn = Number(input.cogsReturn ?? 0n);
+    if (Number.isSafeInteger(cogsReturn) && cogsReturn > 0) {
+      await this.journal.postOrNotifyInTx(tx, {
+        description: `برگشت بهای تمام‌شدهٔ مرجوعی — ${input.refundNumber}`,
+        sourceType: "refund",
+        sourceId: input.refundId,
+        actorId: input.actorId,
+        lines: [
+          { accountCode: "1200", debit: cogsReturn },
+          { accountCode: "5000", credit: cogsReturn },
+        ],
+      });
+    }
   }
 
   private async audit(actorId: string | undefined, action: string, entity: string, entityId: string, meta: Record<string, unknown>): Promise<void> {

@@ -250,12 +250,25 @@ export class ReturnsService {
       }
 
       if (refund.method !== "STORE_CREDIT") {
+        // فاز ۱۴ بند ۱: بهای برگشتی از StockLedgerEntry قلم‌های SALE_RETURN همین مرجوعی (منبع حقیقت انبار)
+        const returnMoves = await tx.stockLedgerEntry.findMany({
+          where: { type: "SALE_RETURN" as never, refType: "pos_refund" as never, refId: refund.sourceId, unitCost: { not: null } },
+          select: { qtyIn: true, unitCost: true, variantSku: true },
+        });
+        const refundItemSkus = await tx.refundItem.findMany({ where: { refundId: refund.id }, select: { variantSku: true, qty: true } });
+        const qtyBySku = new Map(refundItemSkus.map((r) => [r.variantSku, r.qty]));
+        let cogsReturn = 0n;
+        for (const mv of returnMoves) {
+          const q = qtyBySku.get(mv.variantSku) ?? 0;
+          if (q > 0 && mv.unitCost) cogsReturn += BigInt(mv.unitCost) * BigInt(Math.min(q, mv.qtyIn));
+        }
         await this.treasury.creditForRefundInTx(tx, {
           method: refund.method === "CASH" ? "CASH" : "BANK",
           amount,
           refundId: refund.id,
           refundNumber: refund.number,
           actorId: input.actorId,
+          cogsReturn,
         });
       }
 

@@ -5,6 +5,7 @@ import { nextNumber } from "../common/number-series";
 import { EventBusService } from "../events/event-bus.service";
 import { TreasuryService } from "../treasury/treasury.service";
 import { ChecksService } from "../checks/checks.service";
+import { JournalService } from "../accounting/journal.service";
 
 /**
  * چرخه خرید — بند ۲۷–۲۹/۴۳: PO → GRN (ورود بهایی به انبار + WAC) → Invoice → AP.
@@ -33,6 +34,7 @@ export class PurchasingService {
     private readonly events: EventBusService,
     private readonly treasury: TreasuryService,
     private readonly checks: ChecksService,
+    private readonly journal: JournalService,
   ) {}
 
   // ---------------- تامین‌کننده ----------------
@@ -233,6 +235,21 @@ export class PurchasingService {
         await this.inv.updateWacInTx(tx, warehouse.id, line.variantSku, line.qty, unitWithLanded);
       }
       if (po) await tx.purchaseOrder.update({ where: { id: po.id }, data: { status: "RECEIVED" } });
+      // فاز ۱۴ — بند ۱: سند خرید در همان تراکنش — Dr 1200 موجودی کالا (با landedCost) / Cr 2100 بدهی تامین‌کننده.
+      // مبنای بدهی: کل بهای رسید (unitCost×qty + landedCost) — سه‌راهی فاکتور بعداً مطابقت می‌دهد.
+      const totalDebit = lines.reduce((acc, l) => acc + l.unitCost * BigInt(l.qty) + l.landedCost, 0n);
+      if (totalDebit > 0n) {
+        await this.journal.postOrNotifyInTx(tx, {
+          description: `خرید ${number} از ${supplier.name} — ${lines.length} ردیف`,
+          sourceType: "goods_receipt",
+          sourceId: rec.id,
+          actorId: input.actorId,
+          lines: [
+            { accountCode: "1200", debit: Number(totalDebit) },
+            { accountCode: "2100", credit: Number(totalDebit) },
+          ],
+        });
+      }
       return rec;
     });
     await this.events.publish("GoodsReceiptPosted", { grnId: grn.id, number: grn.number, supplierId: supplier.id, lines: lines.length });
@@ -552,6 +569,21 @@ export class PurchasingService {
         where: { supplierId: invoice.supplierId },
         data: { outstanding: { decrement: BigInt(amount) } },
       });
+      // فاز ۱۴ — بند ۱: سند تسویهٔ بدهی — فقط برای نقد/بانک (Dr 2100 / Cr خزانه).
+      // برای چکِ صادره سند صدورِ خودِ چک (Dr 2100/Cr 2110 از check_transition) کافی است — دوبار ثبت ممنوع.
+      if (!isCheck) {
+        const cashAccount = (input.method ?? "transfer") === "cash" ? "1000" : "1100";
+        await this.journal.postOrNotifyInTx(tx, {
+          description: `پرداخت فاکتور خرید ${invoice.number} — نقد/بانک به ${invoice.supplier?.name ?? "تامین‌کننده"}`,
+          sourceType: "purchase_payment",
+          sourceId: invoice.id,
+          actorId: input.actorId,
+          lines: [
+            { accountCode: "2100", debit: amount },
+            { accountCode: cashAccount, credit: amount },
+          ],
+        });
+      }
       const state = paid >= Number(invoice.grandTotal) ? "PAID" : "PARTIALLY_PAID";
       await tx.purchaseInvoice.update({ where: { id: invoice.id }, data: { state } });
       return { state, paid, invoiceNumber: invoice.number, checkId };

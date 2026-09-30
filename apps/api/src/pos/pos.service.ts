@@ -314,6 +314,22 @@ export class PosService {
       if (bankAmt > 0) lines.push({ accountCode: "1100", debit: bankAmt });
       if (checkAmt > 0) lines.push({ accountCode: "1220", debit: checkAmt });
       lines.push({ accountCode: "4000", credit: Number(grandTotal) });
+
+      // فاز ۱۴ — بند ۱: سند بهای تمام‌شدهٔ فروش در همان تراکنش (Dr 5000 / Cr 1200).
+      // بهای هر قلم = میانگین انبار (wacInTx) در لحظهٔ مصرف؛ بدون بهای ثبت‌شده → سند COGS زده نمی‌شود
+      // (مثلاً کالای بدون خرید ثبت‌شده) — صادقانه: سود گزارشی فقط وقتی بهای واقعی دارد محاسبه می‌شود.
+      // این خط‌ها به همان سند فروش اضافه می‌شوند — یک سند، درآمد+بهایی (الگوی اسناد استاندارد).
+      let cogsTotal = 0n;
+      for (const line of priced) {
+        const wac = await this.inventory.wacInTx(tx, warehouseId, line.sku);
+        if (wac != null && wac > 0n) {
+          cogsTotal += wac * BigInt(line.qty);
+        }
+      }
+      if (cogsTotal > 0n) {
+        lines.push({ accountCode: "5000", debit: Number(cogsTotal) });
+        lines.push({ accountCode: "1200", credit: Number(cogsTotal) });
+      }
       // تحلیل STEP 2 (درآمد فقط یک‌بار): فروش POS مستقیم = رویداد شناسایی درآمد — چکِ دریافتی خودِ دارایی است
       // (Dr 1220) و Cr 4000 دقیقاً یک‌بار زده می‌شود. جفتِ Dr 1220/Cr 1210 برای جریان دیگری است:
       // «پرداخت چک به بدهی AR-TRADE قبلی» (سفارش اعتباری → چک) که آنجا درآمد قبلاً شناسایی شده و

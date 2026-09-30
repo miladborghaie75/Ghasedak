@@ -171,11 +171,14 @@ describe("Phase 10 — POS / Treasury / Accounting operations", () => {
     expect(invoice.payments.map((p) => p.method)).toEqual(["CASH"]);
     expect(invoice.items).toHaveLength(1);
 
-    const entry = await prisma.journalEntry.findFirstOrThrow({ where: { sourceType: "pos_invoice", sourceId: invoice.id }, include: { lines: true } });
+    // فاز ۱۴ بند ۱: سند اکنون شامل COGS (Dr 5000 / Cr 1200) هم هست — تراز همچنان باید برقرار باشد
+    const entry = await prisma.journalEntry.findFirstOrThrow({ where: { sourceType: "pos_invoice", sourceId: invoice.id }, include: { lines: { include: { account: true } } } });
     const dr = entry.lines.reduce((a, l) => a + (l.debit ?? 0n), 0n);
     const cr = entry.lines.reduce((a, l) => a + (l.credit ?? 0n), 0n);
     expect(dr).toBe(cr);
-    expect(dr).toBe(BigInt(amount));
+    expect(dr).toBe(BigInt(amount) + 200_000n); // 2×100,000 WAC
+    expect(entry.lines.find((l) => l.account.code === "5000")?.debit).toBe(200_000n);
+    expect(entry.lines.find((l) => l.account.code === "1200")?.credit).toBe(200_000n);
 
     const after = await prisma.cashAccount.findUniqueOrThrow({ where: { id: "demo-cash-main" } });
     expect(after.currentBalance).toBe(before.currentBalance + BigInt(amount));
@@ -197,9 +200,10 @@ describe("Phase 10 — POS / Treasury / Accounting operations", () => {
     const dr = entry.lines.reduce((a, l) => a + (l.debit ?? 0n), 0n);
     const cr = entry.lines.reduce((a, l) => a + (l.credit ?? 0n), 0n);
     expect(dr).toBe(cr);
-    expect(dr).toBe(BigInt(amount));
+    expect(dr).toBe(BigInt(amount) + 100_000n); // 1×100,000 WAC
     // CARD → حساب بانکی GL (1100) بدهکار
     expect(entry.lines.find((l) => l.account.code === "1100")?.debit).toBe(BigInt(amount));
+    expect(entry.lines.find((l) => l.account.code === "5000")?.debit).toBe(100_000n);
   });
 
   it("C) POS check sale → check+AR+transition در همان tx؛ سپس clear → bank (Match ≠ Clear)", async () => {
