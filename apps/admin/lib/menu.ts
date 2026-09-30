@@ -69,6 +69,7 @@ export const MENU: MenuGroup[] = [
       { title: "پیامک و درگاه پرداخت", href: "/settings/capabilities", permission: "settings.view" },
       { title: "اعلان‌ها و صف ارسال", href: "/settings/notifications", permission: "settings.view" }, // فاز ۱۱ P2-B
       { title: "پشتیبان‌گیری", href: "/settings/backup", permission: "settings.view" }, // بند ۴
+      { title: "مرکز عیب‌یابی", href: "/settings/diagnostics", permission: "settings.view" }, // بند ۸
     ],
   },
 ];
