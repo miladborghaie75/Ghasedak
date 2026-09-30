@@ -9,8 +9,9 @@ import {
   Post,
   Query,
   Req,
+  Res,
 } from "@nestjs/common";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
 import { NotificationDispatcherService } from "../events/notification-dispatcher.service";
@@ -34,6 +35,46 @@ const ALLOWED = new Map<string, { ext: string; magic: number[] }>([
 ]);
 const MAX_UPLOAD = 10 * 1024 * 1024; // 10MB
 const MEDIA_DIR = process.env.MEDIA_DIR ?? path.resolve(process.cwd(), "../data/media");
+
+/**
+ * خواندن ابعاد تصویر از خود بایت‌ها (بدون وابستگی خارجی) — فاز ۱۴ شکاف رسانه.
+ * PNG: IHDR در آفست ۱۶ (۴ بایت عرض + ۴ بایت ارتفاع big-endian).
+ * JPEG: پیمایش segmentها تا marker SOF0..SOF3/SOFn (بدون DHT/DNR) و خواندن ارتفاع/عرض.
+ */
+export function readImageSize(buf: Buffer): { w: number; h: number } | null {
+  if (buf.length >= 24 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  }
+  if (buf.length >= 4 && buf[0] === 0xff && buf[1] === 0xd8) {
+    let off = 2;
+    while (off + 9 < buf.length) {
+      if (buf[off] !== 0xff) { off++; continue; }
+      const marker = buf[off + 1];
+      // filler 0xff یا standalone markerها — جلو برو
+      if (marker === 0xff || (marker >= 0xd0 && marker <= 0xd9) || marker === 0x01) { off += 2; continue; }
+      const len = buf.readUInt16BE(off + 2);
+      // SOF0..SOF15 به‌جز DHT(0xc4)/JPG(0xc8)/DAC(0xcc) — همه ابعاد دارند
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        if (off + 9 <= buf.length) return { h: buf.readUInt16BE(off + 5), w: buf.readUInt16BE(off + 7) };
+        return null;
+      }
+      off += 2 + len;
+    }
+  }
+  return null;
+}
+
+/** فایل دیسک را برای ردیف Media امن می‌خواند (بدون path traversal) یا null */
+export function readMediaFile(dir: string, storageKey: string): Buffer | null {
+  if (!/^[a-zA-Z0-9._-]+$/.test(storageKey) || storageKey.includes("..")) return null;
+  const safe = path.resolve(dir, storageKey);
+  if (!safe.startsWith(dir)) return null;
+  try {
+    return fs.readFileSync(safe);
+  } catch {
+    return null;
+  }
+}
 
 @Controller("admin/capabilities")
 export class CapabilitiesController {
@@ -156,8 +197,9 @@ export class CapabilitiesController {
     const safe = path.resolve(MEDIA_DIR, key);
     if (!safe.startsWith(MEDIA_DIR)) throw new BadRequestException({ code: "PATH", message: "مسیر نامعتبر." });
     fs.writeFileSync(safe, buf);
+    const dims = readImageSize(buf); // فاز ۱۴: ابعاد از محتوای واقعی فایل
     const media = await this.prisma.media.create({
-      data: { kind: body.mime === "application/pdf" ? "doc" : "image", storageKey: key, mime: body.mime, sizeBytes: BigInt(buf.length), alt: body.alt ?? null },
+      data: { kind: body.mime === "application/pdf" ? "doc" : "image", storageKey: key, mime: body.mime, sizeBytes: BigInt(buf.length), width: dims?.w ?? null, height: dims?.h ?? null, alt: body.alt ?? null },
     });
     return { id: media.id, url: `/api/media/${key}`, key };
   }
@@ -211,6 +253,33 @@ export class CapabilitiesController {
     return { id: updated.id, alt: updated.alt, title: updated.title, caption: updated.caption, ok: true };
   }
 
+  /** فاز ۱۴ شکاف رسانه — دانلود مستقیم: همان بایت‌ها با Content-Disposition: attachment */
+  @Get("media/:id/download")
+  @RequirePermission("media.view")
+  async mediaDownload(@Param("id") id: string, @Res() res: Response) {
+    const m = await this.prisma.media.findUnique({ where: { id } });
+    if (!m) throw new BadRequestException({ code: "NOT_FOUND", message: "فایل یافت نشد." });
+    const buf = readMediaFile(MEDIA_DIR, m.storageKey);
+    if (!buf) throw new BadRequestException({ code: "FILE_MISSING", message: "فایل روی دیسک یافت نشد." });
+    res.setHeader("content-type", m.mime);
+    res.setHeader("content-length", String(buf.length));
+    res.setHeader("content-disposition", `attachment; filename="${m.storageKey}"`);
+    res.setHeader("cache-control", "no-store");
+    res.send(buf);
+  }
+
+  /** فاز ۱۴ شکاف رسانه — لینک عمومی کامل (برای کپی/اشتراک در بیرون از پنل) */
+  @Get("media/:id/link")
+  @RequirePermission("media.view")
+  async mediaLink(@Param("id") id: string, @Req() req: Request) {
+    const m = await this.prisma.media.findUnique({ where: { id } });
+    if (!m) throw new BadRequestException({ code: "NOT_FOUND", message: "فایل یافت نشد." });
+    const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol ?? "http").split(",")[0].trim();
+    const host = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost:4000").split(",")[0].trim();
+    const url = `/api/media/${m.storageKey}`;
+    return { id: m.id, url, absolute: `${proto}://${host}${url}` };
+  }
+
   /** فاز ۱۲ — جایگزینی فایل: فایل جدید با key جدید (immutable) و ردیف همان id به‌روز می‌شود؛
    *  فایل قبلی بعد از موفقیت حذف می‌شود (هیچ لینک دائمی به key قبلی لازم نیست — UI همیشه url فعلی ردیف را می‌گیرد). */
   @Post("media/:id/replace")
@@ -236,9 +305,10 @@ export class CapabilitiesController {
     const safeNew = path.resolve(MEDIA_DIR, newKey);
     if (!safeNew.startsWith(MEDIA_DIR)) throw new BadRequestException({ code: "PATH", message: "مسیر نامعتبر." });
     fs.writeFileSync(safeNew, buf);
+    const newDims = readImageSize(buf); // فاز ۱۴: ابعاد فایل جدید از محتوای واقعی
     const updated = await this.prisma.media.update({
       where: { id },
-      data: { storageKey: newKey, mime: body.mime, kind: body.mime === "application/pdf" ? "doc" : "image", sizeBytes: BigInt(buf.length) },
+      data: { storageKey: newKey, mime: body.mime, kind: body.mime === "application/pdf" ? "doc" : "image", sizeBytes: BigInt(buf.length), width: newDims?.w ?? null, height: newDims?.h ?? null },
     });
     // حذف فایل قدیمی — بعد از موفقیت آپدیت (اگر وسطش crash شود فقط فایل یتیم می‌ماند، ردیف خراب نمی‌شود)
     const oldSafe = path.resolve(MEDIA_DIR, m.storageKey);
