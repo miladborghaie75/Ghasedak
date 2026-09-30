@@ -569,21 +569,8 @@ export class PurchasingService {
         where: { supplierId: invoice.supplierId },
         data: { outstanding: { decrement: BigInt(amount) } },
       });
-      // فاز ۱۴ — بند ۱: سند تسویهٔ بدهی — فقط برای نقد/بانک (Dr 2100 / Cr خزانه).
-      // برای چکِ صادره سند صدورِ خودِ چک (Dr 2100/Cr 2110 از check_transition) کافی است — دوبار ثبت ممنوع.
-      if (!isCheck) {
-        const cashAccount = (input.method ?? "transfer") === "cash" ? "1000" : "1100";
-        await this.journal.postOrNotifyInTx(tx, {
-          description: `پرداخت فاکتور خرید ${invoice.number} — نقد/بانک به ${invoice.supplier?.name ?? "تامین‌کننده"}`,
-          sourceType: "purchase_payment",
-          sourceId: invoice.id,
-          actorId: input.actorId,
-          lines: [
-            { accountCode: "2100", debit: amount },
-            { accountCode: cashAccount, credit: amount },
-          ],
-        });
-      }
+      // فاز ۱۴ — بند ۱: سند تسویه فقط از یک مسیر — treasury.debitForPurchaseInTx (بالا) سند Dr 2100/Cr خزانه را می‌زند؛
+      // برای چکِ صادره سند صدورِ خودِ چک (Dr 2100/Cr 2110 از check_transition) کافی است. دوبار ثبت ممنوع (بند ۵۹).
       const state = paid >= Number(invoice.grandTotal) ? "PAID" : "PARTIALLY_PAID";
       await tx.purchaseInvoice.update({ where: { id: invoice.id }, data: { state } });
       return { state, paid, invoiceNumber: invoice.number, checkId };
