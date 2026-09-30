@@ -102,6 +102,14 @@ export interface ScheduledTaskInfo {
   nextRun: string | null;
 }
 
+/** نرمال‌سازی تاریخ PowerShell: /Date(ms)/ دات‌نت یا کسر ۷ رقمی → ISO قابل new Date */
+export function normalizePsDate(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const dotnet = /^\/Date\((\d+)\)\/$/.exec(s.trim());
+  if (dotnet) return new Date(Number(dotnet[1])).toISOString();
+  return s.replace(/\.(\d{3})\d+/, ".1$1");
+}
+
 /** خواندن تسک زمان‌بند ویندوزی با PowerShell — هر خطا/عدم‌دسترس → found=false (بدون فیک) */
 export async function readScheduledTask(name: string): Promise<ScheduledTaskInfo> {
   const fallback: ScheduledTaskInfo = { name, found: false, enabled: false, lastRun: null, lastResult: null, nextRun: null };
@@ -127,9 +135,9 @@ export async function readScheduledTask(name: string): Promise<ScheduledTaskInfo
             name,
             found: true,
             enabled: state === "Ready" || state === "Running",
-            lastRun: info.LastRunTime ?? null,
+            lastRun: normalizePsDate(info.LastRunTime),
             lastResult: typeof info.LastTaskResult === "number" ? info.LastTaskResult : null,
-            nextRun: info.NextRunTime ?? null,
+            nextRun: normalizePsDate(info.NextRunTime),
           });
         } catch {
           resolve(fallback);

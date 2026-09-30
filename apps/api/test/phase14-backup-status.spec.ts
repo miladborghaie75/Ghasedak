@@ -16,6 +16,7 @@ import {
   maskDbUrl,
   computeRetention,
   readScheduledTask,
+  normalizePsDate,
 } from "../src/admin/backup-status.controller";
 import { PrismaService } from "../src/prisma/prisma.service";
 
@@ -86,6 +87,15 @@ describe("Phase 14 item4 — backup status endpoint", () => {
     expect(r.scheduledTask.lastRun).toBeTruthy();
     expect(r.scheduledTask.lastResult).toBe(0);
     await prisma.$disconnect().catch(() => undefined);
+  });
+
+  it("normalizePsDate کسر ۷ رقمی و فرمت دات‌نت را قابل new Date می‌کند", () => {
+    const ps = "2026-09-30T02:00:01.1234567+03:30";
+    const out = normalizePsDate(ps);
+    expect(new Date(out!).getTime()).not.toBeNaN();
+    const dotnet = normalizePsDate("/Date(1790721001000)/");
+    expect(new Date(dotnet!).toISOString()).toBe(new Date(1790721001000).toISOString());
+    expect(normalizePsDate(null)).toBeNull();
   });
 
   it("readScheduledTask روی تسک غایب → found=false (بدون فیک)", async () => {
