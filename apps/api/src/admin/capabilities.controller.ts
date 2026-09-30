@@ -14,6 +14,7 @@ import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
 import { NotificationDispatcherService } from "../events/notification-dispatcher.service";
+import { SMS_PROVIDERS, SmsProvidersService, SmsProviderId } from "../events/sms-providers.service";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -39,6 +40,7 @@ export class CapabilitiesController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly dispatcher: NotificationDispatcherService,
+    private readonly sms: SmsProvidersService,
   ) {}
 
   // ================== مجوزهای کاربر جاری (برای UI شرطی) ==================
@@ -482,6 +484,60 @@ export class CapabilitiesController {
   @RequirePermission("settings.manage")
   async notificationDispatch() {
     return this.dispatcher.dispatchOnce(100);
+  }
+
+  // ================== چند-اپراتور پیامک (بند ۱۶) ==================
+
+  /** فهرست اپراتورهای پیامک + اپراتور فعال + وضعیت کلید هرکدام (ماسک‌شده) */
+  @Get("sms/providers")
+  @RequirePermission("settings.view")
+  async listSmsProviders() {
+    const active = await this.sms.activeProviderId();
+    return { providers: this.sms.providersStatus(), active };
+  }
+
+  /** انتخاب اپراتور فعال — ذخیره در Setting key="sms" (field provider) با audit */
+  @Post("sms/providers/active")
+  @RequirePermission("settings.manage")
+  async setActiveSmsProvider(@Req() req: Request, @Body() body: { provider?: string }) {
+    const identity = (req as unknown as Record<string, unknown>).adminIdentity as { userId?: string } | undefined;
+    const id = String(body?.provider ?? "") as SmsProviderId;
+    const meta = SMS_PROVIDERS.find((p) => p.id === id);
+    if (!meta) {
+      throw new BadRequestException({ code: "UNKNOWN_PROVIDER", message: "اپراتور پیامک نامعتبر است." });
+    }
+    const s = await this.prisma.setting.findUnique({ where: { key: "sms" } });
+    const cfg = { ...((s?.value ?? {}) as Record<string, unknown>), provider: id };
+    await this.prisma.setting.upsert({
+      where: { key: "sms" },
+      update: { value: cfg },
+      create: { key: "sms", value: cfg },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        action: "sms.provider.set",
+        entity: "Setting:sms",
+        entityId: id,
+        oldValues: s ? { provider: ((s.value ?? {}) as { provider?: string }).provider ?? "kavenegar" } : undefined,
+        newValues: { provider: id },
+        actorId: identity?.userId ?? null,
+      },
+    }).catch(() => undefined);
+    return { ok: true, active: id, name: meta.name };
+  }
+
+  /** تست اتصال اپراتور — ارسال واقعی پیام آزمایشی به شمارهٔ داده‌شده */
+  @Post("sms/providers/test")
+  @RequirePermission("settings.manage")
+  async testSmsProvider(@Body() body: { provider?: string; mobile?: string }) {
+    if (!/^09\d{9}$/.test(body?.mobile ?? "")) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "موبایل ۱۱ رقم با ۰۹." });
+    }
+    const id = String(body?.provider ?? "") as SmsProviderId;
+    if (!SMS_PROVIDERS.some((p) => p.id === id)) {
+      throw new BadRequestException({ code: "UNKNOWN_PROVIDER", message: "اپراتور پیامک نامعتبر است." });
+    }
+    return this.sms.testConnection(id, String(body.mobile));
   }
 
   // ================== فاز ۱۲ (گام ۴) — Outbox workspace ==================

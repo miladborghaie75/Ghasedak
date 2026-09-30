@@ -13,6 +13,8 @@ interface CapabilityStatus {
 
 interface CredItem { configured: boolean; masked: string | null; source: string }
 interface CredStatus { items: Record<string, CredItem> }
+interface SmsProviderRow { id: string; name: string; envKey: string; docsUrl: string; configured: boolean; masked: string | null }
+interface SmsProvidersStatus { providers: SmsProviderRow[]; active: string }
 
 /** تنظیمات قابلیت‌ها — وضعیت credential واقعی؛ بدون پیام فیک (بند ۱۱۱) */
 export default function CapabilitiesSettings() {
@@ -22,12 +24,17 @@ export default function CapabilitiesSettings() {
   const [testMobile, setTestMobile] = useState("");
   const [creds, setCreds] = useState<CredStatus | null>(null);
   const [credDraft, setCredDraft] = useState<Record<string, string>>({});
+  const [smsProv, setSmsProv] = useState<SmsProvidersStatus | null>(null);
+  const [smsTestMobile, setSmsTestMobile] = useState("");
+  const [smsTestMsg, setSmsTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = async () => {
     const r = await call<CapabilityStatus>("/admin/capabilities/status");
     if (r.ok && r.data) setSt(r.data);
     const c = await call<CredStatus>("/admin/capabilities/credentials");
     if (c.ok && c.data) setCreds(c.data);
+    const sp = await call<SmsProvidersStatus>("/admin/capabilities/sms/providers");
+    if (sp.ok && sp.data) setSmsProv(sp.data);
   };
   useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -65,6 +72,21 @@ export default function CapabilitiesSettings() {
     setMsg(r.ok ? `${key} پاک شد.` : r.error?.message ?? "خطا");
     if (r.ok) await load();
     setTimeout(() => setMsg(""), 4000);
+  };
+
+  const pickSmsProvider = async (id: string) => {
+    const r = await call<{ name: string }>("/admin/capabilities/sms/providers/active", { method: "POST", body: JSON.stringify({ provider: id }) });
+    setMsg(r.ok ? `اپراتور فعال: ${r.data?.name ?? id} ✅` : r.error?.message ?? "خطا");
+    if (r.ok) await load();
+    setTimeout(() => setMsg(""), 4000);
+  };
+
+  const testSmsProvider = async (id: string) => {
+    setSmsTestMsg(null);
+    const r = await call<{ state?: string; error?: string }>("/admin/capabilities/sms/providers/test", { method: "POST", body: JSON.stringify({ provider: id, mobile: smsTestMobile }) });
+    if (!r.ok) { setSmsTestMsg({ ok: false, text: r.error?.message ?? "خطا" }); return; }
+    const state = r.data?.state;
+    setSmsTestMsg({ ok: state === "SENT", text: state === "SENT" ? "پیام آزمایشی ارسال شد ✅" : state === "FAILED" ? (r.data?.error ?? "ارسال ناموفق") : (r.data?.error ?? "تنظیم نشده") });
   };
 
   if (!st) return <p className="p-6 text-sm text-muted">در حال بارگذاری…</p>;
@@ -135,6 +157,56 @@ export default function CapabilitiesSettings() {
         >
           ذخیرهٔ کلیدهای واردشده
         </button>
+      </section>
+
+      {/* اپراتور پیامک (بند ۱۶) */}
+      <section className="rounded-card border border-line bg-surface p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <h3 className="font-display text-base font-bold text-ink">اپراتور پیامک</h3>
+        </div>
+        <p className="mb-3 text-xs leading-6 text-muted">
+          شرکت ارسال پیامک را انتخاب کنید، کلید آن را در کارت «کلیدهای API» وارد کنید و با دکمهٔ تست، اتصال را بررسی کنید. کلید هر شرکت فقط در فایل محلی ذخیره می‌شود.
+        </p>
+        {smsProv ? (
+          <div className="space-y-2">
+            {smsProv.providers.map((p) => (
+              <div
+                key={p.id}
+                className={`flex flex-wrap items-center gap-3 rounded-card border p-3 ${smsProv.active === p.id ? "border-primary bg-primary/5" : "border-line bg-bg"}`}
+              >
+                <label className="flex flex-1 items-center gap-2 text-sm font-bold text-ink">
+                  <input
+                    type="radio"
+                    name="sms-provider"
+                    checked={smsProv.active === p.id}
+                    onChange={() => void pickSmsProvider(p.id)}
+                  />
+                  {p.name}
+                  <a href={p.docsUrl} target="_blank" rel="noreferrer" className="text-[10px] font-normal text-primary hover:underline" dir="ltr">مستندات ↗</a>
+                </label>
+                {p.configured ? (
+                  <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-ok">کلید: {p.masked}</span>
+                ) : (
+                  <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-err">کلید وارد نشده ({p.envKey})</span>
+                )}
+                <input
+                  value={smsTestMobile}
+                  onChange={(e) => setSmsTestMobile(e.target.value)}
+                  placeholder="۰۹… (تست)"
+                  className="w-36 rounded-lg border border-line bg-surface px-2 py-1.5 text-xs"
+                />
+                <button onClick={() => void testSmsProvider(p.id)} className="rounded-lg border border-line px-3 py-1.5 text-xs font-bold">
+                  تست اتصال
+                </button>
+              </div>
+            ))}
+            {smsTestMsg ? (
+              <p className={`text-xs font-bold ${smsTestMsg.ok ? "text-app-ok" : "text-app-err"}`}>{smsTestMsg.text}</p>
+            ) : null}
+          </div>
+        ) : (
+          <p className="text-xs text-muted">در حال بارگذاری اپراتورها…</p>
+        )}
       </section>
 
       {/* SMS */}

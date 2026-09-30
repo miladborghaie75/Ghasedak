@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { backgroundWorkersEnabled } from "../common/background-workers";
+import { SmsProvidersService } from "./sms-providers.service";
 
 /**
  * فاز ۱۱ (P2-B) — Notification Dispatcher
@@ -22,7 +23,10 @@ export class NotificationDispatcherService implements OnModuleInit, OnModuleDest
   private timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly smsProviders: SmsProvidersService,
+  ) {}
 
   onModuleInit(): void {
     // هر ۳۰ ثانیه — سبک؛ در production می‌تواند با worker مستقل جایگزین شود
@@ -86,24 +90,12 @@ export class NotificationDispatcherService implements OnModuleInit, OnModuleDest
     }
   }
 
-  /** SMS — آداپتور Kavenegar REST (بدون SDK)؛ provider فقط اینجا */
+  /** SMS — از لایهٔ چند-اپراتور (بند ۱۶): اپراتور فعال از Setting، آداپتورها در sms-providers.service */
   private async attemptSms(n: { id: string; to: string; templateKey: string; payload: unknown }): Promise<{ state: "SENT" | "FAILED" | "QUEUED"; error?: string }> {
-    const apiKey = process.env.KAVENEGAR_API_KEY;
-    if (!apiKey) {
-      return { state: "QUEUED", error: "NOT_CONFIGURED: KAVENEGAR_API_KEY تنظیم نشده — ردیف در صف می‌ماند. (بند ۱۱۱)" };
-    }
     const message = this.renderMessage(n);
     const setting = await this.prisma.setting.findUnique({ where: { key: "sms" } });
-    const sender = (setting?.value ?? {}) as { sender?: string };
-    const url = `https://api.kavenegar.com/v1/${apiKey}/sms/send.json?receptor=${encodeURIComponent(n.to)}&message=${encodeURIComponent(message)}${sender.sender ? `&sender=${encodeURIComponent(sender.sender)}` : ""}`;
-    try {
-      const res = await fetch(url);
-      const json = (await res.json().catch(() => null)) as { return?: { status?: number; message?: string } } | null;
-      if (res.ok && json?.return?.status === 200) return { state: "SENT" };
-      return { state: "FAILED", error: `SMS_PROVIDER: ${json?.return?.message ?? res.status}` };
-    } catch (e) {
-      return { state: "FAILED", error: `SMS_FAIL: ${e instanceof Error ? e.message : String(e)}` };
-    }
+    const sender = ((setting?.value ?? {}) as { sender?: string }).sender ?? null;
+    return this.smsProviders.send(n.to, message, sender);
   }
 
   /** EMAIL — آداپتور SMTP خام (بدون SDK) — همان الگوی vendor-notify */

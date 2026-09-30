@@ -106,7 +106,13 @@ kill_tree() { taskkill //PID "$1" //T //F >/dev/null 2>&1; }
 
 db_port() { if [ "$DB_MODE" = "primary" ]; then echo "$PRIMARY_PORT"; else echo "$REHEARSAL_PORT"; fi; }
 db_url() {
-  if [ "$DB_MODE" = "primary" ]; then
+  # اگر DATABASE_URL از بیرون داده شده باشد، محترمانه همان استفاده می‌شود (بند: Existing Capability First)
+  # وگرنه پیش‌فرض محیط آزمایشی است. نکته: پایگاه دادهٔ پیش‌فرض rehearsal (wave1rehearsal3)
+  # ممکن است اسکیمای عقب‌مانده داشته باشد — برای دادهٔ تازه از DATABASE_URL استفاده کنید
+  # یا GHASEDAK_DB=primary بگذارید.
+  if [ -n "${DATABASE_URL:-}" ]; then
+    echo "$DATABASE_URL"
+  elif [ "$DB_MODE" = "primary" ]; then
     echo "$PRIMARY_URL"
   else
     echo "postgresql://postgres:${REHEARSAL_PW}@127.0.0.1:${REHEARSAL_PORT}/${REHEARSAL_DB}"
@@ -145,7 +151,9 @@ start_api() {
     return 0
   fi
   local pid code=000 i
-  pid=$(PORT="$API_PORT" DATABASE_URL="$(db_url)" \
+  # گیت کارهای پس‌زمینه برای محیط توسعه محلی — تایمرهای خودکار روشن نمی‌شوند مگر GHASEDAK_WORKERS=on
+  local workers_flag="${GHASEDAK_WORKERS:-off}"
+  pid=$(PORT="$API_PORT" DATABASE_URL="$(db_url)" GHASEDAK_WORKERS="$workers_flag" \
     spawn_detached "api" "$ROOT/apps/api" "$RUN_DIR/api.log" "$NODE_EXE" "dist/main.js")
   for i in $(seq 1 30); do
     sleep 1
