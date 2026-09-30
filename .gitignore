@@ -28,3 +28,10 @@ asset/
 *.zip
 __MACOSX/
 ._*
+
+# رسانهٔ بارگذاری‌شده محلی (دادهٔ کاربری — هرگز commit نمی‌شود)
+apps/data/media/
+
+# فایل آزمایشی و بذر موقت
+/test.jpg
+packages/database/.seed-dist/
