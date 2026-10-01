@@ -50,6 +50,7 @@ export const MENU: MenuGroup[] = [
     title: "حسابداری",
     items: [
       { title: "حسابداری کامل", href: "/accounting", permission: "accounting.view" },
+      { title: "گزارش سود واقعی", href: "/reports/profit", permission: "accounting.reports" },
       { title: "خزانه (نقد و بانک)", href: "/treasury", permission: "treasury.view" },
     ],
   },
