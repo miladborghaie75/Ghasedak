@@ -195,12 +195,15 @@ export class SmsProvidersService {
     return { state: "FAILED", error: `SMS_PROVIDER(${label}): ${json?.error_message ?? res.status}`, provider };
   }
 
-  /** ایده‌پردازان (sms.ir) — REST POST /v1/send/simple با x-api-key */
+  /** ایده‌پردازان (sms.ir) — REST POST /v1/send/bulk با x-api-key (مستندات رسمی پنل؛ ساده/گروهی هر دو همین مسیر) */
   private async idehpardaz(apiKey: string, to: string, message: string, sender: string | null, provider: SmsProviderId): Promise<SendResult> {
-    const res = await fetch("https://api.sms.ir/v1/send/simple", {
+    if (!sender) {
+      return { state: "FAILED", error: "SMS_PROVIDER(ایده‌پردازان): شماره فرستنده (خط) تنظیم نشده — در کارت پیامک، شماره فرستنده را از «شماره‌های من» پنل SMS.ir وارد کنید.", provider };
+    }
+    const res = await fetch("https://api.sms.ir/v1/send/bulk", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": apiKey, accept: "application/json" },
-      body: JSON.stringify({ lineNumber: sender ?? "", messageText: message, mobiles: [to] }),
+      body: JSON.stringify({ lineNumber: sender, messageText: message, mobiles: [to] }),
     });
     const json = (await res.json().catch(() => null)) as { status?: number; message?: string; data?: unknown } | null;
     if (res.ok && json?.status === 1) return { state: "SENT", provider };
