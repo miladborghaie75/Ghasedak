@@ -15,6 +15,7 @@ import {
   type CategorySlug,
 } from "./attributes";
 import type { ProductV2 as ProductV2Type, VariantV2 } from "./catalog";
+import { resetTermLabels, putTermLabel } from "./term-labels";
 import type { SortKey } from "./sort";
 
 export type ProductV2 = ProductV2Type;
@@ -58,6 +59,8 @@ function toV2(raw: Record<string, unknown>): ProductV2 {
         colorId: (v.colorId as string) ?? "",
         sizeId: (v.sizeId as string) ?? "",
         optionIds: (v.optionIds as string[]) ?? [],
+        /** برچسب ترم‌های واقعی DB — از API می‌آید و در رجیستری ثبت می‌شود */
+        termLabels: (v.termLabels as Record<string, string>) ?? {},
       };
       if (v.salePrice != null) out.salePrice = Number(v.salePrice);
       return out;
@@ -105,6 +108,16 @@ export async function loadCatalog(): Promise<ProductV2[]> {
 
 /** کلاینت — hydrate از سرور یا بارگذاری تنبل از proxy؛ Promise مشترک */
 export function hydrateCatalog(products: ProductV2[]): void {
+  // رجیستری برچسب ترم‌ها از همین payload پر می‌شود (سرور و کلاینت) تا UI
+  // به‌جای شناسهٔ خام، نام واقعی ترم را نشان دهد (باگ موج ۱)
+  resetTermLabels();
+  for (const p of products) {
+    for (const v of p.variants) {
+      for (const [tid, label] of Object.entries(v.termLabels ?? {})) {
+        putTermLabel(tid, label);
+      }
+    }
+  }
   if (!g.__ghCatalog || g.__ghCatalog.products.length === 0) {
     g.__ghCatalog = { products, fetchedAt: Date.now(), stale: false };
   }
@@ -141,7 +154,8 @@ export const getProductsByCategoryV2 = (c: CategorySlug): ProductV2[] =>
   getAllProductsV2().filter((p) => p.category === c);
 
 /** برند بر اساس slug — از محصولات واقعی مشتق می‌شود */
-export const getBrandV2 = (id: string) => {
+export const getBrandV2 = (id: string | null) => {
+  if (!id) return undefined; // محصول بدون برند — هیچ برچسبی نساز (باگ «— null» عنوان PDP)
   const hit = getAllProductsV2().find((p) => p.brandId === id);
   return hit ? { id, slug: id, name: id } : undefined;
 };

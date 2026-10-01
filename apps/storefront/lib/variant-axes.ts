@@ -7,6 +7,7 @@ import {
   categoryHas,
   type AttributeKey,
 } from "./attributes";
+import { lookupTermLabel } from "./term-labels";
 import type { ProductV2 } from "./catalog";
 
 export interface VariantAxis {
@@ -20,8 +21,17 @@ export function buildAxes(product: ProductV2): VariantAxis[] {
   const sizeIds = [...new Set(product.variants.map((v) => v.sizeId))];
   const optionIds = [...new Set(product.variants.flatMap((v) => v.optionIds))];
 
-  axes.push({ key: "color", terms: termsOf("color").filter((t) => colorIds.includes(t.id)) });
-  axes.push({ key: "size", terms: termsOf("size").filter((t) => sizeIds.includes(t.id)) });
+  // ترم‌های واقعی DB در رجیستری هستند — axes از تلاقی استاتیک+پویا ساخته می‌شود
+  // (ترم دموی استاتیک برای سازگاری گذشته؛ ترم DB با lookupTermLabel)
+  const dynColor = colorIds
+    .filter((id) => !termsOf("color").some((t) => t.id === id) && lookupTermLabel(id) != null)
+    .map((id) => ({ id, attribute: "color" as AttributeKey, label: lookupTermLabel(id) as string, order: 999 }));
+  const dynSize = sizeIds
+    .filter((id) => !termsOf("size").some((t) => t.id === id) && lookupTermLabel(id) != null)
+    .map((id) => ({ id, attribute: "size" as AttributeKey, label: lookupTermLabel(id) as string, order: 999 }));
+
+  axes.push({ key: "color", terms: [...termsOf("color").filter((t) => colorIds.includes(t.id)), ...dynColor] });
+  axes.push({ key: "size", terms: [...termsOf("size").filter((t) => sizeIds.includes(t.id)), ...dynSize] });
 
   if (categoryHas.underwire(product.category)) {
     const uw = optionIds.filter((id) => id.startsWith("uw-"));

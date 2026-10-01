@@ -13,6 +13,8 @@ export type AttributeKey =
   | "material" // جنس
   | "color"; // رنگ
 
+import { lookupTermLabel } from "./term-labels";
+
 export interface AttributeTerm {
   id: string;
   attribute: AttributeKey;
@@ -103,11 +105,12 @@ const termIndex = new Map(ALL_TERMS.map((t) => [t.id, t]));
 
 export function getTerm(id: string): AttributeTerm {
   const t = termIndex.get(id);
-  if (!t) {
-    // ترم ناشناس/خالی (محصول با واریانت بدون ترم) — crash نکند؛ برچسب محافظه‌کار
-    return { id, attribute: "color", label: id || "—", order: 999 } as AttributeTerm;
-  }
-  return t;
+  if (t) return t;
+  // ترم واقعی DB — برچسب از رجیستری که payload کاتالوگ پر می‌کند (باگ برچسب خام موج ۱)
+  const label = lookupTermLabel(id);
+  if (label != null) return { id, attribute: "color", label, order: 999 } as AttributeTerm;
+  // ترم کاملاً ناشناس/خالی (محصول با واریانت بدون ترم) — crash نکند؛ برچسب محافظه‌کار
+  return { id, attribute: "color", label: id || "—", order: 999 } as AttributeTerm;
 }
 
 export function termsOf(attribute: AttributeKey): AttributeTerm[] {

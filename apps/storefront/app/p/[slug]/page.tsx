@@ -36,8 +36,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   if (!p) return {};
   const brand = getBrandV2(p.brandId);
   return {
-    title: `${p.name}${brand ? ` — ${brand.name}` : ""}`,
-    description: `${p.name}. ${p.short} — با راهنمای سایز و ارسال سریع.`,
+    title: brand ? `${p.name} — ${brand.name}` : p.name,
+    description: `${p.name}. ${p.short ?? ""} — با راهنمای سایز و ارسال سریع.`,
   };
 }
 

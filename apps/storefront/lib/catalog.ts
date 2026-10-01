@@ -22,6 +22,8 @@ export interface ProductV2 {
 }
 
 export interface VariantV2 {
+  /** برچسب ترم‌های واقعی این واریانت (id ترم → برچسب) — از API */
+  termLabels?: Record<string, string>;
   id: string;
   sku: string;
   price: number;

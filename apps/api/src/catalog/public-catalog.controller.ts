@@ -111,7 +111,13 @@ export function shapeCommon(p: ProductRow, priceMap: Map<string, { price: bigint
     inStock: variants.some((v) => v.stock > 0),
     minPrice: prices.length ? Math.min(...prices) : null,
     maxPrice: prices.length ? Math.max(...prices) : null,
-    variants,
+    /** برچسب ترم‌های هر واریانت — UI فروشگاه بدون جدول استاتیک، نام واقعی ترم را نشان دهد */
+    variants: variants.map((v, i) => {
+      const row = p.variants[i];
+      const termLabels: Record<string, string> = {};
+      for (const t of row.terms) termLabels[t.id] = t.value;
+      return { ...v, termLabels };
+    }),
   };
 }
 
@@ -246,7 +252,7 @@ export class PublicCatalogController {
     const shaped = shapeCommon(
       { ...p, images: resolveImages(p.images, mediaMap), variants: p.variants.map(flattenVariantTerms) },
       priceMap,
-    ) as ShapedProduct;
+    ) as unknown as ShapedProduct;
     // اتریبیوت‌های سطح محصول (جنس و …) — برای فیلتر material و نمایش
     const productTerms = await this.prisma.productAttributeTerm.findMany({
       where: { productId: p.id },
