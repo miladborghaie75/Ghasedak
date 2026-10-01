@@ -1,15 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCart } from "@/components/providers/CartProvider";
 import { Field, FaNumberInput } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Price } from "@/components/ui/Price";
 import { cn } from "@/lib/cn";
 import { faNum } from "@/lib/format";
-import { getAllProductsV2 } from "@/lib/catalog-repo";
+import { ensureCatalogClient, type ProductV2 } from "@/lib/catalog-repo";
 import type { VariantV2 } from "@/lib/catalog";
 
 /**
@@ -24,9 +23,17 @@ const DEMO_COUPONS: Record<string, { percent: number }> = {
   GHASEDAK10: { percent: 10 },
 };
 
-export function CheckoutClient() {
+/** روش ارسال از API — id رکورد DB است و به CheckoutInput.shippingMethodId می‌رود */
+export interface ShippingMethodDTO {
+  id: string;
+  name: string;
+  etaText: string | null;
+  cost: number;
+  freeOverAmount: number | null;
+}
+
+export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMethodDTO[] }) {
   const { lines, clearCart, ready } = useCart();
-  const router = useRouter();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [couponOpen, setCouponOpen] = useState(false);
@@ -34,19 +41,40 @@ export function CheckoutClient() {
   const [coupon, setCoupon] = useState<{ code: string; percent: number } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
 
+  const [catalog, setCatalog] = useState<ProductV2[]>([]);
+  useEffect(() => { void ensureCatalogClient().then(setCatalog); }, []);
+
+  // روش‌های ارسال واقعی از API — بدون روش معتبر ثبت سفارش 400 می‌خورد
+  const [fetchedMethods, setFetchedMethods] = useState<ShippingMethodDTO[] | null>(null);
+  useEffect(() => {
+    if (methodsProp) return;
+    let alive = true;
+    void fetch("/api/proxy/shipping-methods")
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((b: { items?: ShippingMethodDTO[] }) => { if (alive) setFetchedMethods(b.items ?? []); })
+      .catch(() => { if (alive) setFetchedMethods([]); });
+    return () => { alive = false; };
+  }, [methodsProp]);
+  const methods: ShippingMethodDTO[] = methodsProp ?? fetchedMethods ?? [];
+
   const subtotal = useMemo(() => {
     const byId = new Map(
-      getAllProductsV2().flatMap((p) => p.variants.map((v) => [v.id, v] as const)),
+      catalog.flatMap((p) => p.variants.map((v) => [v.id, v] as const)),
     );
     return lines.reduce((sum, l) => {
       const v = byId.get(l.variantId) as VariantV2 | undefined;
       if (!v) return sum;
       return sum + (v.salePrice ?? v.price) * l.qty;
     }, 0);
-  }, [lines]);
+  }, [lines, catalog]);
 
-  const [shipping, setShipping] = useState<"post" | "express">("post");
-  const shippingCost = shipping === "post" ? (subtotal >= 1_500_000 ? 0 : 49_000) : 120_000;
+  // پیش‌فرض: اولین روش API؛ تا رسیدن روش‌ها هیچ id تقلبی ارسال نمی‌شود
+  const [shipping, setShipping] = useState<string>("");
+  useEffect(() => {
+    if (!shipping && methods.length > 0) setShipping(methods[0].id);
+  }, [methods, shipping]);
+  const activeMethod = methods.find((m) => m.id === shipping);
+  const shippingCost = activeMethod ? (activeMethod.freeOverAmount != null && subtotal >= activeMethod.freeOverAmount ? 0 : activeMethod.cost) : 0;
   const discount = coupon ? Math.round((subtotal * coupon.percent) / 100) : 0;
   const total = subtotal + shippingCost - discount;
 
@@ -108,7 +136,7 @@ export function CheckoutClient() {
         headers: { "content-type": "application/json", "x-idempotency-key": idem },
         body: JSON.stringify({
           guestName: String(data.get("name") ?? ""),
-          guestMobile: String(data.get("mobile") ?? "").replace(/\D/g, "").replace(/^98/, "0"),
+          guestMobile: String(data.get("phone") ?? "").replace(/\D/g, "").replace(/^98/, "0"),
           address: {
             province: String(data.get("province") ?? ""),
             city: String(data.get("city") ?? ""),
@@ -117,7 +145,7 @@ export function CheckoutClient() {
             unit: String(data.get("unit") ?? "") || undefined,
             postalCode: String(data.get("postal") ?? ""),
           },
-          shippingMethodId: shipping === "post" ? "post" : "express",
+          shippingMethodId: shipping,
           couponCode: coupon?.code ?? null,
           lines: lines.map((l) => ({ sku: l.variantId, qty: l.qty })),
           idempotencyKey: idem,
@@ -239,22 +267,21 @@ export function CheckoutClient() {
       <div className="rounded-card border border-line bg-surface p-4 shadow-clay-1">
         <p className="mb-2.5 text-sm font-extrabold text-ink">روش ارسال</p>
         <div className="grid gap-2 sm:grid-cols-2">
-          <ShippingOption
-            id="post"
-            title="پست پیشتاز"
-            desc="۳ تا ۵ روز کاری"
-            price={subtotal >= 1_500_000 ? 0 : 49_000}
-            checked={shipping === "post"}
-            onChange={() => setShipping("post")}
-          />
-          <ShippingOption
-            id="express"
-            title="ارسال اکسپرس"
-            desc="تهران: همان روز؛ شهرستان: ۲۴ ساعت"
-            price={120_000}
-            checked={shipping === "express"}
-            onChange={() => setShipping("express")}
-          />
+          {methods.length === 0 ? (
+            <p className="text-xs text-muted sm:col-span-2">روش‌های ارسال بارگذاری نشده؛ صفحه را دوباره بارگذاری کنید.</p>
+          ) : (
+            methods.map((m) => (
+              <ShippingOption
+                key={m.id}
+                id={m.id}
+                title={m.name}
+                desc={m.etaText ?? ""}
+                price={m.freeOverAmount != null && subtotal >= m.freeOverAmount ? 0 : m.cost}
+                checked={shipping === m.id}
+                onChange={() => setShipping(m.id)}
+              />
+            ))
+          )}
         </div>
       </div>
 
