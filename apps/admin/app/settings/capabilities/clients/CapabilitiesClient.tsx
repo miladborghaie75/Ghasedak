@@ -15,6 +15,10 @@ interface CredItem { configured: boolean; masked: string | null; source: string 
 interface CredStatus { items: Record<string, CredItem> }
 interface SmsProviderRow { id: string; name: string; envKey: string; docsUrl: string; configured: boolean; masked: string | null }
 interface SmsProvidersStatus { providers: SmsProviderRow[]; active: string }
+interface PayStatus { gateway: "zarinpal"; sandbox: boolean; configured: boolean; merchantValid: boolean; masked: string | null; adapterActive: boolean }
+
+/** کلیدهایی که کارت‌های اختصاصی (درگاه/پیامک) مالک‌اند — از جدول عمومی حذف می‌شوند */
+const OWNED_BY_CARDS = new Set(["ZARINPAL_MERCHANT_ID", "KAVENEGAR_API_KEY", "GHASEDAKSMS_API_KEY", "MELIPAYAMAK_USERNAME", "MEDIANA_API_KEY", "IPPANEL_API_KEY", "SMSIR_API_KEY"]);
 
 /** تنظیمات قابلیت‌ها — کلاینتِ صفحهٔ سرور (بند ۷/۴۵)؛ پیامک در یک کارت واحد */
 export default function CapabilitiesClient() {
@@ -26,6 +30,11 @@ export default function CapabilitiesClient() {
   const [smsProv, setSmsProv] = useState<SmsProvidersStatus | null>(null);
   const [smsTestMobile, setSmsTestMobile] = useState("");
   const [smsTestMsg, setSmsTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [smsKeyDraft, setSmsKeyDraft] = useState<Record<string, string>>({});
+  const [paySt, setPaySt] = useState<PayStatus | null>(null);
+  const [payTest, setPayTest] = useState<{ ok: boolean; text: string } | null>(null);
+  const [payBusy, setPayBusy] = useState(false);
+  const [merchantDraft, setMerchantDraft] = useState("");
 
   const load = async () => {
     const r = await call<CapabilityStatus>("/admin/capabilities/status");
@@ -34,6 +43,8 @@ export default function CapabilitiesClient() {
     if (c.ok && c.data) setCreds(c.data);
     const sp = await call<SmsProvidersStatus>("/admin/capabilities/sms/providers");
     if (sp.ok && sp.data) setSmsProv(sp.data);
+    const ps = await call<PayStatus>("/admin/capabilities/payment-gateway/status");
+    if (ps.ok && ps.data) setPaySt(ps.data);
   };
   useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -82,6 +93,38 @@ export default function CapabilitiesClient() {
     setSmsTestMsg({ ok: state === "SENT", text: state === "SENT" ? "پیام آزمایشی ارسال شد ✅" : state === "FAILED" ? (r.data?.error ?? "ارسال ناموفق") : (r.data?.error ?? "تنظیم نشده") });
   };
 
+  /** کلید همان اپراتور + فعال‌شدنش — یک اقدام از کارت پیامک */
+  const saveSmsKey = async (id: string) => {
+    const key = (smsKeyDraft[id] ?? "").trim();
+    if (!key) { setMsg("کلید را وارد کنید."); setTimeout(() => setMsg(""), 3000); return; }
+    const r = await call("/admin/capabilities/sms/providers/key", { method: "POST", body: JSON.stringify({ provider: id, key }) });
+    if (r.ok) {
+      setSmsKeyDraft((d) => ({ ...d, [id]: "" }));
+      setMsg("کلید ذخیره و اپراتور فعال شد ✅ — بلافاصله قابل تست است.");
+      await load();
+    } else setMsg(r.error?.message ?? "خطا در ذخیرهٔ کلید");
+    setTimeout(() => setMsg(""), 5000);
+  };
+
+  const saveMerchant = async () => {
+    const v = merchantDraft.trim();
+    if (!v) { setMsg("Merchant ID را وارد کنید."); setTimeout(() => setMsg(""), 3000); return; }
+    const r = await call<{ written: string[] }>("/admin/capabilities/credentials", { method: "POST", body: JSON.stringify({ ZARINPAL_MERCHANT_ID: v }) });
+    if (r.ok) { setMerchantDraft(""); setMsg("Merchant ID ذخیره شد ✅ — حالا تست اتصال را بزنید."); await load(); }
+    else setMsg(r.error?.message ?? "خطا در ذخیره");
+    setTimeout(() => setMsg(""), 5000);
+  };
+
+  const testGateway = async () => {
+    setPayTest(null);
+    setPayBusy(true);
+    const r = await call<{ ok?: boolean; message?: string; endpoint?: string; authorityMasked?: string }>("/admin/capabilities/payment-gateway/test", { method: "POST" });
+    if (!r.ok) setPayTest({ ok: false, text: r.error?.message ?? "خطا" });
+    else if (r.data?.ok) setPayTest({ ok: true, text: `اتصال موفق (${r.data.endpoint}) — authority: ${r.data.authorityMasked ?? "—"}` });
+    else setPayTest({ ok: false, text: r.data?.message ?? "تست ناموفق" });
+    setPayBusy(false);
+  };
+
   if (!st) return <p className="p-6 text-sm text-muted">در حال بارگذاری…</p>;
 
   const credBadge = (s: string) =>
@@ -104,39 +147,58 @@ export default function CapabilitiesClient() {
           {credBadge(st.sms.credential)}
         </div>
         <p className="mb-3 text-xs leading-6 text-muted">
-          شرکت ارسال‌کننده را انتخاب کنید؛ کلید API همان شرکت در جدول پایین (یا فایل محلی <code className="rounded bg-bg px-1">apps/api/.env.local</code> که هرگز در git نیست) ذخیره می‌شود و هیچ مقدار کامل در پنل نمایش داده نمی‌شود. پس از ذخیرهٔ کلید، API را ری‌استارت کنید.
+          اپراتور را انتخاب و کلید API همان اپراتور را در همان ردیف وارد کنید — ذخیره در فایل محلی <code className="rounded bg-bg px-1">apps/api/.env.local</code> (هرگز در git) انجام و بلافاصله در فرایند جاری اعمال می‌شود؛ هیچ مقدار کامل در پنل نمایش داده نمی‌شود.
         </p>
         {smsProv ? (
           <div className="space-y-2">
             {smsProv.providers.map((p) => (
               <div
                 key={p.id}
-                className={`flex flex-wrap items-center gap-3 rounded-card border p-3 ${smsProv.active === p.id ? "border-primary bg-primary/5" : "border-line bg-bg"}`}
+                className={`rounded-card border p-3 ${smsProv.active === p.id ? "border-primary bg-primary/5" : "border-line bg-bg"}`}
               >
-                <label className="flex flex-1 items-center gap-2 text-sm font-bold text-ink">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex flex-1 items-center gap-2 text-sm font-bold text-ink">
+                    <input
+                      type="radio"
+                      name="sms-provider"
+                      checked={smsProv.active === p.id}
+                      onChange={() => void pickSmsProvider(p.id)}
+                    />
+                    {p.name}
+                    <a href={p.docsUrl} target="_blank" rel="noreferrer" className="text-[10px] font-normal text-primary hover:underline" dir="ltr">مستندات ↗</a>
+                  </label>
+                  {p.configured ? (
+                    <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-ok">کلید: {p.masked}</span>
+                  ) : (
+                    <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-err">کلید وارد نشده ({p.envKey})</span>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <input
-                    type="radio"
-                    name="sms-provider"
-                    checked={smsProv.active === p.id}
-                    onChange={() => void pickSmsProvider(p.id)}
+                    type="password"
+                    autoComplete="off"
+                    value={smsKeyDraft[p.id] ?? ""}
+                    onChange={(e) => setSmsKeyDraft((d) => ({ ...d, [p.id]: e.target.value }))}
+                    placeholder={p.configured ? "(بدون تغییر اگر خالی بماند)" : `کلید API ${p.name}`}
+                    dir="ltr"
+                    className="w-64 rounded-lg border border-line bg-surface px-2 py-1.5 font-mono text-[11px]"
                   />
-                  {p.name}
-                  <a href={p.docsUrl} target="_blank" rel="noreferrer" className="text-[10px] font-normal text-primary hover:underline" dir="ltr">مستندات ↗</a>
-                </label>
-                {p.configured ? (
-                  <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-ok">کلید: {p.masked}</span>
-                ) : (
-                  <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-err">کلید وارد نشده ({p.envKey})</span>
-                )}
-                <input
-                  value={smsTestMobile}
-                  onChange={(e) => setSmsTestMobile(e.target.value)}
-                  placeholder="۰۹… (تست)"
-                  className="w-36 rounded-lg border border-line bg-surface px-2 py-1.5 text-xs"
-                />
-                <button onClick={() => void testSmsProvider(p.id)} className="rounded-lg border border-line px-3 py-1.5 text-xs font-bold">
-                  تست اتصال
-                </button>
+                  <button
+                    onClick={() => void saveSmsKey(p.id)}
+                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-on-accent"
+                  >
+                    ذخیرهٔ کلید
+                  </button>
+                  <input
+                    value={smsTestMobile}
+                    onChange={(e) => setSmsTestMobile(e.target.value)}
+                    placeholder="۰۹… (تست)"
+                    className="w-36 rounded-lg border border-line bg-surface px-2 py-1.5 text-xs"
+                  />
+                  <button onClick={() => void testSmsProvider(p.id)} className="rounded-lg border border-line px-3 py-1.5 text-xs font-bold">
+                    تست اتصال
+                  </button>
+                </div>
               </div>
             ))}
             {smsTestMsg ? (
@@ -185,7 +247,7 @@ export default function CapabilitiesClient() {
             <div className="admin-table-wrap"><table className="w-full text-xs">
               <thead className="bg-ink/5 text-muted"><tr><th className="px-3 py-2 text-start">کلید</th><th className="px-3 py-2 text-start">وضعیت</th><th className="px-3 py-2 text-start">مقدار فعلی (ماسک)</th><th className="px-3 py-2 text-start">مقدار جدید</th><th className="px-3 py-2"></th></tr></thead>
               <tbody>
-                {Object.entries(creds.items).map(([k, it]) => (
+                {Object.entries(creds.items).filter(([k]) => !OWNED_BY_CARDS.has(k)).map(([k, it]) => (
                   <tr key={k} className="border-t border-line/60">
                     <td className="px-3 py-2 font-mono text-[11px]" dir="ltr">{k}</td>
                     <td className="px-3 py-2">
@@ -227,14 +289,60 @@ export default function CapabilitiesClient() {
         </button>
       </section>
 
-      {/* درگاه پرداخت */}
+      {/* درگاه پرداخت — کارت واحد (فقط زرین‌پال) */}
       <section className="rounded-card border border-line bg-surface p-5">
         <div className="mb-3 flex items-center gap-2">
           <h3 className="font-display text-base font-bold text-ink">درگاه پرداخت</h3>
-          {credBadge(st.payment.zarinpal)} {credBadge(st.payment.mock)}
+          {paySt ? (
+            paySt.adapterActive ? (
+              <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-ok">فعال</span>
+            ) : paySt.configured ? (
+              <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-warning">تنظیم‌شده — با ری‌استارت API فعال می‌شود</span>
+            ) : (
+              <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-err">تنظیم‌نشده</span>
+            )
+          ) : null}
+          <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-muted">زرین‌پال (تنها درگاه فعال)</span>
+          {paySt?.sandbox ? (
+            <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-warning">سندباکس</span>
+          ) : null}
         </div>
         <p className="mb-3 text-xs leading-6 text-muted">
-          زرین‌پال با <code className="rounded bg-bg px-1">ZARINPAL_MERCHANT_ID</code> فعال می‌شود. درگاه آزمایشی فقط در محیط توسعه در دسترس است و هرگز در production بالا نمی‌آید.
+          Merchant ID (فرمت UUID) در فایل محلی <code className="rounded bg-bg px-1">apps/api/.env.local</code> ذخیره می‌شود و هیچ مقدار کامل نمایش داده نمی‌شود. تست اتصال به سندباکس زرین‌پال می‌زند و با درگاه واقعی هیچ پرداختی انجام نمی‌دهد.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {paySt?.masked ? (
+            <span className="rounded-full bg-app-primary-soft px-2 py-0.5 font-mono text-[11px] font-bold text-app-ok" dir="ltr">MID: {paySt.masked}</span>
+          ) : null}
+          <input
+            type="password"
+            autoComplete="off"
+            value={merchantDraft}
+            onChange={(e) => setMerchantDraft(e.target.value)}
+            placeholder="Merchant ID (UUID)"
+            dir="ltr"
+            className="w-72 rounded-lg border border-line bg-bg px-3 py-2 font-mono text-xs"
+          />
+          <button
+            onClick={() => void saveMerchant()}
+            disabled={loading}
+            className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-accent"
+          >
+            ذخیره
+          </button>
+          <button
+            onClick={() => void testGateway()}
+            disabled={payBusy}
+            className="rounded-full border border-line px-4 py-2 text-xs font-bold text-ink disabled:opacity-40"
+          >
+            {payBusy ? "در حال تست…" : "تست اتصال"}
+          </button>
+        </div>
+        {payTest ? (
+          <p className={`mt-2 text-xs font-bold ${payTest.ok ? "text-app-ok" : "text-app-err"}`}>{payTest.text}</p>
+        ) : null}
+        <p className="mt-3 text-[11px] text-muted">
+          درگاه آزمایشی (mock) فقط در محیط توسعه برای تستِ مسیر پرداخت در دسترس است و هرگز در production بالا نمی‌آید.
         </p>
       </section>
 
