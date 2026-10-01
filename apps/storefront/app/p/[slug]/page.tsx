@@ -12,11 +12,11 @@ import { Price } from "@/components/ui/Price";
 import { faNum } from "@/lib/format";
 import { getTerm } from "@/lib/attributes";
 import {
-  getAllProductsV2,
   getBrandV2,
   getProductV2BySlug,
   hasAnyStock,
   isNewProduct,
+  loadCatalog,
   minPrice,
   salePriceOf,
 } from "@/lib/catalog-repo";
@@ -26,12 +26,12 @@ interface PageProps {
   params: Promise<{ slug: string }>;
 }
 
-export function generateStaticParams() {
-  return getAllProductsV2().map((p) => ({ slug: p.slug }));
-}
+/** داده از API واقعی — رندر داینامیک (build به بالا بودن API وابسته نیست) */
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
+  await loadCatalog();
   const p = getProductV2BySlug(slug);
   if (!p) return {};
   const brand = getBrandV2(p.brandId);
@@ -43,6 +43,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function ProductPage({ params }: PageProps) {
   const { slug } = await params;
+  await loadCatalog();
   const product = getProductV2BySlug(slug);
   if (!product) notFound();
 

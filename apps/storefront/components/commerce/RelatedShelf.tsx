@@ -1,11 +1,15 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { ProductCard } from "./ProductCard";
 import { SectionHeader } from "@/components/home/Sections";
-import { getAllProductsV2 } from "@/lib/catalog-repo";
-import type { ProductV2 } from "@/lib/catalog";
+import { ensureCatalogClient, type ProductV2 } from "@/lib/catalog-repo";
 
 /** محصولات مرتبط: همان دسته، حذف خود محصول، حداکثر ۴ */
 export function RelatedShelf({ product }: { product: ProductV2 }) {
-  const related = getAllProductsV2()
+  const [catalog, setCatalog] = useState<ProductV2[]>([]);
+  useEffect(() => { void ensureCatalogClient().then(setCatalog); }, []);
+  const related = catalog
     .filter((p) => p.category === product.category && p.id !== product.id)
     .slice(0, 4);
 

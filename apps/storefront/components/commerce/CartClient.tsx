@@ -1,14 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useCart } from "@/components/providers/CartProvider";
 import { ProductArt, type ArtKind } from "./ProductArt";
 import { Price } from "@/components/ui/Price";
 import { faNum } from "@/lib/format";
 import { getTerm } from "@/lib/attributes";
-import { getAllProductsV2 } from "@/lib/catalog-repo";
-import type { ProductV2, VariantV2 } from "@/lib/catalog";
+import { ensureCatalogClient, type ProductV2 } from "@/lib/catalog-repo";
+import type { VariantV2 } from "@/lib/catalog";
 
 /** آستانه ارسال رایگان — ثابت نمایشی؛ با بک‌اند از تنظیمات می‌آید */
 const FREE_SHIPPING_THRESHOLD = 1_500_000;
@@ -30,18 +30,20 @@ function variantLabel(v: VariantV2): string {
 
 export function CartClient() {
   const { lines, setQty, removeLine, ready } = useCart();
+  const [catalog, setCatalog] = useState<ProductV2[]>([]);
+  useEffect(() => { void ensureCatalogClient().then(setCatalog); }, []);
 
   const detailed = useMemo<Detail[]>(() => {
-    const byId = new Map(getAllProductsV2().flatMap((p) => p.variants.map((v) => [v.id, { v, p }] as const)));
+    const byId = new Map(catalog.flatMap((p) => p.variants.map((v) => [v.id, { v, p }] as const)));
     const result: Detail[] = [];
     for (const line of lines) {
       const hit = byId.get(line.variantId);
       if (hit) result.push({ variant: hit.v, product: hit.p, qty: line.qty });
     }
     return result;
-  }, [lines]);
+  }, [lines, catalog]);
 
-  if (!ready) {
+  if (!ready || catalog.length === 0) {
     return <p className="py-16 text-center text-sm text-muted">در حال بارگذاری سبد…</p>;
   }
 

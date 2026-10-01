@@ -1,11 +1,12 @@
 import type { MetadataRoute } from "next";
-import { getAllProductsV2 } from "@/lib/catalog-repo";
+import { getAllProductsV2, loadCatalog } from "@/lib/catalog-repo";
 import { CATEGORIES } from "@/lib/categories";
 import { guides } from "@/lib/guides-data";
 
 export const dynamic = "force-dynamic";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  await loadCatalog();
   const base = "https://ghasedak.example";
   const now = new Date();
 

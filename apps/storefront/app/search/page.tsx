@@ -2,11 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ProductGrid } from "@/components/commerce/ProductGrid";
 import { faNum } from "@/lib/format";
-import { getAllProductsV2, searchV2 } from "@/lib/catalog-repo";
+import { loadCatalog, searchV2 } from "@/lib/catalog-repo";
 import { CATEGORIES } from "@/lib/categories";
 import { NEEDS, matchesNeed } from "@/lib/needs";
 
 export const metadata: Metadata = { title: "جستجو" };
+
+/** داده از API واقعی — رندر داینامیک */
+export const dynamic = "force-dynamic";
 
 export default async function SearchPage({
   searchParams,
@@ -16,11 +19,12 @@ export default async function SearchPage({
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q : "";
   const needSlug = typeof sp.need === "string" ? sp.need : "";
+  const all = await loadCatalog();
 
   const need = NEEDS.find((n) => n.slug === needSlug);
   const results = need
-    ? getAllProductsV2().filter((p) => matchesNeed(p, need))
-    : searchV2(q);
+    ? all.filter((p) => matchesNeed(p, need))
+    : searchV2(q, all);
 
   return (
     <div className="mx-auto max-w-7xl px-3 py-6 sm:px-4">

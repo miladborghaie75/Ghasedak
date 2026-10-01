@@ -9,6 +9,10 @@ import { QuickAddHost } from "@/components/commerce/QuickAddHost";
 import { ThemeInit } from "@/components/providers/theme-init";
 import { MotionReveal } from "@/components/MotionReveal";
 import { site } from "@/lib/site";
+import { hydrateCatalog, loadCatalog } from "@/lib/catalog-repo";
+
+/** لایهٔ ریشه با دادهٔ زندهٔ کاتالوگ/تم — استاتیک build نمی‌شود */
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: {
@@ -37,6 +41,10 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // کاتالوگ واقعی — یک‌بار در سرور خوانده و به کلاینت hydrate می‌شود (موج ۱)
+  const catalog = await loadCatalog();
+  hydrateCatalog(catalog);
+
   // تم از پنل ادمین (Setting theme) — بدون تغییر کد (بند ۴۰/۵۰)
   let themeCss = "";
   // موشن اسکرول — شدت/خاموشی از ادمین (Setting: motion)

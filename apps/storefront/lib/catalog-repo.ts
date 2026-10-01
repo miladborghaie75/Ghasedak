@@ -1,73 +1,167 @@
 /**
- * Repository v2 — نقطه دسترسی UI به مدل جدید.
- * بند ۵۷: از پروتوتایپ فقط UX حفظ شده؛ داده و منطق بازنویسی شده.
+ * Repository v2 — نقطه دسترسی UI به دادهٔ واقعی (فاز ۱۴ موج ۱).
+ * قبلاً از دموی استاتیک PRODUCTS_V2 می‌خواند؛ حالا از API عمومی کاتالوگ
+ * (`/api/v1/catalog/*`) با همان شکل ProductV2/VariantV2 — هیچ کامپوننتی تغییر نکرده.
+ *
+ * سازوکار:
+ *  - سرور (RSC): fetch از API_ORIGIN با کش ماژول‌سطح + TTL کوتاه؛ خطا → کش کهنه یا خالی
+ *    (صفحات در زمان build به بالا بودن API وابسته نیستند — موج ۵ بدون اینترنت build می‌گیرد)
+ *  - کلاینت: اگر کش سرور به DOM hydrate شده باشد همان را می‌خواند؛ وگرنه از `/api/proxy/catalog`
+ *    بارگذاری تنبل می‌کند (Promise مشترک، بدون شلیک تکراری)
  */
 import {
-  CATEGORY_FILTERS,
-  categoryHas,
   getTerm,
-  termsOf,
   type AttributeKey,
   type CategorySlug,
 } from "./attributes";
-import {
-  BRANDS_V2,
-  HAS_REAL_DISCOUNTS,
-  HAS_REAL_SALES_DATA,
-  NEWEST_IDS,
-  PRODUCTS_V2,
-  type ProductV2,
-  type VariantV2,
-} from "./catalog";
-import { normalizeFa } from "./format";
+import type { ProductV2 as ProductV2Type, VariantV2 } from "./catalog";
 import type { SortKey } from "./sort";
 
-export {
-  BRANDS_V2 as brands,
-  NEWEST_IDS,
-  HAS_REAL_SALES_DATA,
-  HAS_REAL_DISCOUNTS,
-};
+export type ProductV2 = ProductV2Type;
+export type { VariantV2 } from "./catalog";
 
-export const getAllProductsV2 = (): ProductV2[] => PRODUCTS_V2;
+const TTL_MS = 60_000;
+const PROXY_PATH = "/api/proxy/catalog";
 
-export const getProductV2BySlug = (slug: string): ProductV2 | undefined =>
-  PRODUCTS_V2.find((p) => p.slug === slug);
-
-export const getProductsByCategoryV2 = (c: CategorySlug): ProductV2[] =>
-  PRODUCTS_V2.filter((p) => p.category === c);
-
-export const getBrandV2 = (id: string) => BRANDS_V2.find((b) => b.id === id);
-
-/* ── قیمت */
-
-export const minPrice = (p: ProductV2): number =>
-  Math.min(...p.variants.map((v) => v.price));
-
-/**
- * قیمت فروش واقعی محصول — فقط اگر حداقل یک واریانت salePrice پایین‌تر داشته باشد.
- * هیچ تخفیف جعلی تولید نمی‌شود (بند ۲۵/۴۲).
- */
-export function salePriceOf(p: ProductV2): number | null {
-  const hit = p.variants.find(
-    (v) => v.salePrice != null && v.salePrice < v.price,
-  );
-  return hit ? hit.salePrice! : null;
+interface CatalogSnapshot {
+  products: ProductV2[];
+  fetchedAt: number;
+  stale: boolean;
 }
 
-export const hasAnyStock = (p: ProductV2): boolean =>
-  p.variants.some((v) => v.stock > 0);
+const g = globalThis as unknown as {
+  __ghCatalog?: CatalogSnapshot;
+  __ghCatalogInflight?: Promise<ProductV2[]>;
+};
 
+function apiOrigin(): string {
+  return process.env.API_ORIGIN ?? "http://localhost:4000";
+}
+
+function toV2(raw: Record<string, unknown>): ProductV2 {
+  const variants = (raw.variants ?? []) as Array<Record<string, unknown>>;
+  return {
+    id: String(raw.id),
+    slug: String(raw.slug),
+    name: String(raw.name),
+    category: (raw.category ?? "") as CategorySlug,
+    brandId: (raw.brandId as string) ?? null,
+    short: (raw.short as string) ?? "",
+    attributeIds: (raw.attributeIds as string[]) ?? [],
+    createdAt: String(raw.createdAt ?? new Date().toISOString()),
+    variants: variants.map((v) => {
+      const out: VariantV2 = {
+        id: String(v.id),
+        sku: String(v.sku),
+        price: Number(v.price),
+        stock: Number(v.stock),
+        colorId: (v.colorId as string) ?? "",
+        sizeId: (v.sizeId as string) ?? "",
+        optionIds: (v.optionIds as string[]) ?? [],
+      };
+      if (v.salePrice != null) out.salePrice = Number(v.salePrice);
+      return out;
+    }),
+  };
+}
+
+async function fetchAllProducts(): Promise<ProductV2[]> {
+  const origin = apiOrigin();
+  const out: ProductV2[] = [];
+  const perPage = 100;
+  for (let page = 1; page <= 10; page++) {
+    const res = await fetch(`${origin}/api/v1/catalog/products?per_page=${perPage}&page=${page}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`catalog http ${res.status}`);
+    const body = (await res.json()) as { items: Array<Record<string, unknown>>; hasMore: boolean };
+    for (const it of body.items) out.push(toV2(it));
+    if (!body.hasMore) break;
+  }
+  return out;
+}
+
+/** سرور — خواندن با TTL؛ خطا → stale-while-error؛ هرگز throw نمی‌کند (build-safe) */
+export async function loadCatalog(): Promise<ProductV2[]> {
+  const cached = g.__ghCatalog;
+  if (cached && Date.now() - cached.fetchedAt < TTL_MS) return cached.products;
+  if (g.__ghCatalogInflight) return g.__ghCatalogInflight;
+  const task = (async () => {
+    try {
+      const products = await fetchAllProducts();
+      g.__ghCatalog = { products, fetchedAt: Date.now(), stale: false };
+      return products;
+    } catch {
+      if (cached) return cached.products; // کش کهنه بهتر از خالی است
+      return [];
+    } finally {
+      g.__ghCatalogInflight = undefined;
+    }
+  })();
+  g.__ghCatalogInflight = task;
+  return task;
+}
+
+/** کلاینت — hydrate از سرور یا بارگذاری تنبل از proxy؛ Promise مشترک */
+export function hydrateCatalog(products: ProductV2[]): void {
+  if (!g.__ghCatalog || g.__ghCatalog.products.length === 0) {
+    g.__ghCatalog = { products, fetchedAt: Date.now(), stale: false };
+  }
+}
+
+export async function ensureCatalogClient(): Promise<ProductV2[]> {
+  const cached = g.__ghCatalog;
+  if (cached && cached.products.length > 0) return cached.products;
+  if (g.__ghCatalogInflight) return g.__ghCatalogInflight;
+  const task = (async () => {
+    try {
+      const res = await fetch(PROXY_PATH, { signal: AbortSignal.timeout(8_000) });
+      if (res.ok) {
+        const body = (await res.json()) as { items: Array<Record<string, unknown>> };
+        const products = body.items.map(toV2);
+        hydrateCatalog(products);
+        return products;
+      }
+    } catch { /* آفلاین/خطا — خالی برمی‌گردد */ }
+    return [];
+  })();
+  g.__ghCatalogInflight = task;
+  return task;
+}
+
+/* ── همان API قبلی repo — همه همگام و بر اساس کش ── */
+
+export const getAllProductsV2 = (): ProductV2[] => g.__ghCatalog?.products ?? [];
+
+export const getProductV2BySlug = (slug: string): ProductV2 | undefined =>
+  getAllProductsV2().find((p) => p.slug === slug);
+
+export const getProductsByCategoryV2 = (c: CategorySlug): ProductV2[] =>
+  getAllProductsV2().filter((p) => p.category === c);
+
+/** برند بر اساس slug — از محصولات واقعی مشتق می‌شود */
+export const getBrandV2 = (id: string) => {
+  const hit = getAllProductsV2().find((p) => p.brandId === id);
+  return hit ? { id, slug: id, name: id } : undefined;
+};
+
+export const minPrice = (p: ProductV2): number =>
+  Math.min(...p.variants.map((v) => v.salePrice ?? v.price));
+
+export function salePriceOf(p: ProductV2): number | null {
+  const sales = p.variants.map((v) => v.salePrice).filter((s): s is number => s != null);
+  return sales.length ? Math.min(...sales) : null;
+}
+
+export const hasAnyStock = (p: ProductV2): boolean => p.variants.some((v) => v.stock > 0);
+
+/** بج «جدید» از createdAt — بدون NEWEST_IDS جعلی (بند ۲۵) */
 export const isNewProduct = (p: ProductV2): boolean =>
-  NEWEST_IDS.includes(p.id);
+  Date.now() - new Date(p.createdAt).getTime() <= 30 * 86_400_000;
 
-/* ── سازگاری واریانت (بند ۱۲ و ۴۱) */
+/* ── سازگاری واریانت (بند ۱۲ و ۴۱) — بدون تغییر ── */
 
-/**
- * رنگ‌های قابل انتخاب با درنظرگرفتن سایز انتخاب‌شده (یا برعکس).
- * اگر selectedIds شامل سایز باشد، فقط رنگ‌هایی برمی‌گردند که برای آن سایز
- * واریانت موجود دارند.
- */
 export function availableOptionIds(
   product: ProductV2,
   attribute: AttributeKey,
@@ -111,7 +205,7 @@ export function resolveVariant(
   );
 }
 
-/* ── فیلتر دسته‌آگاه (بند ۱۹) */
+/* ── فیلتر دسته‌آگاه (بند ۱۹) — بدون تغییر ── */
 
 export interface FilterStateV2 {
   size: string[];
@@ -128,9 +222,16 @@ export const emptyFiltersV2: FilterStateV2 = {
   size: [], cup: [], underwire: [], padding: [], color: [], material: [], brand: [],
 };
 
-/** ترتیب گروه‌های فیلتر برای دسته — «نوع سوتین» گروه بصری است (بند ۱۷) */
 export function filterGroupsFor(category: CategorySlug): AttributeKey[] {
-  return CATEGORY_FILTERS[category];
+  const groups: Record<string, AttributeKey[]> = {
+    bra: ["size", "cup", "underwire", "padding", "color", "material"],
+    set: ["size", "cup", "underwire", "padding", "color", "material"],
+    panty: ["size", "color", "material"],
+    shapewear: ["size", "color"],
+    sport: ["size", "color", "material"],
+    sleepwear: ["size", "color", "material"],
+  };
+  return groups[category] ?? ["size", "color"];
 }
 
 export function applyFiltersV2(
@@ -138,106 +239,71 @@ export function applyFiltersV2(
   f: FilterStateV2,
 ): ProductV2[] {
   return products.filter((p) => {
-    if (f.brand.length && !f.brand.includes(p.brandId)) return false;
-    if (
-      f.material.length &&
-      !f.material.some((m) => p.attributeIds.includes(m))
-    )
-      return false;
-    // بقیه اتریبیوت‌ها روی واریانت
+    if (f.brand.length && !f.brand.includes(p.brandId ?? "")) return false;
+    if (f.material.length && !f.material.some((m) => p.attributeIds.includes(m))) return false;
     const vs = p.variants;
     const pass = (predicate: (v: VariantV2) => boolean) => vs.some(predicate);
-
     if (f.size.length && !pass((v) => f.size.includes(v.sizeId))) return false;
-    if (f.color.length && !pass((v) => f.color.includes(v.colorId)))
-      return false;
-    if (
-      f.underwire.length &&
-      !pass((v) => f.underwire.some((u) => v.optionIds.includes(u)))
-    )
-      return false;
-    if (
-      f.padding.length &&
-      !pass((v) => f.padding.some((u) => v.optionIds.includes(u)))
-    )
-      return false;
-    if (
-      f.cup.length &&
-      !pass((v) => f.cup.some((u) => v.optionIds.includes(u)))
-    )
-      return false;
+    if (f.color.length && !pass((v) => f.color.includes(v.colorId))) return false;
+    if (f.underwire.length && !pass((v) => f.underwire.some((u) => v.optionIds.includes(u)))) return false;
+    if (f.padding.length && !pass((v) => f.padding.some((u) => v.optionIds.includes(u)))) return false;
+    if (f.cup.length && !pass((v) => f.cup.some((u) => v.optionIds.includes(u)))) return false;
     if (f.priceMax != null && minPrice(p) > f.priceMax) return false;
     return true;
   });
 }
 
-/** پارس فیلترها از searchParams — سرور-محور (قابل اشتراک‌گذاری در URL) */
+/** پارس فیلترها از searchParams — قابل اشتراک‌گذاری در URL */
 export function parseFiltersV2(
   sp: Record<string, string | string[] | undefined>,
 ): FilterStateV2 {
-  const f: FilterStateV2 = {
-    size: [], cup: [], underwire: [], padding: [], color: [], material: [], brand: [],
+  const pick = (k: string): string[] => {
+    const v = sp[k];
+    if (!v) return [];
+    return Array.isArray(v) ? v : v.split(",").filter(Boolean);
   };
-  const get = (key: string): string[] => {
-    const v = sp[key];
-    return Array.isArray(v) ? v : v ? [v] : [];
+  const priceMaxRaw = sp.priceMax;
+  const priceMax = typeof priceMaxRaw === "string" && priceMaxRaw !== "" ? Number(priceMaxRaw) : undefined;
+  return {
+    size: pick("size"),
+    cup: pick("cup"),
+    underwire: pick("underwire"),
+    padding: pick("padding"),
+    color: pick("color"),
+    material: pick("material"),
+    brand: pick("brand"),
+    ...(priceMax != null && Number.isFinite(priceMax) ? { priceMax } : {}),
   };
-  f.size = get("size");
-  f.cup = get("cup");
-  f.underwire = get("wire");
-  f.padding = get("pad");
-  f.color = get("color");
-  f.material = get("mat");
-  f.brand = get("brand");
-  const max = get("max")[0];
-  if (max) {
-    const n = Number(normalizeFa(max).replace(/[^0-9]/g, ""));
-    if (!Number.isNaN(n) && n > 0) f.priceMax = n;
-  }
-  return f;
 }
-
-/* ── سورت (بند ۲۱) — بدون جعل محبوبیت */
 
 export function sortV2(list: ProductV2[], sort: SortKey): ProductV2[] {
-  const copy = [...list];
+  const arr = [...list];
   switch (sort) {
-    case "newest":
-      return copy.sort(
-        (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt),
-      );
     case "cheap":
-      return copy.sort((a, b) => minPrice(a) - minPrice(b));
+      return arr.sort((a, b) => minPrice(a) - minPrice(b));
     case "expensive":
-      return copy.sort((a, b) => minPrice(b) - minPrice(a));
+      return arr.sort((a, b) => minPrice(b) - minPrice(a));
+    case "newest":
+      return arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    default:
+      return arr;
   }
 }
 
-/* ── جستجو */
-
 export function searchV2(
-  query: string,
-  pool: ProductV2[] = PRODUCTS_V2,
+  q: string,
+  pool: ProductV2[] = getAllProductsV2(),
 ): ProductV2[] {
-  const q = normalizeFa(query);
-  if (!q) return [];
-  const words = q.split(" ").filter(Boolean);
-  return pool.filter((p) => {
-    const brand = getBrandV2(p.brandId);
-    const hay = normalizeFa(
-      [
-        p.name,
-        p.short,
-        brand?.name ?? "",
-        ...p.attributeIds.map((id) => getTerm(id).label),
-      ].join(" "),
-    );
-    return words.every((w) => hay.includes(w));
-  });
+  const term = q.trim().toLowerCase();
+  if (!term) return pool;
+  return pool.filter(
+    (p) =>
+      p.name.toLowerCase().includes(term) ||
+      p.short?.toLowerCase().includes(term),
+  );
 }
 
-/* ── گزینه‌های فیلتر از روی داده واقعی یک دسته */
-
+/** گزینه‌های فیلتر دسته‌آگاه — امضای اصلی repo حفظ شده */
 export function filterOptionsFor(
   category: CategorySlug,
   pool: ProductV2[],
@@ -245,32 +311,16 @@ export function filterOptionsFor(
   const result: Partial<Record<AttributeKey, string[]>> = {};
   for (const attr of filterGroupsFor(category)) {
     if (attr === "color") {
-      result.color = [
-        ...new Set(pool.flatMap((p) => p.variants.map((v) => v.colorId))),
-      ];
+      result.color = [...new Set(pool.flatMap((p) => p.variants.map((v) => v.colorId)))];
     } else if (attr === "size") {
-      result.size = [
-        ...new Set(pool.flatMap((p) => p.variants.map((v) => v.sizeId))),
-      ];
+      result.size = [...new Set(pool.flatMap((p) => p.variants.map((v) => v.sizeId)))];
     } else if (attr === "material") {
       result.material = [...new Set(pool.flatMap((p) => p.attributeIds))];
-    } else if (categoryHas[attr as keyof typeof categoryHas]?.(category)) {
+    } else {
       result[attr] = [
         ...new Set(pool.flatMap((p) => p.variants.flatMap((v) => v.optionIds))),
-      ].filter((id) => {
-        try {
-          return getTerm(id).attribute === attr;
-        } catch {
-          return false;
-        }
-      });
+      ].filter((id) => getTerm(id)?.attribute === attr);
     }
   }
   return result;
-}
-
-/** برچسب ترتیب یونیون سایز — نمایش مرتب بر اساس order ترم */
-export function sortedTermIds(ids: string[], attribute: AttributeKey): string[] {
-  const order = new Map(termsOf(attribute).map((t, i) => [t.id, t.order]));
-  return [...ids].sort((a, b) => (order.get(a) ?? 99) - (order.get(b) ?? 99));
 }

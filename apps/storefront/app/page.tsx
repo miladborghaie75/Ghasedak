@@ -11,12 +11,14 @@ import {
 } from "@/components/home/Sections";
 import { ProductCard } from "@/components/commerce/ProductCard";
 import { CATEGORIES } from "@/lib/categories";
-import { NEWEST_IDS, getAllProductsV2 } from "@/lib/catalog-repo";
+import { isNewProduct, loadCatalog } from "@/lib/catalog-repo";
+
+/** داده از API واقعی — رندر داینامیک (build به بالا بودن API وابسته نیست) */
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const newest = NEWEST_IDS.map(
-    (id) => getAllProductsV2().find((p) => p.id === id)!,
-  );
+  const all = await loadCatalog();
+  const newest = all.filter((p) => isNewProduct(p)).slice(0, 8);
   // دسته‌ها با شمارش واقعی محصولات (بدون دسته خالی نمایشی)
   const categories = CATEGORIES;
 

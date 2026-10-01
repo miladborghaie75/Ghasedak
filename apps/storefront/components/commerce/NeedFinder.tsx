@@ -6,16 +6,15 @@
  * نتیجه: محصولات منطبق + دلیل انطباق + نزدیک‌ترین‌ها + امکان تغییر پاسخ.
  * گزینه «هنوز نمی‌دونم» در صفحه خانه کل ویزارد را باز می‌کند.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ProductCard } from "./ProductCard";
 import { cn } from "@/lib/cn";
 import { faNum } from "@/lib/format";
 import { getTerm } from "@/lib/attributes";
-import { getAllProductsV2, hasAnyStock, minPrice } from "@/lib/catalog-repo";
+import { ensureCatalogClient, hasAnyStock, minPrice, type ProductV2 } from "@/lib/catalog-repo";
 import { NEEDS, matchesNeed, type Need } from "@/lib/needs";
 import type { CategorySlug } from "@/lib/attributes";
-import type { ProductV2 } from "@/lib/catalog";
 
 const SITUATION_ICONS: Record<string, string> = {
   everyday: "🌿",
@@ -220,7 +219,9 @@ function ResultView({
   onRestart: () => void;
   onClose?: () => void;
 }) {
-  const all = useMemo(() => getAllProductsV2().filter(hasAnyStock), []);
+  const [raw, setRaw] = useState<ProductV2[]>([]);
+  useEffect(() => { void ensureCatalogClient().then(setRaw); }, []);
+  const all = useMemo(() => raw.filter(hasAnyStock), [raw]);
 
   const { matches, reason } = useMemo(() => {
     const situationNeed = NEEDS.find((n) => n.slug === answers[0]?.id);

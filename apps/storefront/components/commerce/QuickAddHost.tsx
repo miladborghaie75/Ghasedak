@@ -6,19 +6,20 @@
  * انتخاب‌ها با سازگاری ترکیبی (VariantMatrix) و بدون ریدایرکت.
  */
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useCart } from "@/components/providers/CartProvider";
 import { Sheet } from "@/components/ui/Sheet";
 import { VariantMatrix } from "./VariantMatrix";
 import { buildAxes } from "@/lib/variant-axes";
-import { getAllProductsV2 } from "@/lib/catalog-repo";
-import type { ProductV2 } from "@/lib/catalog";
+import { ensureCatalogClient, type ProductV2 } from "@/lib/catalog-repo";
 
 export function QuickAddHost() {
   const { quickAddKey, closeQuickAdd, addLine } = useCart();
   const pathname = usePathname();
-  const product = getAllProductsV2().find((p) => p.id === quickAddKey);
+  const [catalog, setCatalog] = useState<ProductV2[]>([]);
+  useEffect(() => { void ensureCatalogClient().then(setCatalog); }, []);
+  const product = catalog.find((p) => p.id === quickAddKey);
 
   // بستن خودکار هنگام تغییر مسیر — شیت نباید از صفحه‌ای به صفحه دیگر حمل شود
   useEffect(() => {

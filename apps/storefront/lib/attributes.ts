@@ -103,7 +103,10 @@ const termIndex = new Map(ALL_TERMS.map((t) => [t.id, t]));
 
 export function getTerm(id: string): AttributeTerm {
   const t = termIndex.get(id);
-  if (!t) throw new Error(`Unknown term: ${id}`);
+  if (!t) {
+    // ترم ناشناس/خالی (محصول با واریانت بدون ترم) — crash نکند؛ برچسب محافظه‌کار
+    return { id, attribute: "color", label: id || "—", order: 999 } as AttributeTerm;
+  }
   return t;
 }
 

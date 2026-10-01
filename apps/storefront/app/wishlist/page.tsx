@@ -1,16 +1,20 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useCart } from "@/components/providers/CartProvider";
 import { ProductCard } from "@/components/commerce/ProductCard";
-import { getAllProductsV2 } from "@/lib/catalog-repo";
+import { ensureCatalogClient, type ProductV2 } from "@/lib/catalog-repo";
 
 export default function WishlistPage() {
   const { wishlist, ready } = useCart();
-  const all = getAllProductsV2();
+  const [all, setAll] = useState<ProductV2[]>([]);
+  useEffect(() => {
+    void ensureCatalogClient().then(setAll);
+  }, []);
   const items = all.filter((p) => wishlist.includes(p.id));
 
-  if (!ready) {
+  if (!ready || all.length === 0) {
     return <p className="py-16 text-center text-sm text-muted">در حال بارگذاری…</p>;
   }
 

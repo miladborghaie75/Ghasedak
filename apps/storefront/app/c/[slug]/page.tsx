@@ -5,8 +5,8 @@ import { ProductGrid } from "@/components/commerce/ProductGrid";
 import { CategoryFiltersBar } from "@/components/commerce/CategoryFiltersBar";
 import {
   applyFiltersV2,
-  getAllProductsV2,
   getProductsByCategoryV2,
+  loadCatalog,
   parseFiltersV2,
 } from "@/lib/catalog-repo";
 import { CATEGORIES, getCategoryBySlug } from "@/lib/categories";
@@ -18,9 +18,8 @@ interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export function generateStaticParams() {
-  return CATEGORIES.map((c) => ({ slug: c.slug }));
-}
+/** داده از API واقعی — رندر داینامیک (build به بالا بودن API وابسته نیست) */
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
@@ -37,6 +36,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
   const sp = await searchParams;
   const cat = getCategoryBySlug(slug);
   if (!cat) notFound();
+  await loadCatalog();
 
   const filters = parseFiltersV2(sp);
   const sort = parseSortParam(sp);

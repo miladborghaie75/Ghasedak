@@ -7,7 +7,7 @@
  * OR داخل یک اتریبیوت، AND بین اتریبیوت‌ها (بند ۱۸) — در applyFiltersV2.
  */
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Chip } from "@/components/ui/Chip";
 import { Sheet } from "@/components/ui/Sheet";
 import { faNum, toEnDigits } from "@/lib/format";
@@ -20,9 +20,9 @@ import {
 } from "@/lib/attributes";
 import {
   filterOptionsFor,
-  getAllProductsV2,
-  getProductsByCategoryV2,
+  ensureCatalogClient,
   type FilterStateV2,
+  type ProductV2,
 } from "@/lib/catalog-repo";
 import { SORT_LABELS, type SortKey } from "@/lib/sort";
 
@@ -93,8 +93,10 @@ export function CategoryFiltersBar({ category, filters, sort }: BarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [catalog, setCatalog] = useState<ProductV2[]>([]);
+  useEffect(() => { void ensureCatalogClient().then(setCatalog); }, []);
 
-  const pool = getProductsByCategoryV2(category);
+  const pool = catalog.filter((p) => p.category === category);
   const options = filterOptionsFor(category, pool) as Record<ArrayFilterKey, string[]> & { brand?: string[] };
 
   const go = (
