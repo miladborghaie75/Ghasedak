@@ -29,7 +29,7 @@ export class PermissionsGuard implements CanActivate {
     if (!identity) {
       throw new UnauthorizedException({ code: "UNAUTHORIZED", message: "ورود لازم است." });
     }
-    const ok = required.every((p) => identity.permissions.includes(p));
+    const ok = identity.permissions.includes("*") || required.every((p) => identity.permissions.includes(p));
     if (!ok) {
       throw new ForbiddenException({
         code: "FORBIDDEN",

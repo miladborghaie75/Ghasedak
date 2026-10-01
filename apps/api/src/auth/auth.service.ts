@@ -64,6 +64,15 @@ export class AuthService {
     };
   }
 
+  /** id کاربر سیستم برای هویت API-Key — اولین SUPERADMIN فعال */
+  async systemUserId(): Promise<string | null> {
+    const u = await this.prisma.user.findFirst({
+      where: { role: "SUPER_ADMIN", status: "ACTIVE" },
+      orderBy: { createdAt: "asc" },
+    });
+    return u?.id ?? null;
+  }
+
   private readCookie(req: Request): string | null {
     const cookie = req.headers.cookie;
     if (!cookie) return null;
