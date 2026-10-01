@@ -58,14 +58,19 @@ export class PaymentsController {
     return r;
   }
 
-  /** verify سمت‌سرور با authority (بند ۷) */
+  /** verify سمت‌سرور با authority (بند ۷) — کد سفارش برای بازگشت کاربر به صفحهٔ درست */
   @Post("verify/:authority")
   async verifyByAuthority(@Param("authority") authority: string) {
     const attempt = await this.payments.byAuthority(authority);
     if (!attempt) {
       throw new NotFoundException({ code: "NOT_FOUND", message: "پرداخت یافت نشد." });
     }
-    return this.payments.verify(attempt.id);
+    const result = await this.payments.verify(attempt.id);
+    const full = await this.prisma.paymentAttempt.findUnique({
+      where: { id: attempt.id },
+      select: { order: { select: { code: true } } },
+    });
+    return { ...result, orderCode: full?.order?.code ?? null };
   }
 
   /** لیست ادمین — بند ۲۷ (فیلتر status/method) */

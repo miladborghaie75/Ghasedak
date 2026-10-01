@@ -26,10 +26,11 @@ export async function GET(req: Request) {
     signal: AbortSignal.timeout(15_000),
   }).catch(() => null);
   const verify = (await verifyRes?.json().catch(() => null)) as
-    | { state?: string; refId?: string }
+    | { state?: string; refId?: string; orderCode?: string | null }
     | null;
 
-  const orderCode = url.searchParams.get("order") ?? "";
+  // کد سفارش: اول از پاسخ verify (مرجع مطمئن)، بعد از query درگاه
+  const orderCode = verify?.orderCode ?? url.searchParams.get("order") ?? "";
   if (verify?.state === "PAID") {
     return Response.redirect(`${origin}/checkout/paid?order=${encodeURIComponent(orderCode)}&ref=${encodeURIComponent(verify.refId ?? "")}`, 302);
   }

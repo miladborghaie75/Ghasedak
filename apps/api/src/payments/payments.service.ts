@@ -44,17 +44,32 @@ export class PaymentsService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    if (this.zarinpal.isConfigured()) {
-      this.providers.set("zarinpal", this.zarinpal);
-    } else {
-      this.logger.warn("ZarinPal NOT CONFIGURED — درگاه آنلاین تا تنظیم credential غیرفعال است.");
+    // فقط لاگ وضعیت بوت — ثبت providerها با ذخیرهٔ Merchant از کارت ادمین بلافاصله زنده می‌شود
+    // (resolveZarinpal هر بار credential جاری را می‌بیند؛ freeze موقع بوت بی‌معناست)
+    if (!this.zarinpal.isConfigured()) {
+      this.logger.warn("ZarinPal NOT CONFIGURED at boot — با ذخیرهٔ Merchant ID از کارت ادمین، بدون ری‌استارت فعال می‌شود.");
     }
     if (process.env.NODE_ENV !== "production") {
       this.providers.set("mock", this.mock);
     }
   }
 
+  /** زرین‌پال با credential جاری — ذخیرهٔ Merchant از کارت ادمین بلافاصله اثر دارد */
+  private resolveZarinpal(): PaymentProviderAdapter | null {
+    if (!this.zarinpal.isConfigured()) return null;
+    this.providers.set("zarinpal", this.zarinpal);
+    return this.zarinpal;
+  }
+
   private adapter(code: string): PaymentProviderAdapter {
+    if (code === "zarinpal") {
+      const z = this.resolveZarinpal();
+      if (z) return z;
+      throw new BadRequestException({
+        code: "PROVIDER_NOT_CONFIGURED",
+        message: "زرین‌پال تنظیم نشده — Merchant ID را در پنل ذخیره کنید.",
+      });
+    }
     const a = this.providers.get(code);
     if (!a) {
       throw new BadRequestException({
@@ -66,7 +81,7 @@ export class PaymentsService implements OnModuleInit {
   }
 
   private defaultCode(): string {
-    return this.providers.has("zarinpal") ? "zarinpal" : "mock";
+    return this.resolveZarinpal() ? "zarinpal" : "mock";
   }
 
   private async providerRowId(code: string): Promise<string> {
@@ -205,9 +220,6 @@ export class PaymentsService implements OnModuleInit {
     if (attempt.state === "PAID") {
       return { state: "PAID", refId: attempt.providerTxId ?? undefined };
     }
-    if (!this.canTransition(attempt.state, "VERIFYING")) {
-      throw new BadRequestException({ code: "PAYMENT_NOT_VERIFIABLE", message: "این پرداخت قابل تایید نیست." });
-    }
     if (!attempt.authority) {
       throw new BadRequestException({ code: "NO_AUTHORITY", message: "شناسه پرداخت موجود نیست." });
     }
@@ -215,8 +227,13 @@ export class PaymentsService implements OnModuleInit {
       await this.recordTransition(attempt.id, "EXPIRED", actorId);
       throw new BadRequestException({ code: "PAYMENT_EXPIRED", message: "مهلت پرداخت تمام شده است." });
     }
+    // VERIFYING تکراری = تلاش قبلی با خطای گذرا (شبکه/timeout درگاه) قطع شده —
+    // دست‌زدنی نیست؛ همان attempt دوباره verify می‌شود (idempotent: 101 از provider)
+    if (!this.canTransition(attempt.state, "VERIFYING") && attempt.state !== "VERIFYING") {
+      throw new BadRequestException({ code: "PAYMENT_NOT_VERIFIABLE", message: "این پرداخت قابل تایید نیست." });
+    }
 
-    await this.recordTransition(attempt.id, "VERIFYING", actorId);
+    if (attempt.state !== "VERIFYING") await this.recordTransition(attempt.id, "VERIFYING", actorId);
     const withProvider = await this.prisma.paymentAttempt.findUnique({
       where: { id: attempt.id },
       include: { provider: true },
