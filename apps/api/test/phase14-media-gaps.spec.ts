@@ -7,6 +7,7 @@ import { PrismaService } from "../src/prisma/prisma.service";
 import { NotificationDispatcherService } from "../src/events/notification-dispatcher.service";
 import { SmsProvidersService } from "../src/events/sms-providers.service";
 import { CapabilitiesController, readImageSize } from "../src/admin/capabilities.controller";
+import { CredentialsService } from "../src/admin/credentials.service";
 
 jest.setTimeout(120_000);
 
@@ -67,7 +68,7 @@ describe("Phase 14 media gaps — endpointهای دانلود/لینک/آپلو�
     await prisma.$connect();
     const sms = new SmsProvidersService(prisma);
     const dispatcher = new NotificationDispatcherService(prisma, sms);
-    ctl = new CapabilitiesController(prisma, dispatcher, sms);
+    ctl = new CapabilitiesController(prisma, dispatcher, sms, new CredentialsService());
   });
 
   afterAll(async () => {

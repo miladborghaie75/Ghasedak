@@ -5,6 +5,7 @@ import type { PaymentProviderAdapter, PaymentRequestContext, PaymentRedirect } f
  * آداپتور زرین‌پال — PAY.Request/Verification v4 REST.
  * credential فقط از env (ZARINPAL_MERCHANT_ID)؛ بدون آن provider «Not Configured»
  * باقی می‌ماند و هرگز فعال نمی‌شود (بند ۱۱۱ — هیچ credential ساختگی).
+ * مسیر رسمی /pg/v4/... — /api/v4 مسیر قدیمی/نااصحیح است (پروب موج ۲).
  */
 const API_BASE = process.env.ZARINPAL_API_BASE ?? "https://payment.zarinpal.com";
 
@@ -22,7 +23,7 @@ export class ZarinpalProvider implements PaymentProviderAdapter {
     if (!this.isConfigured()) {
       throw new Error("ZARINPAL_NOT_CONFIGURED: ZARINPAL_MERCHANT_ID env تنظیم نشده است.");
     }
-    const res = await fetch(`${API_BASE}/api/v4/payment/request.json`, {
+    const res = await fetch(`${API_BASE}/pg/v4/payment/request.json`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({
@@ -55,7 +56,7 @@ export class ZarinpalProvider implements PaymentProviderAdapter {
     if (!this.isConfigured()) {
       return { ok: false, reason: "ZARINPAL_NOT_CONFIGURED", raw: null };
     }
-    const res = await fetch(`${API_BASE}/api/v4/payment/verify.json`, {
+    const res = await fetch(`${API_BASE}/pg/v4/payment/verify.json`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({

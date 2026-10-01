@@ -17,6 +17,7 @@ process.env.MEDIA_DIR = mediaDir;
 import { PrismaService } from "../src/prisma/prisma.service";
 import { SmsProvidersService, SMS_PROVIDERS } from "../src/events/sms-providers.service";
 import { CapabilitiesController } from "../src/admin/capabilities.controller";
+import { CredentialsService } from "../src/admin/credentials.service";
 
 jest.setTimeout(120_000);
 
@@ -104,7 +105,7 @@ describe("Phase 13 — media service (CapabilitiesController)", () => {
     process.env = { ...OLD_ENV, MEDIA_DIR: mediaDir };
     prisma = new PrismaService();
     await prisma.$connect();
-    ctrl = new CapabilitiesController(prisma, {} as never, {} as never);
+    ctrl = new CapabilitiesController(prisma, {} as never, {} as never, new CredentialsService());
   });
 
   afterAll(async () => {

@@ -13,6 +13,6 @@ import { MockPaymentProvider } from "./mock.provider";
   imports: [PrismaModule, AuthModule, InventoryModule, AccountingModule, TreasuryModule],
   controllers: [PaymentsController],
   providers: [PaymentsService, ZarinpalProvider, MockPaymentProvider],
-  exports: [PaymentsService],
+  exports: [PaymentsService, ZarinpalProvider],
 })
 export class PaymentsModule {}

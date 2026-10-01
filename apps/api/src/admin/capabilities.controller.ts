@@ -16,6 +16,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
 import { NotificationDispatcherService } from "../events/notification-dispatcher.service";
 import { SMS_PROVIDERS, SmsProvidersService, SmsProviderId } from "../events/sms-providers.service";
+import { CredentialsService } from "./credentials.service";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -82,6 +83,7 @@ export class CapabilitiesController {
     private readonly prisma: PrismaService,
     private readonly dispatcher: NotificationDispatcherService,
     private readonly sms: SmsProvidersService,
+    private readonly credentials: CredentialsService,
   ) {}
 
   // ================== مجوزهای کاربر جاری (برای UI شرطی) ==================
@@ -571,7 +573,11 @@ export class CapabilitiesController {
   @RequirePermission("settings.manage")
   async setActiveSmsProvider(@Req() req: Request, @Body() body: { provider?: string }) {
     const identity = (req as unknown as Record<string, unknown>).adminIdentity as { userId?: string } | undefined;
-    const id = String(body?.provider ?? "") as SmsProviderId;
+    return this.activateSmsProvider(String(body?.provider ?? "") as SmsProviderId, identity?.userId);
+  }
+
+  /** هستهٔ مشترک انتخاب اپراتور — از مسیر ذخیرهٔ کلید هم صدا زده می‌شود */
+  private async activateSmsProvider(id: SmsProviderId, actorId?: string) {
     const meta = SMS_PROVIDERS.find((p) => p.id === id);
     if (!meta) {
       throw new BadRequestException({ code: "UNKNOWN_PROVIDER", message: "اپراتور پیامک نامعتبر است." });
@@ -590,7 +596,7 @@ export class CapabilitiesController {
         entityId: id,
         oldValues: s ? { provider: ((s.value ?? {}) as { provider?: string }).provider ?? "kavenegar" } : undefined,
         newValues: { provider: id },
-        actorId: identity?.userId ?? null,
+        actorId: actorId ?? null,
       },
     }).catch(() => undefined);
     return { ok: true, active: id, name: meta.name };
@@ -608,6 +614,36 @@ export class CapabilitiesController {
       throw new BadRequestException({ code: "UNKNOWN_PROVIDER", message: "اپراتور پیامک نامعتبر است." });
     }
     return this.sms.testConnection(id, String(body.mobile));
+  }
+
+  /**
+   * ذخیرهٔ کلید API اپراتور پیامک — از کانال رسمی credentials (env/.env.local، هرگز DB)
+   * به‌همراه انتخاب همان اپراتور به‌عنوان فعال (الگوی یک‌کارت: اپراتور → کلید → تست → ذخیره).
+   */
+  @Post("sms/providers/key")
+  @RequirePermission("settings.manage")
+  async saveSmsProviderKey(@Body() body: { provider?: string; key?: string }) {
+    const id = String(body?.provider ?? "") as SmsProviderId;
+    const meta = SMS_PROVIDERS.find((p) => p.id === id);
+    if (!meta) {
+      throw new BadRequestException({ code: "UNKNOWN_PROVIDER", message: "اپراتور پیامک نامعتبر است." });
+    }
+    const key = String(body?.key ?? "").trim();
+    if (!key) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "کلید خالی است؛ برای پاک‌کردن از کارت کلیدها استفاده کنید." });
+    }
+    if (key.length > 512) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "کلید بیش از حد بلند است." });
+    }
+    // ملی‌پیامک قالب username:password دارد — ساختار را همین‌جا می‌سنجم تا خطا زودتر پیدا شود
+    if (id === "melipayamak" && !key.includes(":")) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "کلید ملی‌پیامک باید به شکل username:password باشد." });
+    }
+    // ثبت در فایل env.local توسط کانال موجود (همین فرایند، همان محدودیت کلیدها)
+    await this.credentials.save({ [meta.envKey]: key });
+    // همان اپراتور فعال می‌شود — کارت واحد یعنی این انتخاب و کلیدش یکی‌اند
+    await this.activateSmsProvider(id);
+    return this.sms.providersStatus().filter((p) => p.id === id)[0] ?? { ok: true };
   }
 
   // ================== فاز ۱۲ (گام ۴) — Outbox workspace ==================
