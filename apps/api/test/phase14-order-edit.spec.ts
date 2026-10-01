@@ -109,12 +109,20 @@ describe("Phase 14 item 6 — order edit", () => {
   it("3) تعداد بیش از موجودی → INSUFFICIENT_STOCK و هیچ تغییر نمانده", async () => {
     const o = await makeOrder([{ sku: "DEMO-BRA-80B-BLK", qty: 1 }]);
     const totalBefore = (await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).total;
-    // DEMO-BRA-75B-BLK2 موجودی صفر دارد ولی زیر سقف ۹۹ است → INSUFFICIENT_STOCK واقعی
-    await expect(orders.editOrder({ orderId: o.id, lines: [{ sku: "DEMO-BRA-75B-BLK2", qty: 50 }] })).rejects.toMatchObject({ response: { code: "INSUFFICIENT_STOCK" } });
-    // هیچ تغییر نمانده باشد
-    const after = await prisma.order.findUniqueOrThrow({ where: { id: o.id } });
-    expect(after.total).toBe(totalBefore);
-    const evCount = await prisma.orderEvent.count({ where: { orderId: o.id, type: "ORDER_EDITED" } });
-    expect(evCount).toBe(0);
+    // واریانتِ بدون ردیف دفتری (sellable صفر واقعی، زیر سقف ۹۹) را خودش می‌سازد؛
+    // قبلاً به SKU دموی ردیف‌ندار تکیه داشت که با تعمیر موجودی آغازین دیگر صفر نیست.
+    const host = await prisma.product.findFirstOrThrow({ where: { deletedAt: null } });
+    const zeroSku = `ZLEDGER-${Date.now()}`;
+    await prisma.productVariant.create({ data: { productId: host.id, sku: zeroSku, price: 1000n, stockQty: 0 } });
+    try {
+      await expect(orders.editOrder({ orderId: o.id, lines: [{ sku: zeroSku, qty: 50 }] })).rejects.toMatchObject({ response: { code: "INSUFFICIENT_STOCK" } });
+      // هیچ تغییر نمانده باشد
+      const after = await prisma.order.findUniqueOrThrow({ where: { id: o.id } });
+      expect(after.total).toBe(totalBefore);
+      const evCount = await prisma.orderEvent.count({ where: { orderId: o.id, type: "ORDER_EDITED" } });
+      expect(evCount).toBe(0);
+    } finally {
+      await prisma.productVariant.delete({ where: { sku: zeroSku } }).catch(() => undefined);
+    }
   });
 });

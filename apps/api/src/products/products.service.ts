@@ -76,11 +76,15 @@ export class ProductsService {
     let slug = data.slug?.trim() || data.name.trim().toLowerCase().replace(/[\s\u200c]+/g, "-").replace(/[^a-z0-9\u0600-\u06FF-]/g, "").replace(/-+/g, "-") || `p-${Date.now().toString(36)}`;
     if (await this.prisma.product.findUnique({ where: { slug } })) slug = `${slug}-${Date.now().toString(36)}`;
 
-    // بارکد خودکار بر اساس دسته (بند ۱۱۶: قابل ویرایش بعداً)
+    // بارکد خودکار بر اساس دسته (بند ۱۱۶: قابل ویرایش بعداً) —
+    // به تعداد واریانت‌های بدون بارکد، پشت‌سرهم و یکتا (باگ قبلی: هر دو واریانت یک بارکد می‌گرفتند)
     const catRow = await this.prisma.category.findUnique({ where: { id: data.categoryId }, select: { slug: true, id: true, parentId: true } });
     const catSlug = catRow?.parentId ? null : catRow?.slug ?? null; // فقط دسته سطح ۱ کد مستقیم دارد
-    const autoBarcode1 = await nextBarcodeForCategory(this.prisma, catSlug, data.categoryId);
-    const autoBarcode2 = await nextBarcodeForCategory(this.prisma, catSlug, data.categoryId);
+    const needsAutoBarcode = (data.variants ?? []).some((v) => v.barcode == null || v.barcode === "");
+    // اولین بارکد کاندید — بقیه داخل tx بعد از هر insert صادر می‌شوند تا سریال جلو برود
+    const firstAutoBarcode = needsAutoBarcode
+      ? await nextBarcodeForCategory(this.prisma, catSlug, data.categoryId)
+      : null;
 
     // یکتایی SKU/بارکد (بند ۱۱۶)
     const skus = (data.variants ?? []).map((v) => v.sku);
@@ -90,15 +94,6 @@ export class ProductsService {
     for (const sku of skus) {
       if (await this.prisma.productVariant.findUnique({ where: { sku } })) {
         throw new BadRequestException({ code: "DUPLICATE_SKU", message: `SKU «${sku}» قبلاً ثبت شده است.` });
-      }
-    }
-    // واریانت بدون بارکد → بارکد خودکار دسته‌محور می‌گیرد
-    let autoIdx = 0;
-    const autoPool = [autoBarcode1, autoBarcode2];
-    for (const v of data.variants ?? []) {
-      if (v.barcode == null || v.barcode === "") {
-        v.barcode = autoPool[autoIdx % autoPool.length];
-        autoIdx++;
       }
     }
     const barcodes = (data.variants ?? []).map((v) => v.barcode).filter((b): b is string => !!b);
@@ -143,10 +138,16 @@ export class ProductsService {
       });
 
       // واریانت‌ها (حداقل یکی — اگر خالی، یک واریانت پیش‌فرض از قیمت پایه)
+      // بارکد خودکار: اولی از قبل؛ دومی به‌بعد داخل tx صادر می‌شود تا یکتا بماند (باگ تکرار بارکد)
       const variantList = data.variants?.length
         ? data.variants
         : [{ sku: `${slug.toUpperCase().slice(0, 12)}-DEF`, price: data.basePrice }];
+      let nextAuto = firstAutoBarcode;
       for (const v of variantList) {
+        if ((v.barcode == null || v.barcode === "") && nextAuto) {
+          v.barcode = nextAuto;
+        }
+        const openingQty = v.stockQty ?? 0;
         await tx.productVariant.create({
           data: {
             productId: product.id,
@@ -154,12 +155,42 @@ export class ProductsService {
             barcode: v.barcode ?? null,
             price: BigInt(v.price),
             salePrice: v.salePrice != null ? BigInt(v.salePrice) : null,
-            stockQty: v.stockQty ?? 0,
+            stockQty: openingQty,
             lowStockThreshold: v.lowStockThreshold ?? 3,
             weightGrams: v.weightGrams ?? null,
             status: (v.status as never) ?? "PUBLISHED",
           },
         });
+        // موجودی آغازین فقط در stockQty ماندنی نیست (باگ موج ۱: سفارش چنین محصولی
+        // چون دفتر انبار خالی بود با INSUFFICIENT_STOCK رد می‌شد) — OPENING داخل همان tx.
+        if (openingQty > 0) {
+          const w = await tx.warehouse.findFirst({ orderBy: { createdAt: "asc" } });
+          if (!w) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "انبار پیش‌فرض یافت نشد؛ ابتدا انبار بسازید." });
+          const idem = `opening:${v.sku}`;
+          const dup = await tx.stockLedgerEntry.findUnique({ where: { idempotencyKey: idem } });
+          if (dup) {
+            throw new BadRequestException({ code: "DUPLICATE_SKU", message: `SKU «${v.sku}» قبلاً موجودی آغازین ثبت کرده است.` });
+          }
+          await tx.stockLedgerEntry.create({
+            data: {
+              warehouseId: w.id,
+              variantSku: v.sku,
+              type: "OPENING",
+              qtyIn: openingQty,
+              balanceBefore: 0,
+              balanceAfter: openingQty,
+              refType: "opening",
+              refId: product.id,
+              idempotencyKey: idem,
+              note: `موجودی آغازین — ایجاد محصول «${product.name}»`,
+            },
+          });
+        }
+        // بارکد بعدی برای واریانت بعدیِ بدون بارکد — بعد از insert فعلی (سریال جلو می‌رود)
+        const remaining = variantList.slice(variantList.indexOf(v) + 1).filter((x) => x.barcode == null || x.barcode === "").length;
+        if (remaining > 0) {
+          nextAuto = await nextBarcodeForCategory(tx, catSlug, data.categoryId);
+        }
       }
 
       // ویژگی‌ها
