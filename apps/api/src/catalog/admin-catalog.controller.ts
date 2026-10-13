@@ -37,7 +37,7 @@ export class AdminCatalogController {
 
   @Post("categories")
   @RequirePermission("categories.manage")
-  async createCategory(@Body() body: { name: string; parentId?: string | null; description?: string; sortOrder?: number }) {
+  async createCategory(@Body() body: { name: string; parentId?: string | null; description?: string; sortOrder?: number; iconMediaId?: string | null; imageMediaId?: string | null }) {
     if (!body.name?.trim()) {
       throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نام دسته الزامی است." });
     }
@@ -64,6 +64,9 @@ export class AdminCatalogController {
         parentId: pid,
         description: body.description ?? null,
         sortOrder: body.sortOrder ?? 0,
+        // آیکون دسته — در فروشگاه کنار دسته‌ها نمایش داده می‌شود
+        iconId: body.iconMediaId ?? null,
+        imageId: body.imageMediaId ?? null,
       },
     });
     return created;
@@ -73,7 +76,7 @@ export class AdminCatalogController {
   @RequirePermission("categories.manage")
   async updateCategory(
     @Param("id") id: string,
-    @Body() body: { name?: string; parentId?: string | null; description?: string; sortOrder?: number; status?: "PUBLISHED" | "DRAFT" | "ARCHIVED" },
+    @Body() body: { name?: string; parentId?: string | null; description?: string; sortOrder?: number; iconMediaId?: string | null; imageMediaId?: string | null; status?: "PUBLISHED" | "DRAFT" | "ARCHIVED" },
   ) {
     // جلوگیری از حلقه: والد نمی‌تواند خودِ زیرشاخه باشد
     if (body.parentId === id) {
@@ -83,6 +86,8 @@ export class AdminCatalogController {
     if (body.name !== undefined) data.name = body.name.trim();
     if (body.description !== undefined) data.description = body.description;
     if (body.sortOrder !== undefined) data.sortOrder = body.sortOrder;
+    if (body.iconMediaId !== undefined) data.iconId = body.iconMediaId;
+    if (body.imageMediaId !== undefined) data.imageId = body.imageMediaId;
     if (body.status !== undefined) data.status = body.status;
     if (body.parentId !== undefined) {
       let depth = 0;

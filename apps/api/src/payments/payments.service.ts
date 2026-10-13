@@ -12,6 +12,8 @@ import { TreasuryService } from "../treasury/treasury.service";
 import type { PaymentProviderAdapter, PaymentRequestContext } from "./provider";
 import { ZarinpalProvider } from "./zarinpal.provider";
 import { MockPaymentProvider } from "./mock.provider";
+import { GL, GL_COGS, GL_EXPENSE, GL_REVENUE, gatewayFeeAmount } from "@ghasedak/contracts";
+import { warehouseGlCode } from "../inventory/inventory.service";
 
 /** گذارهای مجاز وضعیت پرداخت — بند ۸: گذار دلخواه ممنوع */
 const TRANSITIONS: Record<string, string[]> = {
@@ -288,7 +290,7 @@ export class PaymentsService implements OnModuleInit {
         refId: attempt.orderId,
         actorId,
       });
-      await this.postSaleJournal(attempt.orderId, Number(attempt.amount), actorId);
+      await this.postSaleJournal(attempt.orderId, Number(attempt.amount), actorId, attempt.providerId ?? undefined);
     }
 
     await this.recordTransition(attempt.id, "PAID", actorId);
@@ -320,13 +322,37 @@ export class PaymentsService implements OnModuleInit {
     return order.warehouseId;
   }
 
-  /** سند فروش: Dr صندوق/بانک، Cr فروش + (فاز ۱۴ بند ۱) Dr بهای تمام‌شده / Cr موجودی کالا — ردیف کالاها با SKU/بارکد در توضیح */
-  private async postSaleJournal(orderId: string, amount: number, actorId?: string): Promise<void> {
+  /** سند فروش: Dr صندوق/بانک، Cr فروش + (فاز ۱۴ بند ۱) Dr بهای تمام‌شده / Cr موجودی کالا — ردیف کالاها با SKU/بارکد در توضیح
+   *
+   * گام ۲ و ۳ فاز ۲: تخفیف و درآمد ارسال از فروش تفکیک شده‌اند و کارمزد
+   * درگاه (اگر از جیب فروشگاه باشد) در همان سند هزینه ثبت می‌شود.
+   */
+  private async postSaleJournal(
+    orderId: string,
+    amount: number,
+    actorId?: string,
+    providerId?: string,
+  ): Promise<void> {
+        /**
+     * معین طرف حساب (گام ۶ فاز ۲).
+     *
+     * `partyType`/`partyId` روی خطوط درآمد/بدهی می‌نشیند تا فاز ۵ بتواند
+     * گزارش «فروش به تفکیک مشتری» و «حساب‌های دریافتنی به تفکیک بدهکار»
+     * بدهد. قبلاً این دو ستون **هرگز** پر نمی‌شدند، پس گزارش معینِ اشخاص
+     * غیرممکن بود.
+     *
+     * فقط روی خط درآمد: مشتریِ سفارش را می‌نشانیم (تأمین‌کننده در سند خرید).
+     */
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       select: {
         code: true,
         warehouseId: true,
+        // تفکیک مبلغ لازم است تا تخفیف و ارسال در سند گم نشوند (گام ۲ فاز ۲)
+        subtotal: true,
+        discountTotal: true,
+        shippingCost: true,
+        customerId: true,
         items: { select: { qty: true, titleSnapshot: true, variant: { select: { sku: true, barcode: true } } } },
       },
     });
@@ -334,10 +360,89 @@ export class PaymentsService implements OnModuleInit {
     const itemLines = order.items
       .map((it) => `${it.qty}× ${it.titleSnapshot} [${it.variant?.sku ?? ""}${it.variant?.barcode ? ` | بارکد ${it.variant.barcode}` : ""}]`)
       .join(" ، ");
-    const lines: Array<{ accountCode: string; debit?: number; credit?: number }> = [
-      { accountCode: "1100", debit: amount },
-      { accountCode: "4000", credit: amount },
+
+    /**
+     * تفکیک فروش (گام ۲ فاز ۲) — قبلاً همه‌چیز روی `4000` می‌نشست، پس
+     * «چقدر واقعاً فروختم» و «چقدر تخفیف دادم» از دفتر قابل تشخیص نبود.
+     *
+     *   Dr 1100 بانک            = مبلغی که مشتری پرداخت کرد
+     *   Cr 4000 فروش            = جمع فاکتور قبل از تخفیف (subtotal)
+     *   Cr 4000-02 درآمد ارسال  = هزینهٔ ارسالی که از مشتری گرفته شد
+     *   Dr 4000-01 برگشت فروش   = تخفیفی که دادیم (کاهش درآمد)
+     *
+     * جمع بستانکار = subtotal + shipping − discount = grandTotal = مبلغ بانک ✔
+     */
+    const subtotal = Number(order.subtotal ?? 0);
+    const discount = Number(order.discountTotal ?? 0);
+    const shipping = Number(order.shippingCost ?? 0);
+
+    /**
+     * فاز ۲٫۵ — درگاه اعتباری پول را کند و ناقص به حساب ما می‌رساند.
+     *
+     * تشخیص: خودِ درگاه `settlementDays > 1` دارد یعنی «پول فوری نیست».
+     * تا وقتی این تفکیک نبود، کل مبلغ در همان لحظه به بانک می‌رفت و دفتر
+     * بیشتر از واقعیت نشان می‌داد.
+     *
+     * اگر درگاه واقعاً اعتباری بود ولی درگاه‌اش را هنوز نساخته بود، خطا می‌دهیم
+     * — چون حدس زدن یعنی دفتر نادرست.
+     */
+    let cashOrGatewayCode: string = GL.BANK;
+    if (providerId) {
+      const prov = await this.prisma.paymentProvider.findUnique({
+        where: { id: providerId },
+        select: { id: true, name: true, settlementDays: true, active: true },
+      });
+      if (prov?.active && (prov.settlementDays ?? 1) > 1) {
+        const receivable = await this.prisma.account.findUnique({
+          where: { code: GL.GATEWAY_RECEIVABLE },
+          select: { code: true },
+        });
+        if (!receivable) {
+          throw new BadRequestException({
+            code: "GL_MISSING",
+            message: `درگاه «${prov.name}» اعتباری است (تسویه ${prov.settlementDays} روزه) ولی حساب ${GL.GATEWAY_RECEIVABLE} تعریف نشده است.`,
+          });
+        }
+        cashOrGatewayCode = GL.GATEWAY_RECEIVABLE;
+      }
+    }
+
+    // اگر داده‌های تفکیکی ناقص یا ناسازگار بود، به‌جای سند غلط فقط مبلغ
+    // دریافتی را می‌نشانیم (همان رفتار قبلی، ولی بدون ادعای تفکیک)
+    const partsConsistent =
+      subtotal > 0 && subtotal + shipping - discount === amount;
+
+    const lines: Array<{
+      accountCode: string;
+      debit?: number;
+      credit?: number;
+      partyType?: string;
+      partyId?: string;
+    }> = [
+      // درگاه اعتباری: پول هنوز به حساب ما نیامده ⇒ به «طلب از درگاه» می‌رود
+      // (فاز ۲٫۵). درگاه نقدی: مستقیم به بانک.
+      { accountCode: cashOrGatewayCode, debit: amount },
     ];
+    if (partsConsistent) {
+      lines.push({
+        accountCode: GL_REVENUE.SALES,
+        credit: subtotal,
+        // معین: خط درآمد به مشتریِ همین سفارش سنجاق می‌شود
+        partyType: order.customerId ? "customer" : undefined,
+        partyId: order.customerId ?? undefined,
+      });
+      if (shipping > 0) lines.push({ accountCode: GL_REVENUE.SHIPPING, credit: shipping });
+      if (discount > 0) lines.push({ accountCode: GL_REVENUE.SALES_RETURN, debit: discount });
+    } else {
+      // بدون تفکیک معتبر، فروش را همان‌طور که مشتری پرداخت کرده ثبت می‌کنیم
+      lines.push({
+        accountCode: GL_REVENUE.SALES,
+        credit: amount,
+        partyType: order.customerId ? "customer" : undefined,
+        partyId: order.customerId ?? undefined,
+      });
+    }
+
     // فاز ۱۴ — بند ۱: بهای تمام‌شدهٔ فروش آنلاین در همان سند فروش (Dr 5000 / Cr 1200).
     // میانگین انبارِ سفارش؛ بدون بهای ثبت‌شده → سند COGS زده نمی‌شود (صادقانه).
     if (order.warehouseId) {
@@ -347,15 +452,49 @@ export class PaymentsService implements OnModuleInit {
         const wac = await this.inventory.wac(order.warehouseId, it.variant.sku);
         if (wac != null && wac > 0n) cogsTotal += wac * BigInt(it.qty);
       }
-      if (cogsTotal > 0n) {
-        lines.push({ accountCode: "5000", debit: Number(cogsTotal) });
-        lines.push({ accountCode: "1200", credit: Number(cogsTotal) });
+      if (cogsTotal > 0n && order.warehouseId) {
+        lines.push({ accountCode: GL_COGS.COGS, debit: Number(cogsTotal) });
+        // حساب موجودیِ همان انباری که فروش از آن شد (فاز ۶)
+        const invCode = await warehouseGlCode(this.prisma, order.warehouseId);
+        lines.push({ accountCode: invCode, credit: Number(cogsTotal) });
       }
     }
+
+    /**
+     * کارمزد درگاه (گام ۳ فاز ۲).
+     *
+     * تنها وقتی در همین سند می‌نشیند که **از جیب فروشگاه** باشد
+     * (`MERCHANT`): آن‌وقت پولی که به بانک نشست کمتر از مبلغ فاکتور است،
+     * پس هزینهٔ کارمزد باید در همان سند دیده شود وگرنه سود فروش بیش‌برآورد
+     * می‌شود.
+     *
+     * اگر از جیب خریدار باشد (`CUSTOMER`)، مبلغی که به بانک نشسته خالصِ
+     * درآمد فروشگاه است و کارمزد در سند فروش نمی‌آید — چون اصلاً از جیب ما
+     * نرفته. در آن حالت کارمزد در تسویه (فاز ۲٫۵) دیده می‌شود.
+     */
+    if (providerId) {
+      const provider = await this.prisma.paymentProvider.findUnique({
+        where: { id: providerId },
+        select: { feePercentBps: true, feeFlatToman: true, feeBorneBy: true, name: true },
+      });
+      if (provider && provider.feeBorneBy === "MERCHANT") {
+        const fee = gatewayFeeAmount(amount, provider.feePercentBps, provider.feeFlatToman);
+        if (fee > 0) {
+          // هزینهٔ کارمزد: Dr هزینه، Cr همان حسابی که پول از آن خارج شد
+          // (بانک برای درگاه نقدی، طلب از درگاه برای اعتباری)
+          lines.push({ accountCode: GL_EXPENSE.GATEWAY_FEE, debit: fee });
+          lines.push({ accountCode: cashOrGatewayCode, credit: fee });
+        }
+      }
+    }
+
     await this.journal.postOrNotify({
       description: `فروش سفارش ${order.code} — ${itemLines}`,
       sourceType: "order",
       sourceId: orderId,
+      // انبار فروش (فاز ۶). اگر سفارش انبار نداشته باشد، سند بدون انبار ثبت
+      // می‌شود — بهتر از اینکه انبار نادرست حدس زده شود.
+      ...(order.warehouseId ? { warehouseId: order.warehouseId } : {}),
       actorId,
       lines,
     });

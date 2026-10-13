@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAdminApi, fa } from "@/components/useAdminApi";
+import VariantMatrixBuilder, { type MatrixRow } from "./VariantMatrixBuilder";
 
 interface ProductRow {
   id: string;
@@ -16,7 +17,7 @@ interface ProductRow {
 
 interface CategoryRow { id: string; name: string; parentId: string | null; description?: string | null; }
 interface BrandRow { id: string; name: string; }
-interface VariantForm { id?: string; sku: string; barcode: string; price: string; stockQty: string; lowStockThreshold: string; }
+interface VariantForm { id?: string; sku: string; barcode: string; price: string; stockQty: string; lowStockThreshold: string; termIds?: string[]; labels?: string[]; }
 
 const EMPTY = {
   name: "", categoryId: "", brandId: "", shortDescription: "", description: "",
@@ -109,7 +110,7 @@ export default function ProductsClient() {
   /** ویرایش — بارگذاری جزئیات محصول در همان فرم */
   const editProduct = async (id: string) => {
     setError(null); setMsg(null);
-    const r = await call<{ id: string; name: string; categoryId: string; brandId: string | null; basePrice: string; salePrice: string | null; saleStartsAt: string | null; saleEndsAt: string | null; costPrice: string | null; videoUrl: string | null; weightGrams: number | null; tags: string[]; status: string; shortDescription: string | null; description: string | null; seo: { seoTitle: string | null; metaDescription: string | null } | null; variants: Array<{ id: string; sku: string; barcode: string | null; price: string; stockQty: number; lowStockThreshold: number }> }>(`/admin/products/${id}/detail`);
+    const r = await call<{ id: string; name: string; categoryId: string; brandId: string | null; basePrice: string; salePrice: string | null; saleStartsAt: string | null; saleEndsAt: string | null; costPrice: string | null; videoUrl: string | null; weightGrams: number | null; tags: string[]; status: string; shortDescription: string | null; description: string | null; seo: { seoTitle: string | null; metaDescription: string | null } | null; variants: Array<{ id: string; sku: string; barcode: string | null; price: string; stockQty: number; lowStockThreshold: number; termIds?: string[] }> }>(`/admin/products/${id}/detail`);
     if (!r.ok || !r.data) { setError(r.error?.message ?? "خطا"); return; }
     const p = r.data;
     setForm({
@@ -122,7 +123,15 @@ export default function ProductsClient() {
       tags: (p.tags ?? []).join("، "), status: p.status,
       seoTitle: p.seo?.seoTitle ?? "", metaDescription: p.seo?.metaDescription ?? "",
     });
-    setVariants(p.variants.map((v) => ({ id: v.id, sku: v.sku, barcode: v.barcode ?? "", price: String(v.price), stockQty: String(v.stockQty), lowStockThreshold: String(v.lowStockThreshold) })));
+    setVariants(p.variants.map((v) => ({
+      id: v.id,
+      sku: v.sku,
+      barcode: v.barcode ?? "",
+      price: String(v.price),
+      stockQty: String(v.stockQty),
+      lowStockThreshold: String(v.lowStockThreshold),
+      termIds: v.termIds ?? [],
+    })));
     setEditId(id);
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -163,6 +172,8 @@ export default function ProductsClient() {
           price: Number(v.price || form.basePrice),
           stockQty: Number(v.stockQty || 0),
           lowStockThreshold: Number(v.lowStockThreshold || 3),
+          // اتصال واریانت به مقادیر ویژگی — بدون این، محور رنگ/سایز ساخته نمی‌شود
+          ...(v.termIds?.length ? { termIds: v.termIds } : {}),
         })),
       };
       const r = await call(`/admin/products/${editId}/full`, { method: "PUT", body: JSON.stringify(payload) });
@@ -197,6 +208,7 @@ export default function ProductsClient() {
           price: Number(v.price || form.basePrice),
           stockQty: Number(v.stockQty || 0),
           lowStockThreshold: Number(v.lowStockThreshold || 3),
+          ...(v.termIds?.length ? { termIds: v.termIds } : {}),
         })),
     };
     const r = await call<{ id: string }>("/admin/products/full", { method: "POST", body: JSON.stringify(payload) });
@@ -282,8 +294,35 @@ export default function ProductsClient() {
           <div className="mt-5">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black text-ink">واریانت‌ها (SKU/بارکد/موجودی)</h3>
-              <button type="button" onClick={addVariant} className="h-8 rounded-full border border-line px-3 text-xs font-bold">+ واریانت</button>
-            </div>
+<button type="button" onClick={addVariant} className="h-8 rounded-full border border-line px-3 text-xs font-bold">+ واریانت دستی</button>
+        </div>
+
+        {/* سازندهٔ ماتریس از روی ویژگی‌های تعریف‌شده — راه اصلی ساخت واریانت */}
+        <VariantMatrixBuilder
+          productId={editId ?? undefined}
+          defaultPrice={form.basePrice}
+          existing={variants.map((v) => ({
+            id: v.id ?? "",
+            sku: v.sku,
+            price: v.price,
+            stockQty: v.stockQty,
+            termIds: v.termIds ?? [],
+          }))}
+          onApply={(rows: MatrixRow[]) =>
+            setVariants(
+              rows.map((r) => ({
+                id: undefined,
+                sku: r.sku,
+                barcode: "",
+                price: r.price,
+                stockQty: r.stockQty,
+                lowStockThreshold: "3",
+                termIds: r.termIds,
+                labels: r.labels,
+              })),
+            )
+          }
+        />
             {variants.length === 0 ? <p className="mt-2 text-xs text-ink/50">بدون واریانت، یک واریانت پیش‌فرض از قیمت پایه ساخته می‌شود.</p> : null}
             <div className="mt-2 flex flex-col gap-2">
               {variants.map((v, i) => (
@@ -293,6 +332,10 @@ export default function ProductsClient() {
                   <input value={v.price} onChange={(e) => setVariants(variants.map((x, j) => j === i ? { ...x, price: e.target.value } : x))} placeholder="قیمت" type="number" className="rounded-lg border border-line px-2 py-1.5 text-xs" />
                   <input value={v.stockQty} onChange={(e) => setVariants(variants.map((x, j) => j === i ? { ...x, stockQty: e.target.value } : x))} placeholder="موجودی" type="number" className="rounded-lg border border-line px-2 py-1.5 text-xs" />
                   <input value={v.lowStockThreshold} onChange={(e) => setVariants(variants.map((x, j) => j === i ? { ...x, lowStockThreshold: e.target.value } : x))} placeholder="حد هشدار" type="number" className="rounded-lg border border-line px-2 py-1.5 text-xs" />
+                  {/* برچسب ویژگی‌های این واریانت — چیزی که قبلاً اصلاً نمایش داده نمی‌شد */}
+                  <span className="col-span-2 truncate text-[10px] font-bold text-primary-strong sm:col-span-1">
+                    {v.labels?.length ? v.labels.join(" · ") : v.termIds?.length ? `${v.termIds.length} ویژگی` : "—"}
+                  </span>
                   <button type="button" onClick={() => removeVariant(i)} className="text-xs font-bold text-app-err">حذف</button>
                 </div>
               ))}

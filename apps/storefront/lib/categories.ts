@@ -10,6 +10,8 @@ export interface Category {
   name: string;
   /** توضیح کوتاه برای SEO، Hero Drawer و هدر صفحه دسته */
   blurb: string;
+  /** آیکون/تصویر دسته — از رسانه‌های فروشگاه (اختیاری) */
+  imageUrl?: string | null;
 }
 
 export const CATEGORIES: Category[] = [

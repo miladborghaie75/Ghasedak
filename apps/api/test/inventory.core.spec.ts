@@ -6,7 +6,7 @@
 import { ConflictException, BadRequestException } from "@nestjs/common";
 import { InventoryService } from "../src/inventory/inventory.service";
 import { InventorySettingsService } from "../src/inventory/inventory-settings.service";
-import { InventoryOpsService } from "../src/inventory/inventory-ops.service";
+import { InventoryOpsService, standaloneInventoryOpsService } from "../src/inventory/inventory-ops.service";
 import { PrismaService } from "../src/prisma/prisma.service";
 
 describe("InventoryService (integration با DB dev)", () => {
@@ -41,7 +41,7 @@ describe("InventoryService (integration با DB dev)", () => {
     await prisma.$connect();
     const settings = new InventorySettingsService(prisma);
     service = new InventoryService(prisma, settings);
-    ops = new InventoryOpsService(prisma, service);
+    ops = standaloneInventoryOpsService(prisma, service);
     // انبار آزمایشی
     const wh = await ops.createWarehouse({
       code: `TST${Date.now() % 100000}`,

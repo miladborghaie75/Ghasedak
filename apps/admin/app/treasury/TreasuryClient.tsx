@@ -45,6 +45,64 @@ export default function TreasuryClient() {
   const [stmts, setStmts] = useState<Stmt[] | null>(null);
   const [recon, setRecon] = useState<Recon | null>(null);
 
+  // فرم ساخت صندوق/بانک تازه — قبلاً اصلاً امکان ساخت نبود، فقط جدول نمایش
+  const [showNew, setShowNew] = useState(false);
+  const [newKind, setNewKind] = useState<"cash" | "bank">("cash");
+  const [glOptions, setGlOptions] = useState<Array<{ id: string; code: string; name: string }>>([]);
+  const [newForm, setNewForm] = useState({
+    name: "",
+    kind: "cash",
+    glAccountCode: "",
+    bankName: "",
+    accountNumber: "",
+    iban: "",
+  });
+
+  const loadGlOptions = async (kind: "cash" | "bank") => {
+    const r = await call<Array<{ id: string; code: string; name: string }>>(
+      `/admin/treasury/gl-accounts?kind=${kind}`,
+    );
+    setGlOptions(r.ok && r.data ? r.data : []);
+  };
+
+  const submitNewAccount = async () => {
+    setError(null);
+    setMsg(null);
+    const isBank = newForm.kind === "bank";
+    if (!newForm.name.trim()) {
+      setError("نام الزامی است.");
+      return;
+    }
+    if (isBank && (!newForm.bankName.trim() || !newForm.accountNumber.trim())) {
+      setError("نام بانک و شمارهٔ حساب الزامی است.");
+      return;
+    }
+    const path = isBank ? "/admin/treasury/bank-accounts" : "/admin/treasury/cash-accounts";
+    const body: Record<string, string> = isBank
+      ? {
+          name: newForm.name.trim(),
+          bankName: newForm.bankName.trim(),
+          accountNumber: newForm.accountNumber.trim(),
+          iban: newForm.iban.trim() || "",
+        }
+      : { name: newForm.name.trim(), kind: newForm.kind };
+    // اگر مدیر حسابی را انتخاب نکرده باشد، سرویس خودش اولین زیرحساب
+    // بی‌استفاده را برمی‌دارد (تصمیم کاربر: هر بانک حساب مستقل).
+    if (newForm.glAccountCode) body.glAccountCode = newForm.glAccountCode;
+
+    const r = await call<{ glCode?: string }>(path, { method: "POST", body: JSON.stringify(body) });
+    if (r.ok) {
+      setMsg(
+        r.data?.glCode
+          ? `حساب ساخته شد و به حساب GL ${r.data.glCode} وصل شد.`
+          : "حساب ساخته شد.",
+      );
+      setNewForm({ name: "", kind: "cash", glAccountCode: "", bankName: "", accountNumber: "", iban: "" });
+      setShowNew(false);
+      await load();
+    } else setError(r.error?.message ?? "خطا");
+  };
+
   const load = async () => {
     const [a, s] = await Promise.all([
       call<Accounts>("/admin/treasury/accounts"),
@@ -80,8 +138,7 @@ export default function TreasuryClient() {
   };
 
   const openCash = (row: CashRow) => {
-    setSel({ type: "cash", id: row.id, name: row.name });
-    setTab("cash");
+    setSel({ type: "cash", id: row.id, name: row.name });    setTab("cash");
     setStmts(null);
     setRecon(null);
   };
@@ -96,14 +153,146 @@ export default function TreasuryClient() {
   return (
     <div className="space-y-5">
       {/* Tabs — بخش ۱۰: بدون دامنهٔ sidebar جدید */}
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`h-9 rounded-full px-4 text-xs font-bold ${tab === t.key ? "bg-ink text-on-accent" : "border border-line text-ink/60"}`}>
             {t.label}
           </button>
         ))}
+        <button
+          onClick={() => {
+            setShowNew((s) => !s);
+            void loadGlOptions(newForm.kind === "bank" ? "bank" : "cash");
+          }}
+          className="ms-auto h-9 rounded-full bg-primary px-4 text-xs font-bold text-on-accent"
+        >
+          + حساب تازه
+        </button>
       </div>
+
+      {/* فرم ساخت صندوق/بانک — بک‌اندش از قبل بود، رابطش نبود */}
+      {showNew && (
+        <div className="space-y-3 rounded-xl border border-primary-soft bg-surface p-4">
+          <div className="flex flex-wrap gap-2">
+            {(["cash", "bank"] as const).map((k) => (
+              <button
+                key={k}
+                onClick={() => {
+                  setNewForm((f) => ({ ...f, kind: k }));
+                  setNewKind(k);
+                  void loadGlOptions(k);
+                }}
+                className={`h-8 rounded-full px-4 text-xs font-bold ${
+                  newForm.kind === k ? "bg-primary text-on-accent" : "border border-line text-ink/60"
+                }`}
+              >
+                {k === "cash" ? "صندوق نقد" : "حساب بانکی"}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="text-[11px] font-bold text-ink/70">
+              نام
+              <input
+                value={newForm.name}
+                onChange={(e) => setNewForm({ ...newForm, name: e.target.value })}
+                placeholder={newForm.kind === "bank" ? "حساب جاری ملت" : "صندوق فروشگاه"}
+                className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs"
+              />
+            </label>
+
+            {newForm.kind === "bank" && (
+              <>
+                <label className="text-[11px] font-bold text-ink/70">
+                  بانک
+                  <input
+                    value={newForm.bankName}
+                    onChange={(e) => setNewForm({ ...newForm, bankName: e.target.value })}
+                    placeholder="ملت"
+                    className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs"
+                  />
+                </label>
+                <label className="text-[11px] font-bold text-ink/70">
+                  شمارهٔ حساب
+                  <input
+                    value={newForm.accountNumber}
+                    onChange={(e) => setNewForm({ ...newForm, accountNumber: e.target.value })}
+                    placeholder="۰۱۲۳۴۵۶۷۸۹۰"
+                    dir="ltr"
+                    className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs"
+                  />
+                </label>
+                <label className="text-[11px] font-bold text-ink/70">
+                  شبا (اختیاری)
+                  <input
+                    value={newForm.iban}
+                    onChange={(e) => setNewForm({ ...newForm, iban: e.target.value })}
+                    placeholder="IR000000000000000000000000"
+                    dir="ltr"
+                    className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs"
+                  />
+                </label>
+              </>
+            )}
+
+            {newForm.kind === "cash" && (
+              <label className="text-[11px] font-bold text-ink/70">
+                نوع صندوق
+                <select
+                  value={newForm.kind}
+                  onChange={(e) => setNewForm({ ...newForm, kind: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs"
+                >
+                  <option value="cash">صندوق فروشگاه</option>
+                  <option value="petty">تن‌خواه</option>
+                  <option value="card_settlement">تسویهٔ کارت‌خوان</option>
+                  <option value="online_gateway">درگاه آنلاین</option>
+                </select>
+              </label>
+            )}
+
+            <label className="text-[11px] font-bold text-ink/70">
+              حساب دفتری (GL)
+              <select
+                value={newForm.glAccountCode}
+                onChange={(e) => setNewForm({ ...newForm, glAccountCode: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs"
+              >
+                <option value="">خودکار (اولین حساب آزاد)</option>
+                {glOptions.map((g) => (
+                  <option key={g.id} value={g.code}>
+                    {g.code} — {g.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <p className="text-[11px] leading-5 text-ink/50">
+            اگر حساب دفتری را انتخاب نکنید، سیستم خودش اولین حساب آزاد زیر گروه{" "}
+            <span dir="ltr">1100</span> (بانک) یا <span dir="ltr">1000</span> (صندوق) را می‌سازد —
+            یعنی هر بانک دفتر مستقل خودش را دارد و مغایرت‌گیری درست کار می‌کند.
+          </p>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => void submitNewAccount()}
+              disabled={loading}
+              className="h-9 rounded-full bg-primary px-5 text-xs font-black text-on-accent disabled:opacity-40"
+            >
+              ساخت حساب
+            </button>
+            <button
+              onClick={() => setShowNew(false)}
+              className="h-9 rounded-full border border-line px-4 text-xs font-bold text-ink/60"
+            >
+              انصراف
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && <div className="rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-300 p-3 text-sm">{error}</div>}
       {msg && <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 p-3 text-sm">{msg}</div>}

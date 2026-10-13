@@ -19,6 +19,8 @@ export interface ProductV2 {
   variants: VariantV2[];
   /** تاریخ ایجاد نمایشی (ISO) — مبنای بج «جدید» */
   createdAt: string;
+  /** عکس اصلی محصول — `/media/<key>` (هم‌مبدأ)؛ null اگر رسانه‌ای آپلود نشده */
+  image?: string | null;
 }
 
 export interface VariantV2 {

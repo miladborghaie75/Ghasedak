@@ -1,24 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 function fa(n: string | number): string {
   return Number(n).toLocaleString("fa-IR");
+}
+
+/** خواندن توکن CSRF از کوکی (double-submit) و ساخت هدر */
+function csrfHeader(): Record<string, string> {
+  if (typeof document === "undefined") return {};
+  const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
+  return m ? { "x-csrf-token": decodeURIComponent(m[1]) } : {};
 }
 
 /** فرم پرداخت آنلاین — در dev درگاه mock؛ زرین‌پال با credential واقعی فعال می‌شود */
 export function PayForm({ code, total }: { code: string; total: number }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // کلید پایدار برای این سفارش — کلیک دوباره همان کلید را می‌فرستد (ضد تلاش تکراری)
+  const idemRef = useRef<string | null>(null);
 
   const start = async () => {
     setBusy(true);
     setError(null);
-    const idem = `pay-${code}-${Date.now()}`;
+    if (!idemRef.current) idemRef.current = `pay-${code}-${Date.now()}`;
+    const idem = idemRef.current;
     try {
       const res = await fetch("/api/pay/start", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-idempotency-key": idem },
+        headers: { "content-type": "application/json", "x-idempotency-key": idem, ...csrfHeader() },
         body: JSON.stringify({ orderCode: code, idempotencyKey: idem }),
       });
       const body = (await res.json().catch(() => null)) as

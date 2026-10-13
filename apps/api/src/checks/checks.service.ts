@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { JournalService } from "../accounting/journal.service";
+import { GL, GL_LIABILITIES } from "@ghasedak/contracts";
 
 /**
  * فاز ۹ — Wave 2: سرویس دامنهٔ چک (بند ۱۳/۱۴ Design Gate)
@@ -43,11 +44,12 @@ const ISSUED_TRANSITIONS: Record<string, string[]> = {
 /** وضعیت‌های نهایی — هیچ گذار خروجی از آن‌ها مجاز نیست */
 
 
-const GL_CHECK_RECEIVABLE = "1220";
-const GL_AR_TRADE = "1210";
-const GL_BANK = "1100";
-const GL_AP = "2100";
-const GL_OUTSTANDING_PAYABLE = "2110";
+// کدهای حساب از منبع واحد می‌آیند (packages/contracts/account-codes)
+const GL_CHECK_RECEIVABLE = GL.CHECK_RECEIVABLE;
+const GL_AR_TRADE = GL.RECEIVABLE_TRADE;
+const GL_BANK = GL.BANK;
+const GL_AP = GL_LIABILITIES.PAYABLE;
+const GL_OUTSTANDING_PAYABLE = GL_LIABILITIES.CHECK_PAYABLE_OUTSTANDING;
 
 export interface TransitionInput {
   checkId: string;

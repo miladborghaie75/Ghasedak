@@ -9,6 +9,7 @@
  */
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useCart } from "@/components/providers/CartProvider";
 import { ProductArt, type ArtKind } from "./ProductArt";
 import { cn } from "@/lib/cn";
@@ -77,19 +78,29 @@ export function ProductCard({ product }: CardProps) {
       )}
       aria-label={product.name}
     >
-      {/* تصویر ۱:۱ — زمینه روشن برند (بند ۱۱) */}
+      {/* تصویر ۱:۱ — عکس واقعی اگر آپلود شده، وگرنه تصویر تزئینی دسته (بند ۱۱) */}
       <div className="relative overflow-hidden rounded-xl bg-bg">
         <Link
           href={`/p/${product.slug}`}
-          className="block aspect-square"
+          className="relative block aspect-square"
           aria-label={`مشاهده ${product.name}`}
         >
-          <span className="flex h-full w-full items-center justify-center p-3">
-            <ProductArt
-              kind={product.category as ArtKind}
-              colorId={activeColor ?? product.variants[0].colorId}
+          {product.image ? (
+            <Image
+              src={product.image}
+              alt={product.name}
+              fill
+              sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 33vw, 50vw"
+              className="object-cover"
             />
-          </span>
+          ) : (
+            <span className="flex h-full w-full items-center justify-center p-3">
+              <ProductArt
+                kind={product.category as ArtKind}
+                colorId={activeColor ?? product.variants[0].colorId}
+              />
+            </span>
+          )}
         </Link>
 
         {/* Wishlist راست / بج چپ (بند ۱۱ — RTL) */}

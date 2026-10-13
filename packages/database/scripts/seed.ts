@@ -4,6 +4,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { randomBytes, scryptSync } from "node:crypto";
+import { FULL_CHART_OF_ACCOUNTS, SUB_ACCOUNTS } from "@ghasedak/contracts";
 
 /**
  * کپی کمینه از منطق رسمی InventoryService.moveInTx (apps/api/src/inventory/inventory.service.ts)
@@ -110,7 +111,7 @@ const PERMISSIONS = [
   "orders.view", "orders.update",
   "pricing.view", "pricing.manage",
   "customers.view", "customers.manage",
-  "payments.view", "payments.verify",
+  "payments.view", "payments.verify", "payments.manage",
   "payments.reconcile", // بند ۱۸ Audit فاز ۹: عدم‌تقارن قبل — در ROLE_SETS بود ولی در PERMISSIONS نبود
   "checks.view", "checks.manage", "checks.clear", "checks.cancel", "checks.reconcile", // فاز ۹
   "returns.manage", "orders.refund", // فاز ۱۱ P1-B: endpointهای مرجوعی/بازگشت بدون permission بودند
@@ -420,24 +421,39 @@ async function main(): Promise<void> {
       data: { title: "۱۴۰۵ (DEMO)", startsAt: new Date("2026-03-21"), endsAt: new Date("2027-03-20") },
     });
   }
-  if (fy) {
-    const accounts: Array<{ code: string; name: string; type: string }> = [
-      { code: "1000", name: "موجودی نقد", type: "ASSET" },
-      { code: "1100", name: "بانک", type: "ASSET" },
-      { code: "1200", name: "موجودی کالا", type: "ASSET" },
-      { code: "1210", name: "حساب‌های دریافتنی تجاری", type: "ASSET" }, // فاز ۹ — Trade AR
-      { code: "1220", name: "چک‌های دریافتی", type: "ASSET" }, // فاز ۹ — Checks Receivable
-      { code: "2100", name: "حساب‌های پرداختنی", type: "LIABILITY" },
-      { code: "2110", name: "چک‌های پرداختنی در جریان وصول", type: "LIABILITY" }, // فاز ۹ — Outstanding Checks Payable
-      { code: "2150", name: "کالای دریافتی صورت‌حساب‌نشده (GRNI)", type: "LIABILITY" },
-      { code: "3000", name: "سرمایه", type: "EQUITY" },
-      { code: "4000", name: "فروش", type: "REVENUE" },
-      { code: "5000", name: "بهای تمام‌شده کالای فروش‌رفته", type: "COGS" },
-      { code: "6000", name: "هزینه‌های عملیاتی", type: "EXPENSE" },
-    ];
-    for (const a of accounts) {
-      await prisma.account.upsert({ where: { code: a.code }, update: {}, create: a });
+if (fy) {
+    // Chart of Accounts از منبع واحد می‌آید (packages/contracts/account-codes)
+    // تا نام و نوع حساب‌ها در یک جا تعریف شوند و با سندهای سرویس‌ها ناسازگار نشوند.
+    // اول گروه‌های سطح ۱، بعد زیرحساب‌ها با اشاره به والد.
+    for (const a of FULL_CHART_OF_ACCOUNTS.filter((x) => x.level === 1)) {
+      await prisma.account.upsert({
+        where: { code: a.code },
+        update: {},
+        create: {
+          code: a.code,
+          name: a.name,
+          type: a.type as never,
+          level: 1,
+          parentAccountId: null,
+        },
+      });
     }
+    for (const s of SUB_ACCOUNTS) {
+      const parent = await prisma.account.findUnique({ where: { code: s.parent } });
+      if (!parent) continue; // والد باید در گام قبل ساخته شده باشد
+      await prisma.account.upsert({
+        where: { code: s.code },
+        update: { name: s.name, type: s.type as never, level: 2, parentAccountId: parent.id },
+        create: {
+          code: s.code,
+          name: s.name,
+          type: s.type as never,
+          level: 2,
+          parentAccountId: parent.id,
+        },
+      });
+    }
+  }
 
     // ---- خزانه DEMO (فاز ۸، بند ۵۹–۶۲): یک صندوق نقد + یک حساب بانکی روی حساب‌های GL
     // مانده جاری = مانده دفتری GL (projection صادقانه؛ بند ۱۰۷: بدون محاسبه موازی)

@@ -64,9 +64,12 @@ model User {
   approvalsDecided   ApprovalRequest[]      @relation("ApprovalDecidedBy")
   expenses           Expense[]
   stocktakes         Stocktake[]
+  settlementsPosted  SettlementBatch[]    @relation("SettlementPostedBy")
   transfersByRequest StockTransfer[]        @relation("TransferRequestedBy")
   transfersByConfirm StockTransfer[]        @relation("TransferConfirmedBy")
   c2cDecisions       CardToCardSubmission[] @relation("C2cDecidedBy")
+  payrollContracts   PayrollContract[]
+  payrollItems       PayrollItem[]
   stocktakesApproved Stocktake[]            @relation("StocktakeApprovedBy")
 }
 
@@ -488,6 +491,7 @@ model OrderItem {
   variant ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@index([orderId])
+  @@index([variantId])
 }
 
 model OrderStatusHistory {
@@ -633,7 +637,28 @@ model PaymentProvider {
   credentialsEncrypted String? // رمز؛ هرگز در پاسخ API (بند ۵)
   callbackUrl          String?
   methodIds            String[]
+  /// بسته‌های تسویهٔ این درگاه (فاز ۲٫۵)
+  settlementBatches    SettlementBatch[]
   paymentAttempts      PaymentAttempt[]
+
+  // ── تسویه و کارمزد (گام ۳ فاز ۲) ──
+  // درگاه‌های اعتباری پول را چند هفته بعد و کمتر از مبلغ کامل می‌رسانند؛
+  // بدون این ستون‌ها سند فروش کل مبلغ را در بانک می‌نشاند و دفتر با واقعیت
+  // اختلاف پیدا می‌کرد.
+  /** درصد کارمزد درگاه (مثلاً ۱٫۲ برای ۱٫۲٪) — به‌ازای هر درگاه قابل تنظیم */
+  feePercentBps        Int? // درصد با دقت دهم‌درصد (basis point: ۱۰۰ = ۱٪)
+  /** مبلغ کارمزد ثابت هر تراکنش، به تومان — اگر درصده کافی نبود */
+  feeFlatToman         BigInt?
+  /** کارمزد از جیب خریدار گرفته شود یا از جیب فروشگاه؟ (تصمیم کاربر) */
+  feeBorneBy           GatewayFeeBearer @default(MERCHANT)
+  /** روزهایی که درگاه پول را به حساب فروشگاه منتقل می‌کند (برای چرخهٔ تسویه) */
+  settlementDays       Int? @default(1)
+}
+
+/** کارمزد درگاه از چه جیبی پرداخت می‌شود */
+enum GatewayFeeBearer {
+  MERCHANT // فروشگاه (پیش‌فرض — هزینهٔ فروشگاه است)
+  CUSTOMER // خریدار (روی فاکتور مشتری اضافه می‌شود)
 }
 
 enum PayState {
@@ -679,6 +704,9 @@ model PaymentAttempt {
   submissions     CardToCardSubmission[]
   reconciliations PaymentReconciliation[]
   refunds         Refund[]
+  settlementBatch SettlementBatch? @relation(fields: [settlementBatchId], references: [id], onDelete: SetNull)
+  /// بستهٔ تسویه‌ای که این پرداخت در آن تسویه شد (فاز ۲٫۵)
+  settlementBatchId String?
 
   @@index([orderId])
   @@index([state])
@@ -744,6 +772,47 @@ enum ReconciliationStatus {
   PARTIALLY_MATCHED
   RECONCILED
   DISPUTED
+}
+
+/**
+ * بستهٔ تسویه — یک گزارش تسویه از درگاه (فاز ۲٫۵).
+ *
+ * برای درگاه اعتباری، پولِ چند خرید با هم و چند هفته بعد به حساب ما می‌رسد.
+ * پس یک «بسته» لازم است تا برای کل گزارش **یک** سند زده شود، نه یک سند به‌ازای
+ * هر خرید — وگرنه دفتر پر از سندهای ریز و غیرقابل‌بررسی می‌شد.
+ *
+ * چرخه: `PENDING` (وارد شده، هنوز سند نخورده) → `POSTED` (سند حسابداری زده شد)
+ */
+model SettlementBatch {
+  id             String            @id @default(cuid())
+  providerId     String
+  reference      String // شمارهٔ گزارش درگاه — یکتا در هر درگاه
+  settlementDate DateTime
+  grossAmount    BigInt            @default(0) // جمع کل پرداخت‌های تسویه‌شده
+  feeAmount      BigInt            @default(0) // کرمزد درگاه
+  netAmount      BigInt            @default(0) // آنچه واقعاً به حساب ما آمد
+  status         SettlementStatus  @default(PENDING)
+  journalEntryId String?           @unique // سند قطعی — یک سند، یک بسته
+  postedAt       DateTime?
+  postedById     String?
+  note           String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  provider PaymentProvider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  journalEntry JournalEntry?  @relation("SettlementJournal", fields: [journalEntryId], references: [id], onDelete: SetNull)
+  postedBy User?             @relation("SettlementPostedBy", fields: [postedById], references: [id], onDelete: SetNull)
+  attempts PaymentAttempt[]
+
+  @@unique([providerId, reference])
+  @@index([status])
+  @@index([settlementDate])
+}
+
+enum SettlementStatus {
+  PENDING
+  POSTED
+  VOID
 }
 
 model PaymentReconciliation {
@@ -1175,6 +1244,8 @@ model ReturnRequest {
   posInvoice PosInvoice?   @relation(fields: [posInvoiceId], references: [id])
   policy     ReturnPolicy? @relation(fields: [policyId], references: [id])
   refund     Refund?
+
+  @@index([status, createdAt])
 }
 
 model ReturnItem {
@@ -1282,12 +1353,21 @@ model Warehouse {
   address   String?
   phone     String?
   contact   String?
-  isDefault Boolean  @default(false) // انبار پیش‌فرض فروش
+  isDefault Boolean  @default(false) // انبار پیش‌فرض فروش — در محاسبات خوانده می‌شود
   note      String?
   priority  Int      @default(0)
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /**
+   * حساب دفتری اختصاصی این انبار (فاز ۶).
+   *
+   * قبلاً همهٔ انبارها روی `1200` جمع می‌شدند، پس گزارش ارزش‌گذاری انبار با
+   * ترازنامه نمی‌خواند. با این فیلد هر انبار زیرحساب خودش را می‌گیرد
+   * (`1200-01`، `1200-02`، …) و مقدار `null` یعنی «فعلاً به گروه ۱۲۰۰ می‌رود».
+   */
+  glAccountId String?
 
   ledgerEntries     StockLedgerEntry[]
   reservations      StockReservation[]
@@ -1301,6 +1381,10 @@ model Warehouse {
   goodsReceipts     GoodsReceipt[]
   quarantineRecords QuarantineRecord[]
   damageRecords     DamageRecord[]
+  /** حساب دفتری اختصاصی انبار (فاز ۶) */
+  glAccount        Account?      @relation("WarehouseGlAccount", fields: [glAccountId], references: [id])
+  /** خطوط سندی که به این انبار مربوط‌اند */
+  journalLines     JournalLine[]
 }
 
 enum LedgerType {
@@ -1636,6 +1720,23 @@ enum FiscalState {
   CLOSED
 }
 
+/**
+ * سال مالی — دورهٔ حسابداری.
+ *
+ * قید `onlyOneOpenFiscalYear` (مهاجرت phase12) تضمین می‌کند در هر لحظه
+ * **دقیقاً یک** سال باز وجود داشته باشد.
+ *
+ * چرا این قید حیاتی است: کد ساخت سند، سال باز را با
+ * `findFirst({ where: { state: "OPEN" } })` پیدا می‌کند. اگر چند سال باز
+ * وجود داشته باشد، سندها بین آن‌ها **پخش می‌شوند** و شمارهٔ سند (که فقط
+ * در محدودهٔ سال یکتاست) دیگر قابل استناد نیست. قبلاً ۵ سال باز هم‌زمان
+ * روی دیتابیس بود.
+ *
+ * وضعیت‌ها:
+ *  • `OPEN`   — سال جاری، سند جدید پذیرفته می‌شود
+ *  • `LOCKED`  — بسته شد ولی قابل بازگشایی است (اشتباه سند قابل اصلاح)
+ *  • `CLOSED` — بستهٔ نهایی؛ تنها با بازگشایی صریح مدیر ارشد باز می‌شود
+ */
 model FiscalYear {
   id       String      @id @default(cuid())
   title    String
@@ -1643,7 +1744,21 @@ model FiscalYear {
   endsAt   DateTime
   state    FiscalState @default(OPEN)
 
+  // ممیزی بستن/بازکردن — بدون این‌ها معلوم نمی‌شود چه کسی و کِی سال را بست
+  closedAt      DateTime?
+  closedById    String?
+  reopenedAt    DateTime?
+  reopenedById  String?
+  // ماندهٔ حساب‌ها در لحظهٔ بستن — پایهٔ تراز اختتامیه
+  closingSnapshot Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   entries JournalEntry[]
+
+  @@index([state])
+  @@index([startsAt])
 }
 
 enum AccountType {
@@ -1671,6 +1786,8 @@ model Account {
   journalLines JournalLine[]
   cashAccounts CashAccount[]
   bankAccounts BankAccount[]
+  /** انبارهایی که این حساب دفتری‌شان است (فاز ۶) */
+  warehouses   Warehouse[]   @relation("WarehouseGlAccount")
 }
 
 enum JournalState {
@@ -1697,6 +1814,7 @@ model JournalEntry {
   fiscalYear       FiscalYear         @relation(fields: [fiscalYearId], references: [id])
   actor            User?              @relation(fields: [actorId], references: [id])
   lines            JournalLine[]
+  settlementBatches SettlementBatch[] @relation("SettlementJournal")
   checkTransitions CheckTransition[]
 
   @@unique([fiscalYearId, number])
@@ -1713,11 +1831,103 @@ model JournalLine {
   costCenterId String?
   partyType    String? // customer|supplier
   partyId      String?
+  /**
+   * انباری که این خط به آن مربوط است (فاز ۶).
+   *
+   * برای سندهای موجود `null` است و رفتار را خراب نمی‌کند — فقط یعنی آن خط
+   * به انبار خاصی نسبت داده نشده. با پر شدنش، گزارش «سود هر انبار» ممکن می‌شود.
+   */
+  warehouseId  String?
 
-  entry   JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  account Account      @relation(fields: [accountId], references: [id])
+  entry     JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account   Account      @relation(fields: [accountId], references: [id])
+  warehouse Warehouse?   @relation(fields: [warehouseId], references: [id])
 
   @@index([accountId])
+  // گزارش معین اشخاص (فاز ۵): «فروش به تفکیک مشتری» و «بدهکاران»
+  @@index([partyType, partyId])
+  @@index([entryId])
+  // گزارش سود هر انبار (فاز ۶)
+  @@index([warehouseId])
+}
+
+/**
+ * قرارداد حقوق یک کارمند — گام ۷ فاز ۲.
+ *
+ * حقوق ماهانه چیزی است که هر ماه **تکرار** می‌شود، پس داده‌اش باید نگهداری
+ * شود نه اینکه هر ماه دستی سند زده شود. یک کارمند فقط یک قرارداد فعال دارد
+ * (قید دیتابیسی) تا حقوق دو بار پرداخت نشود.
+ */
+model PayrollContract {
+  id                 String    @id @default(cuid())
+  userId             String
+  baseSalary         BigInt    @default(0)
+  housingAllowance   BigInt    @default(0)
+  childAllowance     BigInt    @default(0)
+  transportAllowance BigInt    @default(0)
+  otherAllowance     BigInt    @default(0)
+  deduction          BigInt    @default(0)
+  insuranceDeduction BigInt    @default(0)
+  startDate          DateTime
+  endDate            DateTime?
+  active             Boolean   @default(true)
+  note               String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([active])
+}
+
+/**
+ * لیست حقوق یک ماه — گام ۷ فاز ۲.
+ *
+ * چرخه: DRAFT (محاسبه و بازبینی) → POSTED (سند حسابداری زده شد).
+ * پس از POSTED دیگر قابل تغییر نیست، وگرنه حقوق پرداخت‌شده بازنویسی می‌شد.
+ */
+model PayrollRun {
+  id              String    @id @default(cuid())
+  period          String // مثال: ۱۴۰۴/۰۵
+  title           String
+  state           PayrollState @default(DRAFT)
+  totalGross      BigInt    @default(0)
+  totalDeduction  BigInt    @default(0)
+  totalNet        BigInt    @default(0)
+  journalEntryId  String? // سند قطعی حقوق
+  postedAt        DateTime?
+  postedById      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  items PayrollItem[]
+
+  @@unique([period])
+  @@index([state])
+}
+
+enum PayrollState {
+  DRAFT
+  POSTED
+}
+
+/** ردیف حقوق یک کارمند در یک ماه */
+model PayrollItem {
+  id         String   @id @default(cuid())
+  runId      String
+  userId     String
+  period     String
+  gross      BigInt   @default(0)
+  deduction  BigInt   @default(0)
+  net        BigInt   @default(0)
+  createdAt  DateTime @default(now())
+
+  run  PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, period]) // یک ماه، یک پرداخت برای هر کارمند
+  @@index([runId])
 }
 
 model NumberSeries {

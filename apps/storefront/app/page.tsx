@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { HeroDrawer } from "@/components/home/HeroDrawer";
-import { SectionReveal, SectionBlock, getHomeSections } from "@/components/home/HomeSectionsRenderer";
+import { SectionReveal } from "@/components/ui/Reveal";
 import {
   NeedNav,
   ProductShelf,
@@ -12,20 +12,27 @@ import {
 import { ProductCard } from "@/components/commerce/ProductCard";
 import { CATEGORIES } from "@/lib/categories";
 import { isNewProduct, loadCatalog } from "@/lib/catalog-repo";
+import { HOME_SLUG, buildCmsData, fetchCmsPage, loadLiveBrands, loadLiveCategories } from "@/lib/cms";
+import { CmsRenderer } from "@ghasedak/blocks";
 
 /** داده از API واقعی — رندر داینامیک (build به بالا بودن API وابسته نیست) */
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const all = await loadCatalog();
+  // آیکون دسته‌ها و برندها زنده است — پیش از ساخت دادهٔ بلوک‌ها باید خوانده شود
+  await Promise.all([loadLiveCategories(), loadLiveBrands()]);
+
+  // ── صفحه‌ساز: اگر برای صفحهٔ اصلی صفحه‌ای منتشر شده باشد، همان رندر می‌شود.
+  //    تا وقتی مدیر چیزی منتشر نکرده، چیدمان پیش‌فرض زیر اجرا می‌شود.
+  const cms = await fetchCmsPage(HOME_SLUG);
+  if (cms) {
+    return <CmsRenderer page={cms.page} data={buildCmsData(all)} />;
+  }
+
   const newest = all.filter((p) => isNewProduct(p)).slice(0, 8);
   // دسته‌ها با شمارش واقعی محصولات (بدون دسته خالی نمایشی)
   const categories = CATEGORIES;
-
-  // سکشن‌های منتشرشده از ادمین (صفحه‌ساز) — هرگز بر چیدمان پیش‌فرض غلبه قیمتی نمی‌کنند
-  const dbSections = await getHomeSections();
-  const bannerSections = dbSections.filter((s) => s.type === "BANNER");
-  const tailSections = dbSections.filter((s) => ["RICH_TEXT", "IMAGE_TEXT", "NEWSLETTER"].includes(s.type));
 
   return (
     <>
@@ -53,7 +60,7 @@ export default async function HomePage() {
         </section>
       </SectionReveal>
 
-      {bannerSections[0] ? <SectionBlock section={bannerSections[0]} /> : <PromoBanners />}
+      <PromoBanners />
 
       <SectionReveal>
         <ProductShelf title="جدیدترین‌ها">
@@ -93,11 +100,6 @@ export default async function HomePage() {
       <SectionReveal>
         <GuideTeasers />
       </SectionReveal>
-
-      {/* سکشن‌های سفارشی انتهای صفحه از صفحه‌ساز */}
-      {tailSections.map((s) => (
-        <SectionBlock key={s.id} section={s} />
-      ))}
     </>
   );
 }

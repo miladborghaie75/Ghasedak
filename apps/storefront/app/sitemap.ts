@@ -2,12 +2,13 @@ import type { MetadataRoute } from "next";
 import { getAllProductsV2, loadCatalog } from "@/lib/catalog-repo";
 import { CATEGORIES } from "@/lib/categories";
 import { guides } from "@/lib/guides-data";
+import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   await loadCatalog();
-  const base = "https://ghasedak.example";
+  const base = SITE_URL;
   const now = new Date();
 
   return [
@@ -29,5 +30,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
     { url: `${base}/need`, lastModified: now, priority: 0.5 },
     { url: `${base}/search`, lastModified: now, priority: 0.3 },
+    // صفحات محتوایی اعتمادساز (فوتر به همین مسیرها لینک می‌دهد)
+    { url: `${base}/about`, lastModified: now, priority: 0.4 },
+    { url: `${base}/contact`, lastModified: now, priority: 0.4 },
+    { url: `${base}/shipping`, lastModified: now, priority: 0.4 },
+    { url: `${base}/returns`, lastModified: now, priority: 0.4 },
+    { url: `${base}/terms`, lastModified: now, priority: 0.3 },
+    { url: `${base}/privacy`, lastModified: now, priority: 0.3 },
   ];
 }

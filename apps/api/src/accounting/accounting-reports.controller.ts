@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { JournalService } from "./journal.service";
 import { RequirePermission } from "../auth/permissions.guard";
 import { Identity } from "../auth/identity.decorator";
+import { GL, GL_EXPENSE, GL_LIABILITIES } from "@ghasedak/contracts";
 
 /**
  * گزارش‌ها و عملیات گسترده حسابداری — بند ۲۴/۳۱/۱۰۶:
@@ -241,14 +242,30 @@ export class AccountingReportsController {
   }
 
   /** فاکتورهای خرید — از PurchaseInvoice (شِما آماده؛ تا راه‌اندازی ماژول خرید، خالی صادقانه) */
+  /**
+   * فاکتورهای خرید برای گزارش.
+   *
+   * نگاشت دستی لازم است: رکورد خام Prisma فیلد `BigInt` دارد و `JSON.stringify`
+   * روی BigInt خطا می‌دهد — یعنی این endpoint قبلاً عملاً همیشه ۵۰۰ می‌داد
+   * و به همین دلیل در UI به‌جایش متن ثابت نمایش داده می‌شد.
+   */
   @Get("purchase-invoices")
   @RequirePermission("accounting.view")
   async purchaseInvoices() {
-    const items = await this.prisma.purchaseInvoice.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 50,
-      include: { supplier: { select: { name: true } } },
-    }).catch(() => []);
+    const rows = await this.prisma.purchaseInvoice
+      .findMany({
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: { supplier: { select: { name: true } } },
+      })
+      .catch(() => []);
+    const items = rows.map((p) => ({
+      number: p.number,
+      party: p.supplier?.name ?? "—",
+      total: Number(p.grandTotal ?? 0).toString(),
+      status: p.state,
+      createdAt: p.createdAt.toISOString(),
+    }));
     return { items, total: items.length };
   }
 
@@ -268,8 +285,8 @@ export class AccountingReportsController {
       sourceType: "payroll",
       actorId: actor?.userId,
       lines: [
-        { accountCode: "6000", debit: body.amount },
-        { accountCode: "2100", credit: body.amount },
+        { accountCode: GL_EXPENSE.OPERATING, debit: body.amount },
+        { accountCode: GL_LIABILITIES.PAYABLE, credit: body.amount },
       ],
     });
     return entry;

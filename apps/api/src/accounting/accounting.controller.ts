@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
 import { JournalService, type PostEntryInput } from "./journal.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
@@ -25,6 +25,77 @@ export class AccountingController {
     @Identity() actor?: { userId: string },
   ) {
     return this.journal.postManual({ ...body, actorId: actor?.userId });
+  }
+
+  /** فهرست اسناد — مرور اسناد و پیدا کردن سند اشتباه */
+  @Get("journal")
+  @RequirePermission("accounting.view")
+  listJournal(
+    @Query() q: { state?: "DRAFT" | "FINAL"; sourceType?: string; q?: string; page?: string; limit?: string },
+  ) {
+    return this.journal.listEntries({
+      state: q.state === "DRAFT" || q.state === "FINAL" ? q.state : undefined,
+      sourceType: q.sourceType || undefined,
+      q: q.q || undefined,
+      page: q.page ? Number(q.page) : undefined,
+      limit: q.limit ? Number(q.limit) : undefined,
+    });
+  }
+
+  @Get("journal/:id")
+  @RequirePermission("accounting.view")
+  getJournal(@Param("id") id: string) {
+    return this.journal.getEntry(id);
+  }
+
+  /** اصلاح سند — فقط پیش‌نویس. برای سند قطعی اول باید revert شود. */
+  @Put("journal/:id")
+  @RequirePermission("accounting.journal")
+  updateJournal(
+    @Param("id") id: string,
+    @Body() body: { description?: string; date?: string; lines?: PostEntryInput["lines"] },
+    @Identity() actor?: { userId: string },
+  ) {
+    return this.journal.updateEntry(id, body, actor?.userId);
+  }
+
+  @Delete("journal/:id")
+  @RequirePermission("accounting.journal")
+  deleteJournal(@Param("id") id: string, @Identity() actor?: { userId: string }) {
+    return this.journal.deleteEntry(id, actor?.userId);
+  }
+
+  /** برگشت سند قطعی به پیش‌نویس — راه درستِ اصلاح سند اشتباه */
+  @Post("journal/:id/revert")
+  @RequirePermission("accounting.journal")
+  revertJournal(@Param("id") id: string, @Identity() actor?: { userId: string }) {
+    return this.journal.revertToDraft(id, actor?.userId);
+  }
+
+  /** پیوست‌های یک سند (فاز ۴) */
+  @Get("journal/:id/attachments")
+  @RequirePermission("accounting.view")
+  async listAttachments(@Param("id") id: string) {
+    return { items: await this.journal.listAttachments(id) };
+  }
+
+  @Post("journal/:id/attachments")
+  @RequirePermission("accounting.journal")
+  async addAttachment(
+    @Param("id") id: string,
+    @Body() body: { mediaId: string; title?: string },
+    @Identity() actor?: { userId: string },
+  ) {
+    return this.journal.addAttachment(id, String(body.mediaId ?? "").trim(), body.title, actor?.userId);
+  }
+
+  @Delete("journal/attachments/:attachmentId")
+  @RequirePermission("accounting.journal")
+  async removeAttachment(
+    @Param("attachmentId") attachmentId: string,
+    @Identity() actor?: { userId: string },
+  ) {
+    return this.journal.removeAttachment(attachmentId, actor?.userId);
   }
 
   @Post("journal/:id/finalize")

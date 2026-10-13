@@ -1,11 +1,30 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
+import { PrismaModule } from "../prisma/prisma.module";
 import { AccountingController } from "./accounting.controller";
 import { AccountingReportsController } from "./accounting-reports.controller";
 import { JournalService } from "./journal.service";
+import { ReportsService } from "./reports.service";
+import { ReportsController } from "./reports.controller";
+import { DashboardService } from "./dashboard.service";
+import { DashboardController } from "./dashboard.controller";
+import { FiscalYearService } from "./fiscal-year.service";
+import { FiscalYearController } from "./fiscal-year.controller";
+import { ProductsModule } from "../products/products.module";
 
 @Module({
-  controllers: [AccountingController, AccountingReportsController],
-  providers: [JournalService],
-  exports: [JournalService],
+  // `forwardRef` چون وابستگی حلقوی با ProductsModule داریم
+  // (محصولات برای سند موجودی آغازین، حسابداری برای گزارش‌ها)
+  imports: [PrismaModule, forwardRef(() => ProductsModule)],
+  controllers: [
+    AccountingController,
+    AccountingReportsController,
+    FiscalYearController,
+    ReportsController,
+    DashboardController,
+  ],
+  providers: [JournalService, FiscalYearService, ReportsService, DashboardService],
+  // FiscalYearService هم export می‌شود چون فازهای بعد (سند اختتامیه، کنترل
+  // دسترسی سال مالی در مسیرهای فروش/خرید) به آن نیاز دارند.
+  exports: [JournalService, FiscalYearService],
 })
 export class AccountingModule {}

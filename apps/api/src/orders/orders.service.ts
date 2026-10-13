@@ -53,6 +53,69 @@ export class OrdersService {
     return { price: r.price, salePrice: r.salePrice };
   }
 
+  /**
+   * اعتبارسنجی و محاسبهٔ کد تخفیف — تنها منبع حقیقت.
+   * هم در `createGuestOrder` و هم در `quoteCoupon` استفاده می‌شود تا مبلغ
+   * نمایش‌داده‌شده به مشتری با مبلغ واقعیِ ثبت‌شده یکی باشد.
+   * هیچ تخفیفی سمت کلاینت ساخته نمی‌شود.
+   */
+  async resolveCoupon(
+    code: string,
+    subtotal: bigint,
+    mobile?: string | null,
+  ): Promise<{ id: string; discount: bigint; type: string; amount: number }> {
+    const coupon = await this.prisma.coupon.findUnique({ where: { code: code.trim().toUpperCase() } });
+    const now = new Date();
+    const used =
+      coupon?.usageLimit != null
+        ? await this.prisma.couponRedemption.count({ where: { couponId: coupon.id } })
+        : 0;
+    // حد استفادهٔ هر مشتری (بند ۱۵) — شمارش بر اساس موبایل مهمان؛ بدون موبایل قابل اعمال نیست
+    const usedByCustomer =
+      coupon?.perCustomerLimit != null && mobile
+        ? await this.prisma.couponRedemption.count({ where: { couponId: coupon.id, mobile } })
+        : 0;
+    const valid =
+      !!coupon &&
+      coupon.active &&
+      (!coupon.startsAt || coupon.startsAt <= now) &&
+      (!coupon.endsAt || coupon.endsAt >= now) &&
+      (coupon.minCartTotal == null || subtotal >= coupon.minCartTotal) &&
+      (coupon.usageLimit == null || used < coupon.usageLimit) &&
+      (coupon.perCustomerLimit == null || !mobile || usedByCustomer < coupon.perCustomerLimit);
+
+    if (!coupon || !valid) {
+      throw new BadRequestException({
+        code: "COUPON_INVALID",
+        message:
+          coupon?.perCustomerLimit != null && mobile && usedByCustomer >= coupon.perCustomerLimit
+            ? "سهمیهٔ این کد تخفیف برای شما به پایان رسیده است."
+            : "کد تخفیف معتبر نیست.",
+      });
+    }
+
+    let discount: bigint;
+    if (coupon.type === "percent") {
+      discount = (subtotal * BigInt(coupon.amount)) / 100n;
+      if (coupon.maxDiscount != null && discount > coupon.maxDiscount) discount = coupon.maxDiscount;
+    } else {
+      discount = coupon.amount;
+      if (discount > subtotal) discount = subtotal;
+    }
+    // amount در شِما BigInt است؛ برای مصرف‌کننده (درصد تخفیف) به number تبدیل می‌شود
+    return { id: coupon.id, discount, type: coupon.type, amount: Number(coupon.amount) };
+  }
+
+  /** بررسی کد تخفیف برای نمایش صادقانهٔ مبلغ در سبد، پیش از ثبت سفارش */
+  async quoteCoupon(code: string, subtotal: number, mobile?: string | null): Promise<{ code: string; discount: number; percent: number | null }> {
+    const c = await this.resolveCoupon(code, BigInt(Math.max(0, Math.round(subtotal))), mobile);
+    return {
+      code: code.trim().toUpperCase(),
+      discount: Number(c.discount),
+      percent: c.type === "percent" ? c.amount : null,
+    };
+  }
+
   /** ایجاد سفارش مهمان — اتمیک: رزرو + سفارش + items + snapshot (بند ۹۲) */
   async createGuestOrder(input: CheckoutInput): Promise<{ code: string; total: bigint; id: string }> {
     if (!Array.isArray(input.lines) || input.lines.length === 0) {
@@ -65,6 +128,15 @@ export class OrdersService {
     }
     if (!/^09\d{9}$/.test(input.guestMobile)) {
       throw new BadRequestException({ code: "VALIDATION_ERROR", message: "موبایل نامعتبر است." });
+    }
+
+    // idempotency — باید قبل از هر محاسبهٔ مصرف‌شونده (کد تخفیف/سهمیه) باشد؛
+    // وگرنه تلاش مجددِ سفارشِ موفق (رفرش/قطع شبکه) با خطای «سهمیهٔ تخفیف» ۴۰۰ می‌شد
+    // و مشتری سفارش خودش را نمی‌دید (باگی که تست verify-checkout پیدا کرد).
+    const idem = input.idempotencyKey;
+    if (idem) {
+      const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: idem } });
+      if (existing) return { code: existing.code, total: existing.total, id: existing.id };
     }
 
     // ادغام خط تکراری (اسکن دوباره = افزایش تعداد، بند ۷)
@@ -99,34 +171,10 @@ export class OrdersService {
     let discount = 0n;
     let couponId: string | null = null;
     if (input.couponCode) {
-      const coupon = await this.prisma.coupon.findUnique({ where: { code: input.couponCode.toUpperCase() } });
-      const now = new Date();
-      const valid =
-        coupon &&
-        coupon.active &&
-        (!coupon.startsAt || coupon.startsAt <= now) &&
-        (!coupon.endsAt || coupon.endsAt >= now) &&
-        (coupon.minCartTotal == null || subtotal >= coupon.minCartTotal) &&
-        (coupon.usageLimit == null ||
-          (await this.prisma.couponRedemption.count({ where: { couponId: coupon.id } })) < coupon.usageLimit);
-      if (!valid) {
-        throw new BadRequestException({ code: "COUPON_INVALID", message: "کد تخفیف معتبر نیست." });
-      }
-      couponId = coupon.id;
-      if (coupon.type === "percent") {
-        discount = (subtotal * BigInt(coupon.amount)) / 100n;
-        if (coupon.maxDiscount != null && discount > coupon.maxDiscount) discount = coupon.maxDiscount;
-      } else {
-        discount = coupon.amount;
-        if (discount > subtotal) discount = subtotal;
-      }
+      const c = await this.resolveCoupon(input.couponCode, subtotal, input.guestMobile);
+      couponId = c.id;
+      discount = c.discount;
       total -= discount;
-    }
-
-    const idem = input.idempotencyKey;
-    if (idem) {
-      const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: idem } });
-      if (existing) return { code: existing.code, total: existing.total, id: existing.id };
     }
 
     // رزرو انبار قبل از ساخت سفارش (بند ۱۴) — داخل همان جریان؛ خطا → هیچ رکوردی نمانده
@@ -135,6 +183,28 @@ export class OrdersService {
       fullName: input.guestName,
       mobile: input.guestMobile,
     };
+
+    // اعتبارسنجی آدرس (فاز ۲ — B3): فرمت همیشه؛ وجود استان/شهر فقط وقتی
+    // دادهٔ جغرافیایی seed شده باشد — وگرنه جدولهای خالی همهٔ خریدها را میشکستند.
+    const provinceName = String(input.address?.province ?? "").trim();
+    const cityName = String(input.address?.city ?? "").trim();
+    if (!provinceName || provinceName.length > 60 || !cityName || cityName.length > 60) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        message: "استان و شهر الزامی است (حداکثر ۶۰ نویسه).",
+      });
+    }
+    const geoCount = await this.prisma.province.count();
+    if (geoCount > 0) {
+      const province = await this.prisma.province.findFirst({ where: { name: provinceName }, select: { id: true } });
+      if (!province) {
+        throw new BadRequestException({ code: "VALIDATION_ERROR", message: `استان «${provinceName}» یافت نشد.` });
+      }
+      const city = await this.prisma.city.findFirst({ where: { provinceId: province.id, name: cityName }, select: { id: true } });
+      if (!city) {
+        throw new BadRequestException({ code: "VALIDATION_ERROR", message: `شهر «${cityName}» در استان «${provinceName}» یافت نشد.` });
+      }
+    }
 
     const order = await this.prisma.$transaction(async (tx) => {
       for (const line of priced) {
@@ -276,7 +346,14 @@ export class OrdersService {
           id: true, code: true, status: true, paymentStatus: true, total: true,
           subtotal: true, shippingCost: true, discountTotal: true,
           guestName: true, guestMobile: true, createdAt: true,
+          // کد رهگیری پستی روی سفارش — تا پنل ادمین بدون باز کردن مرسوله آن را ببیند
+          trackingCode: true,
           channel: { select: { name: true } },
+          // خلاصهٔ مرسوله‌ها: پیشرفته‌ترین مرحله و کدی که واقعاً به مشتری داده شده
+          shipments: {
+            orderBy: { createdAt: "desc" },
+            select: { id: true, status: true, trackingCode: true, provider: true, shippedAt: true, deliveredAt: true },
+          },
         },
       }),
       this.prisma.order.count({ where }),
@@ -290,6 +367,30 @@ export class OrdersService {
       include: {
         items: { select: { titleSnapshot: true, qty: true, unitPrice: true, lineTotal: true, variant: { select: { sku: true } } } },
         shipments: { select: { id: true, trackingCode: true, status: true, provider: true } },
+      },
+    });
+  }
+
+  /**
+   * نسخهٔ عمومی — بدون PII (امنیت: کد سفارش از NumberSeries سریالی است و حدس‌پذیر؛
+   * پس هر کسی که کد را دارد نباید اسم/موبایل/آدرس خریدار را ببیند.
+   * مشتریِ واقعی از مسیر پیگیری (shipping/track) و ادمین از byCode کامل استفاده می‌کند.)
+   */
+  async byCodePublic(code: string) {
+    return this.prisma.order.findUnique({
+      where: { code },
+      select: {
+        id: true,
+        code: true,
+        status: true,
+        paymentStatus: true,
+        subtotal: true,
+        shippingCost: true,
+        discountTotal: true,
+        taxTotal: true,
+        total: true,
+        createdAt: true,
+        items: { select: { titleSnapshot: true, qty: true, unitPrice: true, lineTotal: true, variant: { select: { sku: true } } } },
       },
     });
   }

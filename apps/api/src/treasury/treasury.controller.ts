@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
 import { RequirePermission } from "../auth/permissions.guard";
 import { TreasuryService } from "./treasury.service";
@@ -28,6 +28,19 @@ export class TreasuryController {
     return this.treasury.summary();
   }
 
+  /**
+   * حساب‌های GL قابل انتخاب برای صندوق/بانک تازه.
+   *
+   * فرم ساخت حساب بدون این، کاربر نمی‌داند چه کدی وجود دارد یا کدام را باید
+   * انتخاب کند. فقط حساب‌های زیرمجموعهٔ `1000`/`1100` برگردانده می‌شوند، چون
+   * وصل‌کردن صندوق به حساب درآمد یا هزینه اشتباه مالی است.
+   */
+  @Get("gl-accounts")
+  @RequirePermission("treasury.view")
+  glAccounts(@Query() q: { kind?: "cash" | "bank" }) {
+    return this.treasury.listGlAccountsFor(q.kind === "bank" ? "bank" : "cash");
+  }
+
   @Post("cash-accounts")
   @RequirePermission("treasury.manage")
   createCashAccount(@Req() req: Request, @Body() body: { name: string; kind?: string; glAccountCode?: string; openingBalance?: number }) {
@@ -46,9 +59,29 @@ export class TreasuryController {
     return this.treasury.cashIn({ ...body, actorId: this.actor(req) });
   }
 
+  /** برداشت نقدی — `expenseKind` سند را روی زیرحساب درست می‌نشاند (گام ۵ فاز ۲) */
   @Post("cash-out")
   @RequirePermission("treasury.manage")
-  cashOut(@Req() req: Request, @Body() body: { accountId: string; amount: number; counterAccountCode?: string; description?: string }) {
+  cashOut(
+    @Req() req: Request,
+    @Body()
+    body: {
+      accountId: string;
+      amount: number;
+      counterAccountCode?: string;
+      description?: string;
+      expenseKind?:
+        | "shipping"
+        | "packaging"
+        | "gatewayFee"
+        | "salary"
+        | "rent"
+        | "marketing"
+        | "utilities"
+        | "bankFee"
+        | "general";
+    },
+  ) {
     return this.treasury.cashOut({ ...body, actorId: this.actor(req) });
   }
 

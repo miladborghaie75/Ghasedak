@@ -5,6 +5,7 @@ import { PurchasingService } from "./purchasing.service";
 import { VendorNotifyService } from "./vendor-notify.service";
 import { JournalService } from "../accounting/journal.service";
 import { EventBusService } from "../events/event-bus.service";
+import { GL, GL_LIABILITIES } from "@ghasedak/contracts";
 
 /**
  * کنترلر خرید — Suppliers/PO/GRN/Invoice/Payments.
@@ -93,22 +94,20 @@ export class PurchasingController {
     note?: string;
   }) {
     const grn = await this.purchasing.createGRN({ ...body, actorId: this.actor(req) });
-    // سند حسابداری دریافت کالا — زنجیره بند ۴۷: GRN → Inventory → GRNI (کالای دریافتی، صورت‌حساب‌نشده)
-    // Dr موجودی کالا (1200) / Cr GRNI (2150) — بدهی واقعی (AP) فقط با فاکتور باز می‌شود؛
-    // این ساختار از دوبارشماری انبار/AP جلوگیری می‌کند و 1200 = ارزش واقعی موجودی می‌ماند.
-    const total = grn.items.reduce((acc, i) => acc + Number(i.unitCost) * i.qty + Number(i.landedCost), 0);
-    if (total > 0) {
-      await this.journal.postOrNotify({
-        description: `دریافت کالا ${grn.number}`,
-        sourceType: "purchase",
-        sourceId: grn.id,
-        actorId: this.actor(req),
-        lines: [
-          { accountCode: "1200", debit: total },
-          { accountCode: "2150", credit: total },
-        ],
-      });
-    }
+    /**
+     * باگ A3 (فاز ۱): این سند قبلاً **خارج از تراکنش** ثبت می‌شد.
+     *
+     * یعنی اگر شکست می‌خورد، GRN ثبت‌شده بود ولی سند نبود — دفتر بی‌خبر
+     * می‌ماند و موجودی کالا ارزش نداشت. برعکسش هم ممکن بود: سند ثبت شود
+     * ولی عملیات rollback شود.
+     *
+     * حالا سند داخل همان تراکنش `createGRN` زده می‌شود تا یا هر دو باشند
+     * یا هیچ‌کدام.
+     *
+     * سند: Dr موجودی کالا (1200) / Cr GRNI (2150) — بدهی واقعی (AP) فقط
+     * با فاکتور باز می‌شود. این ساختار از دوبارشماری انبار/AP جلوگیری
+     * می‌کند و 1200 = ارزش واقعی موجودی می‌ماند.
+     */
     return grn;
   }
 
@@ -128,31 +127,16 @@ export class PurchasingController {
     shippingTotal?: number; taxTotal?: number; discountTotal?: number; dueDate?: string; note?: string;
   }) {
     const result = await this.purchasing.createInvoice({ ...body, actorId: this.actor(req) });
-    const invoice = result.invoice;
-    // سند فاکتور — بند ۴۷/۴۸: بستن GRNI و باز کردن AP واقعی؛ اختلاف (حمل/تخفیف/PPV) به انبار می‌رود:
-    // Dr GRNI (ارزش GRN) + [Dr 1200 اگر فاکتور بیشتر / Cr 1200 اگر کمتر] / Cr AP (جمع فاکتور)
-    // → همیشه متوازن؛ GL AP = مانده AP زیرمجموعه؛ GL انبار = ارزش فاکتوری موجودی.
-    const grnTotal = (await this.purchasing.getInvoiceDetail(invoice.id)).inventoryImpact.reduce((acc, i) => acc + Number(i.unitCost) * i.qty + Number(i.landedCost), 0);
-    const grand = Number(invoice.grandTotal);
-    if (grand > 0 || grnTotal > 0) {
-      const diff = grand - grnTotal;
-      const lines: Array<{ accountCode: string; debit?: number; credit?: number }> = [
-        { accountCode: "2150", debit: grnTotal },
-      ];
-      if (diff > 0) lines.push({ accountCode: "1200", debit: diff });
-      if (diff < 0) lines.push({ accountCode: "1200", credit: -diff });
-      if (grand > 0) lines.push({ accountCode: "2100", credit: grand });
-      await this.journal.postOrNotify({
-        description: `فاکتور خرید ${invoice.number}`,
-        sourceType: "purchase_invoice",
-        sourceId: invoice.id,
-        actorId: this.actor(req),
-        lines,
-      });
-    }
+    // سند فاکتور خرید حالا **داخل تراکنش** `purchasing.createInvoice` زده می‌شود
+    // (باگ A3). قبلاً از اینجا و بیرون از تراکنش زده می‌شد؛ شکستش فاکتور و
+    // بدهی را ثبت می‌کرد ولی دفتر را بی‌خبر می‌گذاشت.
     // ارسال خودکار فاکتور به تامین‌کننده — بند ۲۷/۱۱۱: تنظیم per-scope؛ ردیف تحویل با state QUEUED/SENT/FAILED؛
     // بدون credential فقط صف + لاگ — هیچ جعل «ارسال شد» (handled در VendorNotifyService)
-    void this.bus.publish("PurchaseInvoiceCreated", { invoiceId: invoice.id, invoiceNumber: invoice.number, supplierId: invoice.supplierId });
+    void this.bus.publish("PurchaseInvoiceCreated", {
+      invoiceId: result.invoice.id,
+      invoiceNumber: result.invoice.number,
+      supplierId: result.invoice.supplierId,
+    });
     return result;
   }
 

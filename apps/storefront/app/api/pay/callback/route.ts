@@ -18,13 +18,20 @@ export async function GET(req: Request) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ authority, status }),
     signal: AbortSignal.timeout(10_000),
-  }).catch(() => null);
+  }).catch((e) => {
+    // شکست ثبت callback نباید بی‌صدا رد شود؛ ولی verify سمت‌سرور همچنان اجرا می‌شود
+    console.error(`[pay/callback] registerCallback failed (authority=${authority || "-"}):`, e instanceof Error ? e.message : String(e));
+    return null;
+  });
 
   // verify سمت سرور — تنها مرجع تایید
   const verifyRes = await fetch(`${api}/api/v1/payments/verify/${encodeURIComponent(authority)}`, {
     method: "POST",
     signal: AbortSignal.timeout(15_000),
-  }).catch(() => null);
+  }).catch((e) => {
+    console.error(`[pay/callback] verify failed (authority=${authority || "-"}):`, e instanceof Error ? e.message : String(e));
+    return null;
+  });
   const verify = (await verifyRes?.json().catch(() => null)) as
     | { state?: string; refId?: string; orderCode?: string | null }
     | null;

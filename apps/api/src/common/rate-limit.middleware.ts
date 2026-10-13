@@ -3,14 +3,29 @@ import type { Request, Response, NextFunction } from "express";
 
 /**
  * Rate limiter داخلی (بند ۶۸/۷۵) — پنجره ثابت در حافظه برای تک‌نود V1.
- * مسیرهای حساس: login (برای brute-force) و checkout (برای enumeration/abuse).
+ * مسیرهای حساس: برای جلوگیری از brute-force، abuse، و scarcity attacks.
  * در production چندنودی جایگزین Redis می‌شود (فاز AC).
  */
 const BUCKETS = new Map<string, { count: number; resetAt: number }>();
 
 const RULES: Array<{ match: RegExp; max: number; windowMs: number }> = [
-  { match: /\/auth\/login$/, max: 10, windowMs: 60_000 }, // 10/min per IP
-  { match: /\/orders\/checkout$/, max: 20, windowMs: 60_000 },
+  // Auth routes - strict limits to prevent brute force
+  { match: /\/auth\/login$/, max: 5, windowMs: 60_000 }, // 5/min per IP (login is most critical)
+  { match: /\/auth\/logout$/, max: 10, windowMs: 60_000 }, // 10/min per IP
+  { match: /\/auth\/me$/, max: 30, windowMs: 60_000 }, // 30/min per IP (less critical)
+  
+  // Order routes - protect order creation and modification
+  { match: /\/orders\/checkout$/, max: 10, windowMs: 60_000 }, // 10/min per IP (order creation is critical)
+  { match: /\/orders\/quote\/coupon$/, max: 20, windowMs: 60_000 }, // 20/min per IP (quote is less critical)
+  { match: /\/orders\/.+$/, max: 30, windowMs: 60_000 }, // 30/min per IP for other order routes (cancel, edit, etc.)
+  
+  // Payment routes - protect payment initiation and verification
+  { match: /\/payments\/start$/, max: 5, windowMs: 60_000 }, // 5/min per IP (payment initiation is critical)
+  { match: /\/payments\/verify\/.+$/, max: 10, windowMs: 60_000 }, // 10/min per IP (verification)
+  { match: /\/payments\/methods$/, max: 30, windowMs: 60_000 }, // 30/min per IP (methods list)
+  { match: /\/payments\/admin\/list$/, max: 20, windowMs: 60_000 }, // 20/min per IP (admin list)
+  { match: /\/payments\/callback\/.+$/, max: 30, windowMs: 60_000 }, // 30/min per IP (callback from providers)
+  { match: /\/payments\/.+$/, max: 20, windowMs: 60_000 }, // 20/min per IP for other payment routes
 ];
 
 @Injectable()

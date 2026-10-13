@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAdminApi, fa } from "@/components/useAdminApi";
+import { ImagePickerButton } from "@/components/MediaLibraryDialog";
 
 interface BrandRow {
   id: string; name: string; slug: string; logoId: string | null;
@@ -52,7 +53,7 @@ export default function BrandsClient() {
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <label className="text-xs font-bold text-ink/70">نام برند *<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
           <label className="text-xs font-bold text-ink/70">وب‌سایت<input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} dir="ltr" placeholder="https://…" className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
-          <label className="text-xs font-bold text-ink/70">شناسه لوگو (Media)<input value={form.logoId} onChange={(e) => setForm({ ...form, logoId: e.target.value })} dir="ltr" placeholder="media id" className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
+          <ImagePickerButton value={form.logoId} onChange={(id) => setForm({ ...form, logoId: id ?? "" })} label="انتخاب لوگوی برند" previewClass="size-16" />
           <label className="text-xs font-bold text-ink/70">توضیح<input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
           <label className="text-xs font-bold text-ink/70">ترتیب<input type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" /></label>
         </div>

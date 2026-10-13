@@ -1,6 +1,8 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { InventorySettingsService } from "./inventory-settings.service";
+import { GL } from "@ghasedak/contracts";
+import type { Prisma } from "@prisma/client";
 import type { PrismaTransaction } from "../common/tx";
 
 /**
@@ -34,6 +36,28 @@ export async function releaseExpiredReservations(prisma: PrismaService): Promise
     data: { state: "RELEASED" },
   });
   return expired.count;
+}
+
+/**
+ * کد حساب دفتری یک انبار (فاز ۶).
+ *
+ * چرا این کمکی لازم است: ۱۲ نقطهٔ سند در کد وجود دارد که موجودی را روی
+ * `GL.INVENTORY` (گروه ۱۲۰۰) می‌نشاند. اگر همه را دستی عوض کنیم احتمال
+ * فراموشی بالاست؛ اگر از این کمکی استفاده کنند، همه از **یک** جا تصمیم
+ * می‌گیرند که موجودی هر انبار روی حساب خودش بنشیند یا روی گروه.
+ *
+ * اگر انبار `glAccountId` نداشته باشد، به گروه ۱۲۰۰ برمی‌گردد — یعنی همان
+ * رفتار قبلی، نه خطا. (انبارهای تازه در مهاجرت فاز ۶ حساب گرفتند.)
+ */
+export async function warehouseGlCode(
+  client: Prisma.TransactionClient | PrismaService,
+  warehouseId: string,
+): Promise<string> {
+  const wh = await client.warehouse.findUnique({
+    where: { id: warehouseId },
+    select: { glAccount: { select: { code: true } } },
+  });
+  return wh?.glAccount?.code ?? GL.INVENTORY;
 }
 
 @Injectable()
@@ -344,35 +368,33 @@ export class InventoryService {
       if (!variant) return;
       const lowOn = variant.lowStockThreshold > 0 && variant.stockQty <= variant.lowStockThreshold;
       if (lowOn && delta < 0) {
-        const recent = await tx.domainEventOutbox.findFirst({
-          where: { name: "LowStockStockAlert", createdAt: { gte: new Date(Date.now() - 6 * 3600_000) } },
+        // همان الگوی اتمیک StockRestocked — findFirst+create در فروشهای همزمانِ
+        // مرز آستانه با P2002 کل فروش را ۵۰۰ میکرد؛ upsert تکراری را بیاثر میکند.
+        const lowPayload = { warehouseId, variantSku, stockQty: variant.stockQty, threshold: variant.lowStockThreshold, actorId: actorId ?? null };
+        await tx.domainEventOutbox.upsert({
+          where: { name_payload: { name: "LowStockStockAlert", payload: lowPayload } },
+          create: { name: "LowStockStockAlert", payload: lowPayload as never },
+          update: {},
         });
-        if (!recent) {
-          await tx.domainEventOutbox.create({
-            data: {
-              name: "LowStockStockAlert",
-              payload: { warehouseId, variantSku, stockQty: variant.stockQty, threshold: variant.lowStockThreshold, actorId } as never,
-            },
-          });
-        }
       }
       if (delta > 0) {
         const minQty = await this.settings.get<number>("minRestockQty");
         if (delta >= minQty) {
-          // درس ریسک ۶: catch خالی روی create داخل tx کافی نیست — P2002 تراکنش را در سطح DB
-          // abort می‌کند و ادامه‌ی tx با 25P02 می‌میرد. اول findFirst idempotent، بعد create:
-          const dupRestock = await tx.domainEventOutbox.findFirst({
-            where: { name: "StockRestocked", payload: { path: ["variantSku"], equals: variantSku }, createdAt: { gte: new Date(Date.now() - 6 * 3600_000) } },
+          // درس ریسک ۶ + باگ GRN: findFirst+create پنجرهٔ مسابقه دارد — دو حرکت همزمان
+          // هر دو find را از دست میدهند و create دوم با P2002 کل تراکنش حرکت انبار را
+          // ۵۰۰ میکند. upsert روی قید یکتا (name,payload) اتمیک است: تکراری = بیاثر.
+          const restockPayload = { warehouseId, variantSku, qty: delta, actorId: actorId ?? null };
+          await tx.domainEventOutbox.upsert({
+            where: { name_payload: { name: "StockRestocked", payload: restockPayload } },
+            create: { name: "StockRestocked", payload: restockPayload as never },
+            update: {}, // رویداد موجود دست نمی‌خورد
           });
-          if (!dupRestock) {
-            await tx.domainEventOutbox.create({
-              data: { name: "StockRestocked", payload: { warehouseId, variantSku, qty: delta, actorId } as never },
-            });
-          }
         }
       }
-    } catch {
-      // رویداد هرگز حرکت انبار را fail نمی‌کند
+    } catch (e) {
+      // رویداد هرگز حرکت انبار را fail نمی‌کند؛ اما خطا نباید بی‌صدا بلعیده شود —
+      // بلعیدنِ خطا باعث می‌شود تراکنش abort بماند و خطای بعدی (25P02) گمراه‌کننده شود.
+      console.error(`[inventory] emitThresholdEvents failed (warehouse=${warehouseId}, sku=${variantSku}):`, e instanceof Error ? e.message : String(e));
     }
   }
 }

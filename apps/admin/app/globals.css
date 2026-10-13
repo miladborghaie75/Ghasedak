@@ -5,9 +5,17 @@
  * (بند ۷۲: اغراق طراحی ممنوع؛ بند ۱۰۶: پالت برند)
  * Theme System (بند ۴۹–۵۷): توکن‌های معنایی دوباره‌نگاشت‌پذیر در حالت شب؛
  * کامپوننت‌ها فقط توکن مصرف می‌کنند — هیچ رنگ هاردکد تم-آگاه مجاز نیست.
+ *
+ * بلوک‌های صفحه‌ساز (packages/blocks) در پنل ادمین هم رندر می‌شوند تا
+ * پیش‌نمایش زنده دقیقاً همان چیزی باشد که در فروشگاه دیده می‌شود.
+ * برای همین توکن‌های مصرفیِ بلوک‌ها اینجا هم تعریف شده‌اند — عمداً هم‌ارزِ
+ * نسخهٔ فروشگاه، وگرنه پیش‌نمایش با اصل صفحه فرق می‌کند.
  */
+@source "../../../packages/blocks/src";
+
 @theme {
   --font-sans: "Vazirmatn Variable", "Vazirmatn", "Segoe UI", Tahoma, sans-serif;
+  --font-display: "Vazirmatn Variable", "Vazirmatn", "Segoe UI", Tahoma, sans-serif;
 
   --color-bg: #f4f1f7;
   --color-surface: #ffffff;
@@ -17,9 +25,16 @@
   --color-primary: #8a5bc9;
   --color-primary-strong: #7a4ab8;
   --color-primary-soft: #eee6f8;
+  --color-primary-tint: #f6f1fc;
   --color-deep: #3b2948;
   --color-ok: #3f8a68;
   --color-err: #c94a5a;
+
+  --radius-card: 1.25rem;
+  --radius-blob: 1.75rem;
+
+  --shadow-clay-1: 0 1px 2px rgba(41, 35, 47, 0.05), 0 10px 24px -8px rgba(59, 41, 72, 0.12);
+  --shadow-clay-2: 0 2px 4px rgba(41, 35, 47, 0.06), 0 18px 44px -12px rgba(59, 41, 72, 0.22);
 }
 
 /*
@@ -36,14 +51,20 @@
   --app-primary: var(--color-primary);
   --app-primary-strong: var(--color-primary-strong);
   --app-primary-soft: var(--color-primary-soft);
+  --app-primary-tint: var(--color-primary-tint);
   --app-deep: var(--color-deep);
   --app-ok: var(--color-ok);
   --app-err: var(--color-err);
+  /* نام‌های هم‌معنی فروشگاه — تا بلوک‌های مشترک در هر دو اپ یکسان رندر شوند */
+  --app-success: var(--color-ok);
+  --app-error: var(--color-err);
   --app-on-accent: #ffffff;
   --app-warning: #b97a1e;
   --app-info: #4a6fa5;
   --app-overlay: rgba(41, 35, 47, 0.45);
   --app-focus-ring: var(--color-primary-strong);
+  --app-shadow-1: var(--shadow-clay-1);
+  --app-shadow-2: var(--shadow-clay-2);
 }
 
 /* تم شب — بازتعریف معنایی: خوانایی عملیاتی اول؛ هویت بنفش حفظ، بدون نئون */
@@ -115,6 +136,54 @@ body {
   outline: 2px solid var(--app-focus-ring);
   outline-offset: 2px;
   border-radius: 6px;
+}
+
+/*
+ * چاپ سند حسابداری (فاز ۴)
+ *
+ * دو نکته که تجربهٔ چاپ را می‌سازد یا خرابش می‌کند:
+ *  ۱) نوار ابزار باید کاملاً حذف شود — وگرنه دکمه‌ها داخل PDF می‌آیند.
+ *     برای همین کلاس `no-print` داریم و به‌جای آن `.print-hide` نه.
+ *  ۲) جدول نباید وسط صفحه بشکند؛ `break-inside: avoid` روی ردیف‌ها و
+ *     سرصفحه (`thead`) تکرار می‌شود تا صفحهٔ دوم هم ستون‌ها را داشته باشد.
+ */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .print-sheet {
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+
+  /* محل مُهر و امضا — کادر خالی با اندازهٔ استاندارد */
+  .stamp-box {
+    width: 32mm;
+    height: 32mm;
+    border: 1px dashed #999;
+    border-radius: 50%;
+  }
+
+  /* ردیف جدول نباید بین دو صفحه بشکند */
+  .print-sheet tbody tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* سرصفحه در هر صفحهٔ جدول تکرار شود */
+  .print-sheet thead {
+    display: table-header-group;
+  }
+
+  /* جمع‌ها از جدول جدا نشود */
+  .print-sheet tfoot {
+    display: table-row-group;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 }
 
 /*

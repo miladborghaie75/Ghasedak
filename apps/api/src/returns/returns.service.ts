@@ -251,12 +251,32 @@ export class ReturnsService {
 
       if (refund.method !== "STORE_CREDIT") {
         // فاز ۱۴ بند ۱: بهای برگشتی از StockLedgerEntry قلم‌های SALE_RETURN همین مرجوعی (منبع حقیقت انبار)
+        // **دو مسیر مبدأ:** آنلاین (refType=return_request، refId=ReturnRequest) و حضوری
+        // (refType=pos_refund، refId=PosInvoice). پیشتر فقط pos_refund خوانده می‌شد و
+        // بهای مرجوعیِ آنلاین هرگز برنمی‌گشت — موجودی و سود غلط می‌ماند.
+        const isOnline = refund.sourceType === "order";
         const returnMoves = await tx.stockLedgerEntry.findMany({
-          where: { type: "SALE_RETURN" as never, refType: "pos_refund" as never, refId: refund.sourceId, unitCost: { not: null } },
+          where: {
+            type: "SALE_RETURN" as never,
+            refType: (isOnline ? "return_request" : "pos_refund") as never,
+            refId: isOnline ? (refund.returnId ?? "") : refund.sourceId,
+            unitCost: { not: null },
+          },
           select: { qtyIn: true, unitCost: true, variantSku: true },
         });
-        const refundItemSkus = await tx.refundItem.findMany({ where: { refundId: refund.id }, select: { variantSku: true, qty: true } });
-        const qtyBySku = new Map(refundItemSkus.map((r) => [r.variantSku, r.qty]));
+        let qtyBySku = new Map<string, number>();
+        if (isOnline) {
+          // آنلاین: مقدار واقعاً برگشته به موجودی = اقلام SELLABLE (آسیبدیده وارد انبار نمیشود)
+          const items = refund.returnId
+            ? await tx.returnItem.findMany({ where: { returnId: refund.returnId, condition: "SELLABLE" as never }, select: { variantSku: true, qty: true } })
+            : [];
+          for (const it of items) qtyBySku.set(it.variantSku, (qtyBySku.get(it.variantSku) ?? 0) + it.qty);
+        } else {
+          const refundItemSkus = await tx.refundItem.findMany({ where: { refundId: refund.id }, select: { variantSku: true, qty: true } });
+          for (const r of refundItemSkus) {
+            if (r.variantSku) qtyBySku.set(r.variantSku, r.qty);
+          }
+        }
         let cogsReturn = 0n;
         for (const mv of returnMoves) {
           const q = qtyBySku.get(mv.variantSku) ?? 0;

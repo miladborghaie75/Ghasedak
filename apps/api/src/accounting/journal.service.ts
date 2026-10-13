@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { FiscalYearService } from "./fiscal-year.service";
 import { money, type Money } from "@ghasedak/contracts";
 
 export interface JournalLineInput {
@@ -9,6 +10,8 @@ export interface JournalLineInput {
   credit?: number;
   partyType?: string;
   partyId?: string;
+  /** انبار این خط (فاز ۶) — برای گزارش سود هر انبار */
+  warehouseId?: string;
 }
 
 export interface PostEntryInput {
@@ -17,6 +20,8 @@ export interface PostEntryInput {
   sourceType?: string;
   sourceId?: string;
   actorId?: string;
+  /** انباری که کل سند به آن مربوط است؛ روی خطوط موجودی اعمال می‌شود */
+  warehouseId?: string;
   lines: JournalLineInput[];
 }
 
@@ -26,7 +31,18 @@ export interface PostEntryInput {
  */
 @Injectable()
 export class JournalService {
-  constructor(private readonly prisma: PrismaService) {}
+  /**
+   * سرویس سال مالی عمداً تزریق نمی‌شود.
+   *
+   * فقط به `prisma` نیاز دارد و ساختنش ارزان است؛ تزریقش باعث می‌شد
+   * ۱۵ فایل تست که `new JournalService(prisma)` صدا می‌زنند بشکنند.
+   * یک منبع حقیقت بودن مهم‌تر از تزریق شیک است.
+   */
+  private readonly fiscal: FiscalYearService;
+
+  constructor(private readonly prisma: PrismaService) {
+    this.fiscal = new FiscalYearService(prisma);
+  }
 
   /**
    * درس ریسک ۶ (audit معماری): شکست سند هرگز بی‌صدا swallow نمی‌شود.
@@ -115,18 +131,24 @@ export class JournalService {
    * همین منطق validation/numbering/create با post() مشترک است.
    */
   async postInTx(tx: Prisma.TransactionClient, input: PostEntryInput): Promise<{ id: string; number: string }> {
-    const prepared = this.prepareLines(input.lines);
+    const prepared = this.prepareLines(input.lines, input.warehouseId);
     return this.createEntryInTx(tx, input, prepared);
   }
 
-  /** آماده‌سازی و اعتبارسنجی ردیف‌ها — مشترک بین post و postInTx */
-  private prepareLines(lines: JournalLineInput[]): Array<{ accountCode: string; debit: Money; credit: Money; partyType?: string; partyId?: string }> {
+  /**
+   * آماده‌سازی و اعتبارسنجی ردیف‌ها — مشترک بین post و postInTx
+   *
+   * `defaultWarehouseId` روی خطوطی می‌نشیند که خودشان انبار ندارند؛ پس یک سند
+   * انبار فقط کافی است `warehouseId` را در سطح سند بدهد و همهٔ خطوط آن انبار
+   * به‌نظر برسد.
+   */
+  private prepareLines(lines: JournalLineInput[], defaultWarehouseId?: string): Array<{ accountCode: string; debit: Money; credit: Money; partyType?: string; partyId?: string; warehouseId?: string }> {
     if (!lines || lines.length < 2) {
       throw new BadRequestException({ code: "JOURNAL_INVALID", message: "سند حداقل دو ردیف لازم دارد." });
     }
     let debitTotal = 0;
     let creditTotal = 0;
-    const prepared: Array<{ accountCode: string; debit: Money; credit: Money; partyType?: string; partyId?: string }> = [];
+    const prepared: Array<{ accountCode: string; debit: Money; credit: Money; partyType?: string; partyId?: string; warehouseId?: string }> = [];
     for (const line of lines) {
       const debit = line.debit ?? 0;
       const credit = line.credit ?? 0;
@@ -147,6 +169,7 @@ export class JournalService {
         credit: money(credit),
         partyType: line.partyType,
         partyId: line.partyId,
+        warehouseId: line.warehouseId ?? defaultWarehouseId,
       });
     }
     if (debitTotal !== creditTotal) {
@@ -163,11 +186,18 @@ export class JournalService {
   private async createEntryInTx(
     tx: Prisma.TransactionClient,
     input: PostEntryInput,
-    prepared: Array<{ accountCode: string; debit: Money; credit: Money; partyType?: string; partyId?: string }>,
+    prepared: Array<{ accountCode: string; debit: Money; credit: Money; partyType?: string; partyId?: string; warehouseId?: string }>,
   ): Promise<{ id: string; number: string }> {
-    const year = await tx.fiscalYear.findFirst({ where: { state: "OPEN" } });
-    if (!year) {
-      throw new BadRequestException({ code: "NO_OPEN_FISCAL_YEAR", message: "سال مالی بازی وجود ندارد." });
+    // سال از سرویس مرکزی می‌آید — مرتب‌شده و قطعی. قبلاً اینجا
+    // `findFirst({ where: { state: "OPEN" } })` بدون ترتیب بود و وقتی
+    // چند سال باز وجود داشت، سندها بین آن‌ها پخش می‌شدند.
+    const year = await this.fiscal.requireYear(input.date, tx);
+
+    if (input.date && (input.date < year.startsAt || input.date > year.endsAt)) {
+      throw new BadRequestException({
+        code: "FISCAL_PERIOD_INVALID",
+        message: "تاریخ سند در بازهٔ سال مالی نیست.",
+      });
     }
 
     // شماره‌گذاری اتمیک (بند ۴۵/۸۲) — nextNumber در DB Int است
@@ -211,6 +241,7 @@ export class JournalService {
                 credit: BigInt(l.credit.amount),
                 partyType: l.partyType,
                 partyId: l.partyId,
+                warehouseId: l.warehouseId ?? null,
               };
             }),
           ),
@@ -221,7 +252,7 @@ export class JournalService {
   }
 
   async post(input: PostEntryInput): Promise<{ id: string; number: string }> {
-    const prepared = this.prepareLines(input.lines);
+    const prepared = this.prepareLines(input.lines, input.warehouseId);
     return this.prisma.$transaction(async (tx) => this.createEntryInTx(tx, input, prepared));
   }
 
@@ -249,13 +280,10 @@ export class JournalService {
       }
     }
     const entry = await this.prisma.$transaction(async (tx) => {
-      const year = await tx.fiscalYear.findFirst({ where: { state: "OPEN" } });
-      if (!year) {
-        throw new BadRequestException({ code: "NO_OPEN_FISCAL_YEAR", message: "سال مالی بازی وجود ندارد." });
-      }
+      const year = await this.fiscal.requireYear(input.date ?? new Date(), tx);
       const inputDate = input.date ?? new Date();
       if (inputDate < year.startsAt || inputDate > year.endsAt) {
-        throw new BadRequestException({ code: "FISCAL_PERIOD_INVALID", message: "تاریخ سند در بازهٔ سال مالی باز نیست." });
+        throw new BadRequestException({ code: "FISCAL_PERIOD_INVALID", message: "تاریخ سند در بازهٔ سال مالی نیست." });
       }
       // شماره‌گذاری اتمیک — همان قاعدهٔ createEntryInTx (بند ۴۵/۸۲)
       const series = await tx.$queryRaw<{ nextNumber: number }[]>`
@@ -285,6 +313,7 @@ export class JournalService {
               credit: BigInt(l.credit.amount),
               partyType: l.partyType,
               partyId: l.partyId,
+              warehouseId: l.warehouseId ?? null,
             })),
           },
         },
@@ -292,6 +321,331 @@ export class JournalService {
       });
     });
     return entry;
+  }
+
+  /* ============================================================
+   * اصلاح سندها (درخواست کاربر: سندهای خودکار اشتباه می‌خورند)
+   *
+   * قانون حسابداری رعایت شده:
+   *  • سند FINAL مستقیم ویرایش نمی‌شود — اگر ویرایش می‌شد، تاریخچهٔ
+   *    دفاتر بازنویسی می‌شد و معلوم نمی‌شد چه چیزی اشتباه بود.
+   *  • به‌جایش «برگشت به پیش‌نویس» هست: سند از FINAL خارج می‌شود (و چون
+   *    گزارش‌ها فقط FINAL را می‌خوانند، فوراً از تراز و دفترها پاک می‌شود)،
+   *    بعد قابل ویرایش، و در پایان با یک کلیک دوباره FINAL می‌شود.
+   *  • هر تغییر در AuditLog با قبل/بعد ثبت می‌شود.
+   *  ============================================================ */
+
+  /**
+   * پیوست سند حسابداری (فاز ۴).
+   *
+   * مدل `Attachment` از قبل عمومی بود (`ownerType: journal`) ولی هیچ endpointی
+   * نداشت، یعنی رسید کارت‌خوان یا فاکتور کاغذی را نمی‌شد به سند چسباند.
+   *
+   * فایل از کتابخانهٔ رسانه انتخاب می‌شود نه آپلود مستقیم، چون همان مسیری است
+   * که magic-bytes و سقف حجم را بررسی می‌کند.
+   */
+  async addAttachment(entryId: string, mediaId: string, title?: string, actorId?: string) {
+    const entry = await this.prisma.journalEntry.findUnique({
+      where: { id: entryId },
+      select: { id: true, number: true, state: true },
+    });
+    if (!entry) throw new BadRequestException({ code: "NOT_FOUND", message: "سند یافت نشد." });
+
+    const media = await this.prisma.media.findUnique({
+      where: { id: mediaId },
+      select: { id: true, storageKey: true, mime: true, alt: true, title: true },
+    });
+    if (!media) throw new BadRequestException({ code: "MEDIA_NOT_FOUND", message: "فایل در کتابخانهٔ رسانه یافت نشد." });
+
+    const dup = await this.prisma.attachment.findFirst({ where: { ownerType: "journal", ownerId: entryId, mediaId } });
+    if (dup) throw new BadRequestException({ code: "DUPLICATE_ATTACHMENT", message: "این فایل قبلاً به این سند پیوست شده است." });
+
+    const att = await this.prisma.attachment.create({
+      data: { mediaId, ownerType: "journal", ownerId: entryId, title: title?.trim() || null },
+      include: { media: { select: { id: true, storageKey: true, mime: true, alt: true, title: true } } },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: actorId ?? "system",
+        action: "accounting.journal.attach",
+        entity: "JournalEntry",
+        entityId: entryId,
+        newValues: { attachmentId: att.id, mediaId, entryNumber: entry.number, entryState: entry.state } as object,
+      },
+    });
+
+    return this.mapAttachment(att);
+  }
+
+  async listAttachments(entryId: string) {
+    const rows = await this.prisma.attachment.findMany({
+      where: { ownerType: "journal", ownerId: entryId },
+      orderBy: { createdAt: "desc" },
+      include: { media: { select: { id: true, storageKey: true, mime: true, alt: true, title: true } } },
+    });
+    return rows.map((a) => this.mapAttachment(a));
+  }
+
+  /**
+   * حذف پیوست.
+   *
+   * فقط سند **پیش‌نویس** اجازه دارد: سند قطعی سندی است که دفتر قانونی به آن
+   * ارجاع می‌دهد و پاک‌کردن مدرکش یعنی حذف سند از حسابرسی.
+   */
+  async removeAttachment(attachmentId: string, actorId?: string) {
+    const att = await this.prisma.attachment.findUnique({
+      where: { id: attachmentId },
+      select: { id: true, ownerId: true, mediaId: true },
+    });
+    if (!att) throw new BadRequestException({ code: "NOT_FOUND", message: "پیوست یافت نشد." });
+
+    const entry = await this.prisma.journalEntry.findUnique({
+      where: { id: att.ownerId },
+      select: { state: true },
+    });
+    if (entry?.state === "FINAL") {
+      throw new BadRequestException({
+        code: "ENTRY_FINAL",
+        message: "پیوست سند قطعی قابل حذف نیست. اول سند را به پیش‌نویس برگردانید.",
+      });
+    }
+
+    await this.prisma.attachment.delete({ where: { id: attachmentId } });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: actorId ?? "system",
+        action: "accounting.journal.detach",
+        entity: "JournalEntry",
+        entityId: att.ownerId,
+        oldValues: { attachmentId, mediaId: att.mediaId } as object,
+      },
+    });
+    return { ok: true };
+  }
+
+  /** شکل یکنواخت پیوست برای UI */
+  private mapAttachment(a: {
+    id: string;
+    title: string | null;
+    createdAt: Date;
+    media: { id: string; storageKey: string; mime: string; alt: string | null; title: string | null };
+  }) {
+    return {
+      id: a.id,
+      mediaId: a.media.id,
+      title: a.title,
+      alt: a.media.alt,
+      mime: a.media.mime,
+      createdAt: a.createdAt.toISOString(),
+      // لینک سروی عمومی رسانه — همان مسیری که `/api/media/:key` سرو می‌کند
+      url: `/api/media/${encodeURIComponent(a.media.storageKey)}`,
+    };
+  }
+
+  /** فهرست اسناد — برای مرور و پیدا کردن سند اشتباه */
+  async listEntries(query: { state?: "DRAFT" | "FINAL"; sourceType?: string; q?: string; page?: number; limit?: number }) {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query.limit ?? 50));
+    const where = {
+      ...(query.state ? { state: query.state } : {}),
+      ...(query.sourceType ? { sourceType: query.sourceType } : {}),
+      ...(query.q ? { OR: [{ number: { contains: query.q } }, { description: { contains: query.q } }] } : {}),
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.journalEntry.findMany({
+        where,
+        orderBy: { date: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { lines: { include: { account: { select: { code: true, name: true } } } } },
+      }),
+      this.prisma.journalEntry.count({ where }),
+    ]);
+    return {
+      items: items.map((e) => ({
+        id: e.id,
+        number: e.number,
+        date: e.date,
+        description: e.description,
+        sourceType: e.sourceType,
+        sourceId: e.sourceId,
+        state: e.state,
+        totalDebit: e.lines.reduce((s, l) => s + Number(l.debit), 0),
+        lines: e.lines.map((l) => ({
+          accountCode: l.account.code,
+          accountName: l.account.name,
+          debit: Number(l.debit),
+          credit: Number(l.credit),
+        })),
+      })),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  /** یک سند با خطوطش */
+  async getEntry(id: string) {
+    const e = await this.prisma.journalEntry.findUnique({
+      where: { id },
+      include: { lines: { include: { account: { select: { code: true, name: true } } } } },
+    });
+    if (!e) throw new BadRequestException({ code: "NOT_FOUND", message: "سند یافت نشد." });
+    return {
+      id: e.id,
+      number: e.number,
+      date: e.date,
+      description: e.description,
+      sourceType: e.sourceType,
+      sourceId: e.sourceId,
+      state: e.state,
+      lines: e.lines.map((l) => ({
+        id: l.id,
+        accountCode: l.account.code,
+        accountName: l.account.name,
+        debit: Number(l.debit),
+        credit: Number(l.credit),
+      })),
+    };
+  }
+
+  /**
+   * ویرایش سند — فقط DRAFT.
+   * اعتبارسنجی کامل دوباره اجرا می‌شود (حداقل دو ردیف، Dr/Cr مثبت، توازن،
+   * حساب فعال) پس سند خراب ذخیره نمی‌شود.
+   */
+  async updateEntry(
+    id: string,
+    input: { description?: string; date?: string; lines?: PostEntryInput["lines"] },
+    actorId?: string,
+  ): Promise<{ id: string; number: string; state: string }> {
+    const entry = await this.prisma.journalEntry.findUnique({
+      where: { id },
+      include: { lines: { include: { account: { select: { code: true, name: true } } } } },
+    });
+    if (!entry) throw new BadRequestException({ code: "NOT_FOUND", message: "سند یافت نشد." });
+    if (entry.state !== "DRAFT") {
+      throw new BadRequestException({
+        code: "ENTRY_FINAL",
+        message: "سند قطعی مستقیم قابل ویرایش نیست. اول آن را به پیش‌نویس برگردانید.",
+      });
+    }
+
+    const before = {
+      description: entry.description,
+      date: entry.date,
+      lines: entry.lines.map((l) => ({ accountCode: l.account.code, debit: Number(l.debit), credit: Number(l.credit) })),
+    };
+
+    // اگر خطوط جدید داده شده، اعتبارسنجی می‌شود؛ وگرنه خطوط قبلی می‌مانند
+    // `Money` یک شیء {amount, currency} است، نه عدد — پس `.amount` لازم است.
+// (Number(moneyObj) می‌شد NaN و سند خطای ۵۰۰ می‌داد.)
+let prepared: ReturnType<JournalService["prepareLines"]> = entry.lines.map((l) => ({
+      accountCode: l.account.code,
+      debit: money(Number(l.debit)),
+      credit: money(Number(l.credit)),
+    }));
+    if (input.lines) prepared = this.prepareLines(input.lines);
+
+    return this.prisma.$transaction(async (tx) => {
+      if (input.lines) {
+        await tx.journalLine.deleteMany({ where: { entryId: id } });
+        for (const l of prepared) {
+          const account = await tx.account.findUnique({ where: { code: l.accountCode } });
+          if (!account) {
+            throw new BadRequestException({ code: "ACCOUNT_NOT_FOUND", message: `حساب ${l.accountCode} یافت نشد.` });
+          }
+          if (!account.isActive) {
+            throw new BadRequestException({ code: "ACCOUNT_INACTIVE", message: `حساب ${l.accountCode} غیرفعال است.` });
+          }
+          await tx.journalLine.create({
+            data: {
+              entryId: id,
+              accountId: account.id,
+              debit: BigInt(l.debit.amount),
+              credit: BigInt(l.credit.amount),
+            },
+          });
+        }
+      }
+      const updated = await tx.journalEntry.update({
+        where: { id },
+        data: {
+          ...(input.description !== undefined ? { description: input.description.trim() || entry.description } : {}),
+          ...(input.date ? { date: new Date(input.date) } : {}),
+        },
+        select: { id: true, number: true, state: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: actorId ?? null,
+          action: "accounting.journal.update",
+          entity: "JournalEntry",
+          entityId: id,
+          oldValues: before as never,
+          newValues: { description: input.description ?? entry.description, lines: prepared } as never,
+        },
+      });
+      return updated;
+    });
+  }
+
+  /** حذف سند — فقط DRAFT */
+  async deleteEntry(id: string, actorId?: string): Promise<{ ok: true }> {
+    const entry = await this.prisma.journalEntry.findUnique({
+      where: { id },
+      include: { lines: { include: { account: { select: { code: true } } } } },
+    });
+    if (!entry) throw new BadRequestException({ code: "NOT_FOUND", message: "سند یافت نشد." });
+    if (entry.state !== "DRAFT") {
+      throw new BadRequestException({
+        code: "ENTRY_FINAL",
+        message: "سند قطعی قابل حذف نیست. برای اصلاح، آن را به پیش‌نویس برگردانید.",
+      });
+    }
+    const lines = entry.lines.map((l) => ({ accountCode: l.account.code, debit: Number(l.debit), credit: Number(l.credit) }));
+    await this.prisma.$transaction(async (tx) => {
+      await tx.journalEntry.delete({ where: { id } });
+      await tx.auditLog.create({
+        data: {
+          actorId: actorId ?? null,
+          action: "accounting.journal.delete",
+          entity: "JournalEntry",
+          entityId: id,
+          oldValues: { number: entry.number, description: entry.description, lines } as never,
+        },
+      });
+    });
+    return { ok: true };
+  }
+
+  /**
+   * برگشت سند قطعی به پیش‌نویس — همان چیزی که «اصلاح سند اشتباه» را ممکن می‌کند.
+   * چون گزارش‌ها فقط FINAL را می‌خوانند، با این کار سند فوراً از تراز بیرون می‌رود.
+   */
+  async revertToDraft(id: string, actorId?: string): Promise<{ id: string; number: string; state: string }> {
+    const entry = await this.prisma.journalEntry.findUnique({ where: { id } });
+    if (!entry) throw new BadRequestException({ code: "NOT_FOUND", message: "سند یافت نشد." });
+    if (entry.state !== "FINAL") {
+      throw new BadRequestException({ code: "NOT_FINAL", message: "سند در وضعیت پیش‌نویس است." });
+    }
+    const updated = await this.prisma.journalEntry.update({
+      where: { id },
+      data: { state: "DRAFT" },
+      select: { id: true, number: true, state: true },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: actorId ?? null,
+        action: "accounting.journal.revert",
+        entity: "JournalEntry",
+        entityId: id,
+        oldValues: { state: "FINAL", number: entry.number } as never,
+        newValues: { state: "DRAFT" } as never,
+      },
+    });
+    return updated;
   }
 
   /** فاز ۱۰ — نهایی‌سازی سند DRAFT: همان اعتبارسنجی، سپس FINAL (auditable) */
@@ -329,10 +683,20 @@ export class JournalService {
     return updated;
   }
 
-  /** تراز آزمایشی — از منبع حقیقت Ledger (بند ۱۰۶/۱۰۷) */
+  /** تراز آزمایشی — از منبع حقیقت Ledger (بند ۱۰۶/۱۰۷)
+   *
+   *  فقط سندهای FINAL.
+   *
+   *  این شرط قبلاً نبود و یک اشکال واقعی بود: سند DRAFT هم در تراز می‌آمد،
+   *  در حالی که خودِ طراحی می‌گوید «سند پیش‌نویس اثر مالی ندارد». نتیجه دو
+   *  چیز خراب می‌کرد: (۱) دفترهای در دست بازبینی ارقام نهایی را جابه‌جا
+   *  می‌کردند، (۲) «برگشت سند به پیش‌نویس» هیچ اثری در تراز نمی‌گذاشت،
+   *  پس اصلاح سند اشتباه عملاً غیرممکن بود.
+   */
   async trialBalance(): Promise<Array<{ code: string; name: string; debit: string; credit: string }>> {
     const rows = await this.prisma.journalLine.groupBy({
       by: ["accountId"],
+      where: { entry: { state: "FINAL" } },
       _sum: { debit: true, credit: true },
     });
     const accounts = await this.prisma.account.findMany({
@@ -354,7 +718,10 @@ export class JournalService {
 
   /** کنترل سازگاری مالی — بند ۶۶: ΣDr = ΣCr روی کل Ledger */
   async integrity(): Promise<{ balanced: boolean; debit: string; credit: string }> {
-    const agg = await this.prisma.journalLine.aggregate({ _sum: { debit: true, credit: true } });
+    const agg = await this.prisma.journalLine.aggregate({
+      where: { entry: { state: "FINAL" } },
+      _sum: { debit: true, credit: true },
+    });
     const d = agg._sum.debit ?? 0n;
     const c = agg._sum.credit ?? 0n;
     return { balanced: d === c, debit: d.toString(), credit: c.toString() };
@@ -367,10 +734,15 @@ export class JournalService {
   async accountTree(): Promise<unknown> {
     const [accounts, agg, directLines] = await Promise.all([
       this.prisma.account.findMany({ orderBy: { code: "asc" } }),
-      this.prisma.journalLine.groupBy({ by: ["accountId"], _sum: { debit: true, credit: true } }),
       this.prisma.journalLine.groupBy({
         by: ["accountId"],
-        where: { account: { level: { gte: 1 } } },
+        where: { entry: { state: "FINAL" } },
+        _sum: { debit: true, credit: true },
+      }),
+      this.prisma.journalLine.groupBy({
+        by: ["accountId"],
+        // فقط FINAL، مثل trialBalance — وگرنه سند پیش‌نویس دفتر را جابه‌جا می‌کرد
+        where: { entry: { state: "FINAL" }, account: { level: { gte: 1 } } },
         _sum: { debit: true, credit: true },
       }),
     ]);

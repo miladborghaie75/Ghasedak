@@ -1,8 +1,25 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 // note: posSearch در پایین — جستجوی فارسی POS
 import { nextBarcodeForCategory } from "./barcode.util";
+import { GL, GL_EQUITY } from "@ghasedak/contracts";
+import { JournalService } from "../accounting/journal.service";
 import type { Prisma } from "@prisma/client";
+
+/**
+ * یک نمونهٔ `JournalService` برای استفادهٔ خارج از DI (تست‌ها).
+ *
+ * تست‌ها `ProductsService` را مستقیم می‌سازند و Nest در آنجا نیست؛ برای
+ * اینکه تست بتواند مسیر «سند موجودی آغازین» را هم بسنجد، این کمکی را
+ * می‌دهند. در اپ واقعی همیشه سرویس تزریق‌شده استفاده می‌شود.
+ */
+export function standaloneProductsService(prisma: PrismaService): ProductsService {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { JournalService } = require("../accounting/journal.service") as {
+    JournalService: new (p: PrismaService) => JournalService;
+  };
+  return new ProductsService(prisma, new JournalService(prisma));
+}
 
 export interface ListQuery {
   page?: number;
@@ -13,7 +30,50 @@ export interface ListQuery {
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    /**
+     * سند حسابداری موجودی آغازین (شکاف ۱ — فاز ۲).
+     *
+     * `forwardRef` + `@Inject(JournalService)` لازم است چون وابستگی حلقوی
+     * داریم (محصولات ↔ حسابداری) و Nest بدون این، `design:paramtypes` را
+     * نمی‌تواند در ماژول‌های تازه‌ساخته حل کند.
+     *
+     * نکتهٔ مهم: اول این را با یک `interface` و `@Optional()` نوشتم. کامپایل می‌شد
+     * ولی در runtime مقدار `undefined` تزریق می‌شد و سند **بی‌صدا** نمی‌خورد —
+     * یعنی موجودی در دفتر انبار می‌نشست ولی در دفتر مالی نه. دقیقاً همان باگی
+     * که دنبالش بودیم، فقط پنهان. برای همین اینجا نه `@Optional()` می‌گذاریم و
+     * نه رابطه: اگر تزریق شکست بخورد، بوت باید Loud بماند نه اینکه سند حذف شود.
+     */
+    @Inject(forwardRef(() => JournalService)) private readonly journal: JournalService,
+  ) {}
+
+  /**
+ * واریانت‌هایی که موجودی دارند ولی سند حسابداری موجودی‌شان ثبت نشده.
+ *
+ * علت نبود سند معمولاً «بهای خرید ثبت نشده» است — و مبلغ ساختگی در دفتر از
+ * نبود سند بدتر است، پس سند نمی‌زنیم ولی گزارش می‌دهیم تا مدیر بها را وارد کند.
+ */
+  async openingWithoutJournal(): Promise<string[]> {
+    const variants = await this.prisma.productVariant.findMany({
+      where: { product: { deletedAt: null }, stockQty: { gt: 0 } },
+      select: {
+        sku: true,
+        product: {
+          select: { costPrice: true },
+        },
+      },
+    });
+    // واریانت‌هایی که اصلاً ردیف «موجودی آغازین» در دفتر انبار ندارند
+    const withOpening = await this.prisma.stockLedgerEntry.findMany({
+      where: { type: "OPENING" },
+      select: { variantSku: true },
+    });
+    const opened = new Set(withOpening.map((o) => o.variantSku));
+    return variants
+      .filter((v) => !opened.has(v.sku))
+      .map((v) => v.sku);
+  }
 
   async list(query: ListQuery): Promise<unknown> {
     const page = Math.max(1, query.page ?? 1);
@@ -61,14 +121,18 @@ export class ProductsService {
     categoryId: string; brandId?: string | null;
     basePrice: number; salePrice?: number | null; saleStartsAt?: string | null; saleEndsAt?: string | null;
     costPrice?: number | null; videoUrl?: string | null; weightGrams?: number | null;
-    tags?: string[]; status?: string;
+    tags?: string[]; status?: string; actorId?: string;
     seo?: { seoTitle?: string; metaDescription?: string; canonical?: string; ogTitle?: string; ogDescription?: string; noindex?: boolean } | null;
-    variants?: Array<{ sku: string; barcode?: string | null; price: number; salePrice?: number | null; stockQty?: number; lowStockThreshold?: number; status?: string; weightGrams?: number | null }>;
+    variants?: Array<{ sku: string; barcode?: string | null; price: number; salePrice?: number | null; stockQty?: number; lowStockThreshold?: number; status?: string; weightGrams?: number | null; termIds?: string[] }>;
     attributeTermIds?: string[];
   }): Promise<unknown> {
     if (!data.name?.trim()) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نام محصول الزامی است." });
     if (!Number.isSafeInteger(data.basePrice) || data.basePrice < 0) {
       throw new BadRequestException({ code: "VALIDATION_ERROR", fieldErrors: { basePrice: ["قیمت باید عدد صحیح تومان باشد"] } });
+    }
+    // قیمت حراج نباید از قیمت پایه بیشتر یا منفی باشد
+    if (data.salePrice != null && (!Number.isSafeInteger(data.salePrice) || data.salePrice < 0 || data.salePrice > data.basePrice)) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", fieldErrors: { salePrice: ["قیمت حراج باید عدد صحیح بین ۰ تا قیمت پایه باشد"] } });
     }
     const category = await this.prisma.category.findUnique({ where: { id: data.categoryId } });
     if (!category) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "دسته یافت نشد." });
@@ -142,13 +206,26 @@ export class ProductsService {
       const variantList = data.variants?.length
         ? data.variants
         : [{ sku: `${slug.toUpperCase().slice(0, 12)}-DEF`, price: data.basePrice }];
+      // اعتبارسنجی حراج هر واریانت — حراج نباید از قیمت خود واریانت بیشتر باشد
+      for (const v of variantList) {
+        if (!Number.isSafeInteger(v.price) || v.price < 0) {
+          throw new BadRequestException({ code: "VALIDATION_ERROR", message: `قیمت واریانت «${v.sku}» نامعتبر است.` });
+        }
+        if (v.salePrice != null && (!Number.isSafeInteger(v.salePrice) || v.salePrice < 0 || v.salePrice > v.price)) {
+          throw new BadRequestException({ code: "VALIDATION_ERROR", message: `قیمت حراج واریانت «${v.sku}» باید بین ۰ تا قیمت آن باشد.` });
+        }
+      }
       let nextAuto = firstAutoBarcode;
+      // جمع ارزش موجودی آغازین برای سند حسابداری (شکاف ۱ — فاز ۲)
+      let openingValue = 0;
+      /** واریانت‌هایی که بهای خرید ندارند؛ سندشان صادقانه رد می‌شود */
+      const noCostSkus: string[] = [];
       for (const v of variantList) {
         if ((v.barcode == null || v.barcode === "") && nextAuto) {
           v.barcode = nextAuto;
         }
         const openingQty = v.stockQty ?? 0;
-        await tx.productVariant.create({
+        const createdVariant = await tx.productVariant.create({
           data: {
             productId: product.id,
             sku: v.sku,
@@ -161,10 +238,26 @@ export class ProductsService {
             status: (v.status as never) ?? "PUBLISHED",
           },
         });
+        // اتصال به مقادیر ویژگی (سایز/رنگ/…) — بدون این، محور واریانت در
+        // فروشگاه هیچ‌وقت ساخته نمی‌شود.
+        if (v.termIds?.length) {
+          const real = await tx.attributeTerm.findMany({ where: { id: { in: v.termIds } }, select: { id: true } });
+          if (real.length) {
+            await tx.variantTerm.createMany({
+              data: real.map((t) => ({ variantId: createdVariant.id, attributeTermId: t.id })),
+              skipDuplicates: true,
+            });
+          }
+        }
         // موجودی آغازین فقط در stockQty ماندنی نیست (باگ موج ۱: سفارش چنین محصولی
         // چون دفتر انبار خالی بود با INSUFFICIENT_STOCK رد می‌شد) — OPENING داخل همان tx.
         if (openingQty > 0) {
-          const w = await tx.warehouse.findFirst({ orderBy: { createdAt: "asc" } });
+          const w = await tx.warehouse.findFirst({
+            // `isDefault` اولویت دارد؛ قبلاً فقط قدیمی‌ترین انبار انتخاب می‌شد
+            // و انتخاب مدیر در پنل بی‌اثر بود.
+            where: { active: true },
+            orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+          });
           if (!w) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "انبار پیش‌فرض یافت نشد؛ ابتدا انبار بسازید." });
           const idem = `opening:${v.sku}`;
           const dup = await tx.stockLedgerEntry.findUnique({ where: { idempotencyKey: idem } });
@@ -185,6 +278,28 @@ export class ProductsService {
               note: `موجودی آغازین — ایجاد محصول «${product.name}»`,
             },
           });
+
+          /**
+           * سند حسابداری موجودی آغازین (شکاف ۱ از ۹ — فاز ۲).
+           *
+           * قبلاً این ردیف فقط در `stockQty` و دفتر انبار می‌نشست، ولی **هیچ سندی
+           * نمی‌زد**. نتیجه: حساب ۱۲۰۰ از صفر شروع می‌شد و هر فروشی آن را
+           * منفی می‌کرد (روی دیتابیس توسعه ماندهٔ ۱۲۰۰ = ‎−۳٬۰۰۰٬۰۰۰ رسید).
+           * یعنی ترازنامه ارزش موجودی را نشان نمی‌داد.
+           *
+           * Dr 1200 موجودی کالا / Cr 3900 سود و زیان انباشته (سرمایه اولیه).
+           * اگر بهای خرید ثبت نشده باشد سند زده نمی‌شود — چون مبلغ ساختگی در
+           * دفتر، از نبودِ سند بدتر است. آن حالت در پاسخ گزارش می‌شود.
+           */
+          const unitCost = data.costPrice != null ? Number(data.costPrice) : null;
+          if (unitCost != null && unitCost > 0) {
+            const value = openingQty * unitCost;
+            // جمع ارزش همهٔ واریانت‌های این محصول را بعد از حلقه می‌زنیم؛
+            // اینجا فقط برای هر واریانت سهمش نگه داشته می‌شود.
+            openingValue += value;
+          } else {
+            noCostSkus.push(v.sku);
+          }
         }
         // بارکد بعدی برای واریانت بعدیِ بدون بارکد — بعد از insert فعلی (سریال جلو می‌رود)
         const remaining = variantList.slice(variantList.indexOf(v) + 1).filter((x) => x.barcode == null || x.barcode === "").length;
@@ -192,6 +307,37 @@ export class ProductsService {
           nextAuto = await nextBarcodeForCategory(tx, catSlug, data.categoryId);
         }
       }
+
+      /**
+       * سند موجودی آغازین — یک سند برای کل محصول (نه یکی به‌ازای هر واریانت،
+       * چون سندهای تکراری دفتر را بی‌فایده می‌کنند).
+       */
+      let openingJournalPosted = false;
+      if (openingValue > 0 && this.journal) {
+        await this.journal.postOrNotifyInTx(tx, {
+          description: `موجودی آغازین — «${product.name}» (${variantList.length} واریانت)`,
+          sourceType: "opening_inventory",
+          sourceId: product.id,
+          actorId: data.actorId ?? undefined,
+          lines: [
+            { accountCode: GL.INVENTORY, debit: openingValue },
+            { accountCode: GL_EQUITY.RETAINED_EARNINGS, credit: openingValue },
+          ],
+        });
+        openingJournalPosted = true;
+      }
+
+      /**
+       * گزارش صادقانه به مدیر.
+       *
+       * اگر موجودی وارد شده ولی سند نخورده، دلیلش نبودِ «بهای خرید» است.
+       * پنهان‌کردن این باعث می‌شد مدیر فکر کند همه‌چیز در دفتر است در حالی که
+       * ارزش موجودی در ترازنامه غایب می‌ماند.
+       */
+      const openingWarning =
+        variantList.some((v) => (v.stockQty ?? 0) > 0) && !openingJournalPosted
+          ? "موجودی آغازین ثبت شد ولی سند حسابداری آن زده نشد، چون «بهای خرید» محصول خالی است. برای دیده‌شدن ارزش موجودی در دفتر، بهای خرید را وارد کنید."
+          : null;
 
       // ویژگی‌ها
       if (data.attributeTermIds?.length) {
@@ -202,7 +348,7 @@ export class ProductsService {
           }
         }
       }
-      return product;
+      return { ...product, openingJournalPosted, openingWarning };
     });
   }
 
@@ -400,14 +546,23 @@ export class ProductsService {
     costPrice?: number | null; videoUrl?: string | null; weightGrams?: number | null;
     tags?: string[]; status?: string;
     seo?: { seoTitle?: string; metaDescription?: string; canonical?: string; ogTitle?: string; ogDescription?: string; noindex?: boolean } | null;
-    variants?: Array<{ id?: string; sku: string; barcode?: string | null; price: number; salePrice?: number | null; stockQty?: number; lowStockThreshold?: number; status?: string; weightGrams?: number | null; remove?: boolean }>;
+    variants?: Array<{ id?: string; sku: string; barcode?: string | null; price: number; salePrice?: number | null; stockQty?: number; lowStockThreshold?: number; status?: string; weightGrams?: number | null; remove?: boolean; termIds?: string[] }>;
     imageMediaIds?: string[];
   }): Promise<unknown> {
-    const product = await this.prisma.product.findFirst({ where: { id, deletedAt: null } });
+    const product = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      // دسته لازم است تا بارکد خودکارِ واریانت‌های جدید با کد درست دسته ساخته شود
+      include: { category: { select: { slug: true, parentId: true } } },
+    });
     if (!product) throw new NotFoundException({ code: "NOT_FOUND", message: "محصول یافت نشد." });
 
     return this.prisma.$transaction(async (tx) => {
       const pd: Record<string, unknown> = {};
+      /** موجودی و بهای قبلی هر واریانت — برای تشخیص «افزای» و ارزش‌گذاری سند */
+      const prevStock = new Map<string, number>();
+      const beforeVariantCost = new Map<string, number>();
+      let openingValue = 0;
+      const noCostSkus: string[] = [];
       if (data.name !== undefined) pd.name = data.name.trim();
       if (data.shortDescription !== undefined) pd.shortDescription = data.shortDescription;
       if (data.description !== undefined) pd.description = data.description;
@@ -457,12 +612,37 @@ export class ProductsService {
             await tx.productVariant.delete({ where: { id: v.id } }).catch(() => null);
             continue;
           }
+          // موجودی قبلی — قبل از نوشتن، تا «افزای» تشخیص داده شود.
+          // بها فقط روی `Product` است (واریانت فیلد costPrice ندارد).
+          if (v.id) {
+            const prev = await tx.productVariant.findUnique({
+              where: { id: v.id },
+              select: { stockQty: true },
+            });
+            if (prev) {
+              prevStock.set(v.id, prev.stockQty);
+              beforeVariantCost.set(
+                v.id,
+                data.costPrice != null
+                  ? Number(data.costPrice)
+                  : product.costPrice != null
+                    ? Number(product.costPrice)
+                    : 0,
+              );
+            }
+          }
           if (v.barcode) {
             const dup = await tx.productVariant.findFirst({ where: { barcode: v.barcode, sku: { not: v.sku } } });
             if (dup) throw new BadRequestException({ code: "DUPLICATE_BARCODE", message: `بارکد «${v.barcode}» برای کالای دیگری ثبت شده است.` });
           }
           const dupSku = await tx.productVariant.findFirst({ where: { sku: v.sku, id: { not: v.id ?? "" } } });
           if (dupSku) throw new BadRequestException({ code: "DUPLICATE_SKU", message: `SKU «${v.sku}» تکراری است.` });
+
+          // شناسهٔ ترم‌های ویژگی (سایز/رنگ/…) — این اتصال تاکنون اصلاً نوشته نمی‌شد،
+          // برای همین فروشگاه هیچ‌وقت محور رنگ/سایز واقعی نداشت.
+          const termIds = Array.isArray(v.termIds) ? v.termIds.filter((t): t is string => typeof t === "string") : null;
+
+          let variantId = v.id;
           if (v.id) {
             await tx.productVariant.update({
               where: { id: v.id },
@@ -478,11 +658,17 @@ export class ProductsService {
               },
             });
           } else {
-            await tx.productVariant.create({
+            // بارکد خالی یعنی «خودکار بساز» — فقط همین‌جا شمارهٔ یکتا صادر می‌شود
+            let barcode = v.barcode || null;
+            if (!barcode) {
+              const cat = product.category.parentId ? null : product.category.slug;
+              barcode = await nextBarcodeForCategory(tx as never, cat, product.categoryId);
+            }
+            const created = await tx.productVariant.create({
               data: {
                 productId: id,
                 sku: v.sku,
-                barcode: v.barcode || null,
+                barcode,
                 price: BigInt(v.price),
                 salePrice: v.salePrice != null ? BigInt(v.salePrice) : null,
                 stockQty: v.stockQty ?? 0,
@@ -490,8 +676,88 @@ export class ProductsService {
                 status: (v.status as never) ?? "PUBLISHED",
               },
             });
+            variantId = created.id;
+          }
+
+          // اتصال واریانت به مقادیر ویژگی — جایی که قبلاً کلاً فراموش شده بود
+          if (termIds && variantId) {
+            await tx.variantTerm.deleteMany({ where: { variantId } });
+            if (termIds.length) {
+              const real = await tx.attributeTerm.findMany({ where: { id: { in: termIds } }, select: { id: true } });
+              const ids = real.map((t) => t.id);
+              if (ids.length) {
+                await tx.variantTerm.createMany({
+                  data: ids.map((termId) => ({ variantId, attributeTermId: termId })),
+                  skipDuplicates: true,
+                });
+              }
+            }
+          }
+
+          /**
+           * افزای موجودی در ویرایش محصول هم باید سند بخورد (شکاف ۱ — فاز ۲).
+           *
+           * قبلاً `stockQty` مستقیم نوشته می‌شد، پس دفتر انبار و دفتر مالی دو
+           * عدد متفاوت می‌شدند. آن هم پایین‌تر از سطح انبار است و باید از مسیر
+           * انبار (ADJUSTMENT) برود، نه اینکه یک‌طرفه بنویسیم.
+           *
+           * فقط **افزایش** سند می‌خورد؛ کاهش هم باید از مسیر انبارگردانی/تعدیل
+           * بیاید تا تأیید و ممیزی داشته باشد.
+           */
+          if (v.stockQty !== undefined && v.id) {
+            const before = prevStock.get(v.id);
+            if (before != null && v.stockQty > before) {
+              const delta = v.stockQty - before;
+              const w = await tx.warehouse.findFirst({
+                where: { active: true },
+                orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+              });
+              const cost =
+                data.costPrice != null ? Number(data.costPrice) : (beforeVariantCost.get(v.id) ?? 0);
+              if (w) {
+                const last = await tx.stockLedgerEntry.findFirst({
+                  where: { warehouseId: w.id, variantSku: v.sku },
+                  orderBy: { id: "desc" },
+                });
+                await tx.stockLedgerEntry.create({
+                  data: {
+                    warehouseId: w.id,
+                    variantSku: v.sku,
+                    type: "ADJUSTMENT",
+                    qtyIn: delta,
+                    // موجودی در دفتر انبار Int است (کمیت)، نه BigInt
+                    balanceBefore: last?.balanceAfter ?? before,
+                    balanceAfter: before + delta,
+                    refType: "product_update",
+                    refId: id,
+                    idempotencyKey: `prod-open:${id}:${v.sku}:${v.stockQty}`,
+                    note: `افزای موجودی با ویرایش محصول (+${delta})`,
+                  },
+                });
+              }
+              if (cost > 0) {
+                openingValue += delta * cost;
+              } else {
+                noCostSkus.push(v.sku);
+              }
+            }
           }
         }
+      }
+
+      // سند افزایش موجودی (اگر اتفاق افتاده باشد)
+      let openingJournalPosted = false;
+      if (openingValue > 0 && this.journal) {
+        await this.journal.postOrNotifyInTx(tx, {
+          description: `افزای موجودی با ویرایش محصول «${data.name ?? product.name ?? id}»`,
+          sourceType: "opening_inventory",
+          sourceId: id,
+          lines: [
+            { accountCode: GL.INVENTORY, debit: openingValue },
+            { accountCode: GL_EQUITY.RETAINED_EARNINGS, credit: openingValue },
+          ],
+        });
+        openingJournalPosted = true;
       }
 
       // عکس‌ها — ProductImage با ترتیب؛ اولی primary
@@ -504,7 +770,15 @@ export class ProductsService {
         }
       }
 
-      return tx.product.findUnique({ where: { id }, include: { variants: true, images: true } });
+      const updated = await tx.product.findUnique({ where: { id }, include: { variants: true, images: true } });
+      return {
+        ...updated,
+        openingJournalPosted,
+        openingWarning:
+          noCostSkus.length > 0 && !openingJournalPosted
+            ? "افزای موجودی در دفتر انبار ثبت شد ولی سند مالی آن زده نشد، چون «بهای خرید» خالی است."
+            : null,
+      };
     });
   }
 
@@ -513,7 +787,14 @@ export class ProductsService {
     const p = await this.prisma.product.findFirst({
       where: { id, deletedAt: null },
       include: {
-        variants: { orderBy: { createdAt: "asc" } },
+        // `terms` لازم است تا فرم ویرایش بتواند مقادیر انتخاب‌شدهٔ هر واریانت را
+        // دوباره نشان دهد؛ بدون آن، ویرایش محصول مقادیر ویژگی‌ها را پاک می‌کرد.
+        variants: {
+          orderBy: { createdAt: "asc" },
+          include: {
+            terms: { include: { term: { include: { attribute: { select: { id: true, name: true, slug: true } } } } } },
+          },
+        },
         images: { orderBy: { sortOrder: "asc" } },
         seo: true,
         category: { select: { id: true, name: true } },
@@ -521,38 +802,137 @@ export class ProductsService {
       },
     });
     if (!p) throw new NotFoundException({ code: "NOT_FOUND", message: "محصول یافت نشد." });
-    return p;
+    // مسیر `term` را به `termId` هم تخت می‌کنیم تا فرم ساده بماند
+    return {
+      ...p,
+      variants: p.variants.map((v) => ({
+        ...v,
+        termIds: v.terms.map((t) => t.attributeTermId),
+        terms: undefined,
+      })),
+    };
   }
 
-  /**
-   * ماتریس واریانت سایز×رنگ — ترکیب مقادیر دو ویژگی محور واریانت؛
-   * SKU/بارکد خودکار پیشنهاد می‌شود (قابل ویرایش بعداً).
+/**
+   * ماتریس واریانت از روی ویژگی‌های تعریف‌شده.
+   *
+   * کاربر در ادمین ویژگی‌ها را از قبل ساخته (مثلاً «نوع سوتین» با مقادیر
+   * جک‌دار/ساده، «سایز» با ۷۰ تا ۸۵، «رنگ» با قرمز/آبی/…) و اینجا ترکیب
+   * آن‌ها را می‌سازد. یعنی دیگر لازم نیست SKU را دستی تایپ کند.
+   *
+   * دو نکته که قبلاً اشتباه بود و اینجا درست شده:
+   *  ۱) پیشنهاد باید **شناسهٔ ترم** را برگرداند، نه فقط برچسبش؛ وگرنه ساخت
+   *     واقعی واریانت ممکن نبود چون `VariantTerm` به id نیاز دارد.
+   *  ۲) پیشنهاد نباید بارکد واقعی بسوزاند. قبلاً برای هر ترکیب یک شمارهٔ
+   *     یکتا از دیتابیس رزرو می‌شد و بعد دور ریخته می‌شد — یعنی با هر
+   *     بار کلیک روی «ساخت ماتریس»، شماره‌ها هدر می‌رفتند. حالا بارکد فقط در
+   *     لحظهٔ ساخت واقعی صادر می‌شود.
+   *
+   * `axes` هر کدام یک ویژگی است و `termIds` مقادیر انتخاب‌شدهٔ آن.
    */
-  async variantMatrix(id: string, body: { sizeTermIds: string[]; colorTermIds?: string[] }): Promise<unknown> {
+  async variantMatrix(
+    id: string,
+    body: {
+      axes?: Array<{ attributeId: string; termIds: string[] }>;
+      /** برای سازگاری با کلاینت قدیمی که فقط سایز×رنگ می‌فرستاد */
+      sizeTermIds?: string[];
+      colorTermIds?: string[];
+    },
+  ): Promise<unknown> {
     const product = await this.prisma.product.findFirst({
       where: { id, deletedAt: null },
       include: { category: { select: { slug: true, id: true, parentId: true } } },
     });
     if (!product) throw new NotFoundException({ code: "NOT_FOUND", message: "محصول یافت نشد." });
-    const sizes = body.sizeTermIds ?? [];
-    const colors = body.colorTermIds?.length ? body.colorTermIds : [null];
+
+    // نرمال‌سازی ورودی: مسیر جدید (axes) یا مسیر قدیمی (size×color)
+    const axesInput: Array<{ attributeId: string; termIds: string[] }> =
+      body.axes?.filter((a) => a && Array.isArray(a.termIds) && a.termIds.length > 0) ?? [];
+    if (axesInput.length === 0 && (body.sizeTermIds?.length || body.colorTermIds?.length)) {
+      const bySlug: Record<string, string> = {};
+      if (body.sizeTermIds?.length) bySlug.size = body.sizeTermIds[0];
+      // شناسهٔ ویژگی را از روی ترم‌ها پیدا می‌کنیم
+      const allTermIds = [...(body.sizeTermIds ?? []), ...(body.colorTermIds ?? [])];
+      if (allTermIds.length) {
+        const terms = await this.prisma.attributeTerm.findMany({
+          where: { id: { in: allTermIds } },
+          select: { id: true, attributeId: true, attribute: { select: { slug: true } } },
+        });
+        for (const slug of ["size", "color"]) {
+          const ids = terms.filter((t) => t.attribute.slug === slug).map((t) => t.id);
+          if (ids.length) axesInput.push({ attributeId: terms[0]?.attributeId ?? "", termIds: ids });
+        }
+      }
+      void bySlug;
+    }
+
+    if (axesInput.length === 0) {
+      return { combos: [], axes: [] };
+    }
+
+    // اعتبارسنجی: ترم‌ها باید واقعی و متعلق به ویژگی خودشان باشند
+    const allTermIds = axesInput.flatMap((a) => a.termIds);
+    const terms = await this.prisma.attributeTerm.findMany({
+      where: { id: { in: allTermIds } },
+      include: { attribute: { select: { id: true, name: true, slug: true } } },
+    });
+    const termById = new Map(terms.map((t) => [t.id, t]));
+
+    const axes = axesInput
+      .map((a) => ({
+        attributeId: a.attributeId,
+        attributeName: termById.get(a.termIds[0])?.attribute.name ?? a.attributeId,
+        attributeSlug: termById.get(a.termIds[0])?.attribute.slug ?? "",
+        terms: a.termIds
+          .map((tid) => termById.get(tid))
+          .filter((t): t is NonNullable<typeof t> => !!t)
+          .map((t) => ({ id: t.id, value: t.value, slug: t.slug, hex: t.hex })),
+      }))
+      .filter((a) => a.terms.length > 0);
+
+    if (axes.length === 0) return { combos: [], axes: [] };
+
+    // سقف ترکیب‌ها — ۵ محور × ۲۰ مقدار می‌شود ۳٫۲ میلیارد ترکیب
+    const combos: Array<{ terms: Array<{ termId: string; value: string; attributeName: string }>; sku: string; price: string }> = [];
+    const cartesian = (i: number, acc: Array<{ termId: string; value: string; attributeName: string }>) => {
+      if (combos.length >= 500) return;
+      if (i === axes.length) {
+        combos.push({ terms: [...acc], sku: "", price: String(product.basePrice) });
+        return;
+      }
+      for (const t of axes[i].terms) {
+        acc.push({ termId: t.id, value: t.value, attributeName: axes[i].attributeName });
+        cartesian(i + 1, acc);
+        acc.pop();
+      }
+    };
+    cartesian(0, []);
+
+    // SKU پیشنهادی از نام محصول + اسلاگ ترم‌ها (انگلیسی برای خوانایی)
     const existing = await this.prisma.productVariant.findMany({ where: { productId: id }, select: { sku: true } });
     const taken = new Set(existing.map((e) => e.sku));
-    const cat = product.category.parentId ? null : product.category.slug;
-    const combos: Array<{ sku: string; size?: string; color?: string; barcode: string }> = [];
-    for (const size of sizes) {
-      for (const color of colors) {
-        const termS = size ? await this.prisma.attributeTerm.findUnique({ where: { id: size } }) : null;
-        const termC = color ? await this.prisma.attributeTerm.findUnique({ where: { id: color } }) : null;
-        let sku = `${product.slug.slice(0, 10).toUpperCase().replace(/-/g, "")}-${termS?.slug ?? "DEF"}${termC ? `-${termC.slug}` : ""}`.slice(0, 40);
-        let n = 1;
-        while (taken.has(sku)) sku = sku.replace(/\d+$/, "") + n++;
-        taken.add(sku);
-        const barcode = await nextBarcodeForCategory(this.prisma, cat, product.categoryId);
-        combos.push({ sku, size: termS?.value, color: termC?.value, barcode });
-      }
+    const base = product.slug.slice(0, 8).toUpperCase().replace(/-/g, "") || "VAR";
+    for (const c of combos) {
+      const suffix = c.terms
+        .map((t) => termById.get(t.termId)?.slug ?? "")
+        .filter(Boolean)
+        .join("-")
+        .slice(0, 20);
+      let sku = `${base}-${suffix}`.slice(0, 40);
+      let n = 1;
+      while (taken.has(sku)) sku = `${base}-${suffix}-${n++}`.slice(0, 40);
+      taken.add(sku);
+      c.sku = sku;
     }
-    return { combos };
+
+    // ⚠ دیگر barCode رزرو نمی‌کنیم — فقط هنگام ساخت واقعی صادر می‌شود
+    void product.category;
+    return {
+      axes,
+      combos,
+      price: String(product.basePrice),
+      cat: product.category.parentId ? null : product.category.slug,
+    };
   }
 
   /** soft delete — بند ۸۹: محصول قابل restore */

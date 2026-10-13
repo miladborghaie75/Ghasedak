@@ -158,13 +158,16 @@ export class PublicCatalogController {
     return map;
   }
 
-  /** دسته‌های منتشرشده + شمارش محصول واقعی */
+  /** دسته‌های منتشرشده + شمارش محصول واقعی + آیکون (برای نمایش در فروشگاه) */
   @Get("categories")
   async categories() {
     const rows = await this.prisma.category.findMany({
       where: { deletedAt: null, status: "PUBLISHED" },
       orderBy: { sortOrder: "asc" },
-      select: { id: true, slug: true, name: true, description: true, parentId: true, sortOrder: true },
+      select: {
+        id: true, slug: true, name: true, description: true, parentId: true, sortOrder: true,
+        iconId: true, imageId: true,
+      },
     });
     const counts = await this.prisma.product.groupBy({
       by: ["categoryId"],
@@ -172,16 +175,44 @@ export class PublicCatalogController {
       _count: { _all: true },
     });
     const byCat = new Map(counts.map((c) => [c.categoryId, c._count._all]));
-    return { items: rows.map((r) => ({ ...r, productCount: byCat.get(r.id) ?? 0 })) };
+    // آیکون/تصویر دسته → کلید فایل، تا فروشگاه بتواند واقعاً نمایش دهد
+    const mediaKeys = await this.mediaKeyMap(rows.map((r) => r.iconId ?? r.imageId).filter((x): x is string => !!x));
+    return {
+      items: rows.map((r) => {
+        const mediaId = r.iconId ?? r.imageId;
+        return {
+          id: r.id,
+          slug: r.slug,
+          name: r.name,
+          description: r.description,
+          parentId: r.parentId,
+          sortOrder: r.sortOrder,
+          productCount: byCat.get(r.id) ?? 0,
+          // اولویت با آیکون؛ اگر نبود تصویر دسته
+          imageUrl: mediaId ? (mediaKeys.get(mediaId) ? `/media/${mediaKeys.get(mediaId)}` : null) : null,
+          hasIcon: !!r.iconId,
+        };
+      }),
+    };
   }
 
+  /** برندها + لوگو */
   @Get("brands")
   async brands() {
     const rows = await this.prisma.brand.findMany({
       orderBy: { sortOrder: "asc" },
-      select: { id: true, slug: true, name: true },
+      select: { id: true, slug: true, name: true, logoId: true, description: true },
     });
-    return { items: rows };
+    const mediaKeys = await this.mediaKeyMap(rows.map((r) => r.logoId).filter((x): x is string => !!x));
+    return {
+      items: rows.map((r) => ({
+        id: r.id,
+        slug: r.slug,
+        name: r.name,
+        description: r.description,
+        logoUrl: r.logoId && mediaKeys.get(r.logoId) ? `/media/${mediaKeys.get(r.logoId)}` : null,
+      })),
+    };
   }
 
   /** لیست محصولات منتشرشده — فیلتر دسته/برند/جست‌وجو + صفحه‌بندی */

@@ -9,6 +9,8 @@ import { InventorySettingsService } from "./inventory-settings.service";
 import { InventoryService } from "./inventory.service";
 import { EventBusService } from "../events/event-bus.service";
 import { INVENTORY_SETTINGS } from "./inventory-settings";
+import { GL, GL_EXPENSE } from "@ghasedak/contracts";
+import { warehouseGlCode } from "./inventory.service";
 
 /** کنترلر انبار — همه مسیرها با @RequirePermission محافظت می‌شوند (بند ۷) */
 @Controller("admin/inventory-ops")
@@ -128,14 +130,23 @@ export class InventoryController {
   async quarantineDestroy(@Req() req: Request, @Param("id") id: string, @Body() body: { note?: string }) {
     const result = await this.ops.quarantineDestroy(id, this.actor(req), body.note);
     if (result.value > 0) {
+      // `postOrNotify` بیرون تراکنش است، پس کلاینت `this.prisma` است نه `tx`.
+      // انبار از خودِ رکورد خسارت خوانده می‌شود؛ اگر نبود، به گروه ۱۲۰۰ می‌رود.
+      const dmg = await this.prisma.damageRecord.findUnique({
+        where: { id: result.damageRecordId },
+        select: { warehouseId: true },
+      });
+      const invCode = dmg?.warehouseId
+        ? await warehouseGlCode(this.prisma, dmg.warehouseId)
+        : GL.INVENTORY;
       await this.journal.postOrNotify({
         description: "انهدام کالای قرنطینه — خسارت",
         sourceType: "damage",
         sourceId: result.damageRecordId,
         actorId: this.actor(req),
         lines: [
-          { accountCode: "6000", debit: result.value },
-          { accountCode: "1200", credit: result.value },
+          { accountCode: GL_EXPENSE.OPERATING, debit: result.value },
+          { accountCode: invCode, credit: result.value },
         ],
       });
     }
@@ -155,14 +166,15 @@ export class InventoryController {
   async reportDamage(@Req() req: Request, @Body() body: { warehouseId: string; variantSku: string; qty: number; kind: "damage" | "loss"; reason?: string; holdForApproval?: boolean; note?: string }) {
     const rec = await this.ops.reportDamage({ ...body, actorId: this.actor(req) });
     if (rec.state === "POSTED" && rec.unitCost > 0n) {
+      const invCode = await warehouseGlCode(this.prisma, rec.warehouseId);
       await this.journal.postOrNotify({
         description: `${rec.kind === "loss" ? "مفقودی" : "خرابی"} ${rec.number}`,
         sourceType: "damage",
         sourceId: rec.id,
         actorId: this.actor(req),
         lines: [
-          { accountCode: "6000", debit: Number(rec.unitCost * BigInt(rec.qty)) },
-          { accountCode: "1200", credit: Number(rec.unitCost * BigInt(rec.qty)) },
+          { accountCode: GL_EXPENSE.OPERATING, debit: Number(rec.unitCost * BigInt(rec.qty)) },
+          { accountCode: invCode, credit: Number(rec.unitCost * BigInt(rec.qty)) },
         ],
       });
     }
@@ -175,14 +187,15 @@ export class InventoryController {
     const rec = await this.ops.postDamage(id, this.actor(req));
     const after = await this.prisma.damageRecord.findUniqueOrThrow({ where: { id } });
     if (after.unitCost > 0n) {
+      const invCode = await warehouseGlCode(this.prisma, after.warehouseId);
       await this.journal.postOrNotify({
         description: `${after.kind === "loss" ? "مفقودی" : "خرابی"} ${after.number}`,
         sourceType: "damage",
         sourceId: after.id,
         actorId: this.actor(req),
         lines: [
-          { accountCode: "6000", debit: Number(after.unitCost * BigInt(after.qty)) },
-          { accountCode: "1200", credit: Number(after.unitCost * BigInt(after.qty)) },
+          { accountCode: GL_EXPENSE.OPERATING, debit: Number(after.unitCost * BigInt(after.qty)) },
+          { accountCode: invCode, credit: Number(after.unitCost * BigInt(after.qty)) },
         ],
       });
     }
@@ -297,15 +310,37 @@ export class InventoryController {
     return { items };
   }
 
-  /** تایید → فیلد approvedById پر می‌شود؛ سپس close با عبور از چک تحمل ممکن است */
+  /**
+   * تایید → فیلد approvedById پر می‌شود؛ سپس close با عبور از چک تحمل ممکن است.
+   *
+   * تفکیک وظیفه (درخواست‌دهنده خودش تایید نکند) یک کنترل واقعی است و در
+   * فروشگاهی با چند کاربر حفظ می‌شود. اما در فروشگاهی تک‌نفره (همان چیزی که
+   * بیشتر فروشگاه‌های کوچک هستند) همان یک کاربر هم درخواست می‌دهد و هم باید
+   * تایید کند — و آن وقت کنترل به بن‌بست تبدیل می‌شود و تعدیل هرگز ثبت
+   * نمی‌شود.
+   *
+   * راه‌حل: استثنا فقط برای مدیر ارشد (مجوز `*`). این استثنا حذفِ کنترل نیست،
+   * چون (۱) محدود به بالاترین سطح دسترسی است، (۲) همیشه با
+   * `selfApproved: true` در ��د ممیزی ثبت می‌شود تا قابل بازبینی باشد.
+   */
   @Post("approvals/:id/decide")
   @RequirePermission("inventory.approve")
   async decideApproval(@Req() req: Request, @Param("id") id: string, @Body() body: { approve: boolean; note?: string }) {
     const apr = await this.prisma.approvalRequest.findUnique({ where: { id } });
     if (!apr || apr.state !== "PENDING") throw new BadRequestException({ code: "INVALID_STATE", message: "درخواست تایید یافت نشد/تصمیم قبلی ثبت شده." });
-    if (apr.requestedById === this.actor(req)) {
-      throw new BadRequestException({ code: "SELF_APPROVAL", message: "درخواست‌دهنده نمی‌تواند خودش تایید کند." });
+
+    const me = (req as unknown as { adminIdentity?: { role?: string; permissions?: string[] } }).adminIdentity;
+    const isSuperAdmin =
+      me?.role === "SUPER_ADMIN" || (Array.isArray(me?.permissions) && me.permissions.includes("*"));
+    const selfApproval = apr.requestedById === this.actor(req);
+
+    if (selfApproval && !isSuperAdmin) {
+      throw new BadRequestException({
+        code: "SELF_APPROVAL",
+        message: "درخواست‌دهنده نمی‌تواند خودش تایید کند. تایید را به مدیر دیگری بسپارید.",
+      });
     }
+
     const state = body.approve ? "APPROVED" : "REJECTED";
     await this.prisma.approvalRequest.update({
       where: { id },
@@ -315,19 +350,19 @@ export class InventoryController {
     if (body.approve && payload.stocktakeId) {
       await this.prisma.stocktake.update({
         where: { id: payload.stocktakeId },
-        data: { approvedById: this.actor(req), approvedAt: new Date(), toleranceQty: 999999 },
+        data: { approvedById: this.actor(req), approvedAt: new Date() },
       });
     }
     await this.prisma.auditLog.create({
       data: {
         actorId: this.actor(req) ?? null,
-        action: "inventory.approval.decide",
+        action: selfApproval ? "inventory.approval.decide.self" : "inventory.approval.decide",
         entity: "ApprovalRequest",
         entityId: id,
-        newValues: { state, note: body.note } as object,
+        newValues: { state, note: body.note, selfApproved: selfApproval } as object,
       },
     }).catch(() => undefined); // audit — شکستش حیاتی نیست (تصمیم تایید ثبت شده)
-    return { ok: true, state };
+    return { ok: true, state, selfApproved: selfApproval };
   }
 
 }

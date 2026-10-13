@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAdminApi, fa } from "@/components/useAdminApi";
+import { ImagePickerButton } from "@/components/MediaLibraryDialog";
 
 interface CategoryRow {
   id: string;
@@ -10,7 +11,8 @@ interface CategoryRow {
   parentId: string | null;
   sortOrder: number;
   status: string;
-  description?: string | null;
+  description: string | null;
+  iconId?: string | null;
   parent?: { name: string } | null;
   _count?: { products: number; children: number };
 }
@@ -25,7 +27,7 @@ export default function CategoriesClient() {
   const [rows, setRows] = useState<CategoryRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", parentId: "", description: "", sortOrder: 0 });
+  const [form, setForm] = useState({ name: "", parentId: "", description: "", sortOrder: 0, iconMediaId: "" as string });
   const [editId, setEditId] = useState<string | null>(null);
 
   const load = async () => {
@@ -64,13 +66,15 @@ export default function CategoriesClient() {
       parentId: form.parentId || null,
       description: form.description || undefined,
       sortOrder: Number(form.sortOrder) || 0,
+      // آیکون دسته — اگر انتخاب نشده باشد null یعنی «حذف آیکون»
+      iconMediaId: form.iconMediaId || null,
     };
     const r = editId
       ? await call(`/admin/catalog/categories/${editId}`, { method: "PATCH", body: JSON.stringify(payload) })
       : await call("/admin/catalog/categories", { method: "POST", body: JSON.stringify(payload) });
     if (r.ok) {
       setMsg(editId ? "دسته ویرایش شد." : "دسته ایجاد شد.");
-      setForm({ name: "", parentId: "", description: "", sortOrder: 0 });
+      setForm({ name: "", parentId: "", description: "", sortOrder: 0, iconMediaId: "" });
       setEditId(null);
       void load();
     } else {
@@ -87,7 +91,7 @@ export default function CategoriesClient() {
 
   const startEdit = (c: CategoryRow) => {
     setEditId(c.id);
-    setForm({ name: c.name, parentId: c.parentId ?? "", description: c.description ?? "", sortOrder: c.sortOrder });
+    setForm({ name: c.name, parentId: c.parentId ?? "", description: c.description ?? "", sortOrder: c.sortOrder, iconMediaId: c.iconId ?? "" });
   };
 
   return (
@@ -114,6 +118,7 @@ export default function CategoriesClient() {
             توضیح
             <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" />
           </label>
+          <ImagePickerButton value={form.iconMediaId} onChange={(id) => setForm({ ...form, iconMediaId: id ?? "" })} label="انتخاب آیکون دسته" previewClass="size-16" />
           <label className="text-xs font-bold text-ink/70">
             ترتیب
             <input type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm" />
@@ -124,7 +129,7 @@ export default function CategoriesClient() {
             {editId ? "ذخیره ویرایش" : "افزودن دسته"}
           </button>
           {editId ? (
-            <button type="button" onClick={() => { setEditId(null); setForm({ name: "", parentId: "", description: "", sortOrder: 0 }); }} className="h-10 rounded-full border border-line px-5 text-sm font-bold">
+            <button type="button" onClick={() => { setEditId(null); setForm({ name: "", parentId: "", description: "", sortOrder: 0, iconMediaId: "" }); }} className="h-10 rounded-full border border-line px-5 text-sm font-bold">
               انصراف
             </button>
           ) : null}

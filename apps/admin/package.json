@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ghasedak/blocks": "workspace:*",
     "@ghasedak/contracts": "workspace:*",
     "@fontsource-variable/vazirmatn": "^5.2.5",
     "next": "^15.5.6",

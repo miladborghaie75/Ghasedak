@@ -8,13 +8,15 @@ import { Footer } from "@/components/layout/Footer";
 import { QuickAddHost } from "@/components/commerce/QuickAddHost";
 import { ThemeInit } from "@/components/providers/theme-init";
 import { MotionReveal } from "@/components/MotionReveal";
-import { site } from "@/lib/site";
+import { site, SITE_URL } from "@/lib/site";
 import { hydrateCatalog, loadCatalog } from "@/lib/catalog-repo";
 
 /** لایهٔ ریشه با دادهٔ زندهٔ کاتالوگ/تم — استاتیک build نمی‌شود */
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
+  // بدون این، canonical های نسبی صفحه‌ها به localhost حل می‌شوند
+  metadataBase: new URL(SITE_URL),
   title: {
     default: `${site.fullName} | فروشگاه آنلاین لباس زیر زنانه`,
     template: `%s | ${site.name}`,

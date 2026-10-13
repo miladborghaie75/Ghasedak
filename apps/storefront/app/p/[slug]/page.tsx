@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { ProductArt, type ArtKind } from "@/components/commerce/ProductArt";
 import { WishlistButton } from "@/components/commerce/WishlistButton";
 import { StickyBuyBar } from "@/components/commerce/StickyBuyBar";
@@ -90,11 +91,26 @@ export default async function ProductPage({ params }: PageProps) {
       <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
         {/* ۱) گالری */}
         <section aria-label="تصویر محصول" className="self-start lg:sticky lg:top-24">
-          <div className="relative rounded-blob border border-line bg-gradient-to-b from-primary-tint to-surface p-6 shadow-clay-1 sm:p-10">
+          <div className="relative rounded-blob border border-line bg-gradient-to-b from-primary-tint to-surface shadow-clay-1">
             <div className="absolute start-4 top-4 z-10">
               <WishlistButton productId={product.id} name={product.name} />
             </div>
-            <ProductArt kind={product.category as ArtKind} colorId={product.variants[0].colorId} />
+            {product.image ? (
+              <div className="relative aspect-square overflow-hidden rounded-blob">
+                <Image
+                  src={product.image}
+                  alt={product.name}
+                  fill
+                  priority
+                  sizes="(min-width: 1024px) 50vw, 100vw"
+                  className="object-cover"
+                />
+              </div>
+            ) : (
+              <div className="p-6 sm:p-10">
+                <ProductArt kind={product.category as ArtKind} colorId={product.variants[0].colorId} />
+              </div>
+            )}
           </div>
         </section>
 

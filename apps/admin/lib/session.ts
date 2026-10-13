@@ -1,22 +1,40 @@
-import { cookies } from "next/headers";
-import { api } from "./api";
+/**
+ * انواع و توابع نشست ادمین.
+ *
+ * این فایل عمداً **همهٔ بخش سروری** ندارد و هیچ چیزی از `next/headers`
+ * وارد نمی‌کند، چون کامپوننت‌های کلاینتی (`Shell`, `MobileNav`) هم
+ * `AdminMe` و `can()` را لازم دارند. قبلاً همین یک import باعث می‌شد بیلد
+ * ادمین بشکند: «You're importing a component that needs next/headers».
+ *
+ * توابعی که واقعاً کوکی می‌خوانند در `session.server.ts` هستند.
+ */
 
 export interface AdminMe {
   userId: string;
-  name: string | null;
-  email: string | null;
+  name?: string;
+  email?: string;
   role: string;
   permissions: string[];
 }
 
-export async function getIdentity(): Promise<AdminMe | null> {
-  const jar = await cookies();
-  const cookie = jar.get("ghasedak_admin_session")?.value;
-  if (!cookie) return null;
-  const res = await api<AdminMe>("/auth/me", { cookie: `ghasedak_admin_session=${cookie}` });
-  return res.ok ? (res.data ?? null) : null;
+/** آیا مجوز را دارد؟ `*` یعنی مدیر ارشد و همه‌چیز. */
+export function can(permissions: string[], permission: string): boolean {
+  if (!permission) return true;
+  if (permissions.includes("*")) return true;
+  return permissions.includes(permission);
 }
 
-export function can(permissions: string[] | undefined, key: string): boolean {
-  return !!permissions?.includes(key);
+/** نقش‌ها به فارسی — استفاده مشترک بین سایدبار و موبایل */
+export function roleFa(role: string): string {
+  const map: Record<string, string> = {
+    SUPER_ADMIN: "مدیر ارشد",
+    ACCOUNTANT: "حسابدار",
+    STORE_MANAGER: "مدیر فروشگاه",
+    CASHIER: "صندوقدار",
+    INVENTORY_MANAGER: "مدیر انبار",
+    SALES_MANAGER: "مدیر فروش",
+    MARKETING_MANAGER: "مدیر بازاریابی",
+    SUPPORT: "پشتیبانی",
+  };
+  return map[role] ?? role;
 }

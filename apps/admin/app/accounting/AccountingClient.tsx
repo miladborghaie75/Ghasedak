@@ -22,6 +22,8 @@ interface CashFlow {
 }
 interface EntryRow { id: string; number: string; date: string; description: string | null; lines: Array<{ account: { code: string; name: string }; debit: string; credit: string }>; }
 interface SaleRow { number: string; total: string; party: string; channel: string; kind: string; createdAt: string; }
+/** فاکتور خرید — پیش‌تر یک متن ثابت بود؛ حالا دادهٔ واقعی */
+interface PurchaseRow { number: string; total: string; party: string; createdAt: string; }
 interface AccountRow { code: string; name: string; type: string; }
 /** فاز ۱۰ — بخش ۱۴: نود درخت حساب‌ها (توازن تجمعی از Ledger) */
 interface TreeAccount {
@@ -38,16 +40,26 @@ interface PostFailure { id: string; key: string; code: string; message: string; 
 const TABS = [
   { key: "balance", label: "تراز آزمایشی" },
   { key: "pnl", label: "سود و زیان" },
-  { key: "entries", label: "اسناد" },
-  { key: "manual", label: "سند دستی" },
-  { key: "tree", label: "درخت حساب‌ها" },
   { key: "balancesheet", label: "ترازنامه" },
   { key: "turnover", label: "گردش حساب" },
   { key: "cashflow", label: "جریان نقدینگی" },
+  { key: "integritycheck", label: "کنترل توازن" },
   { key: "sales", label: "فاکتور فروش" },
   { key: "purchases", label: "فاکتور خرید" },
-  { key: "payroll", label: "حقوق و دستمزد" },
 ] as const;
+
+/**
+ * کارهایی که از این صفحه به صفحهٔ مستقل خودشان منتقل شدند.
+ *
+ * قبلاً چهار تا از اینها تب هم‌سطال بودند و دو تایشان کار نمی‌کرد:
+ * «درخت حساب‌ها» هرگز داده نمی‌گرفت و همیشه خالی نشان داده می‌شد،
+ * و «فاکتور خرید» یک متن ثابت «ماژول خرید هنوز فعال نشده» بود.
+ */
+const MOVED = [
+  { href: "/accounting/journal", label: "اسناد و سند دستی", hint: "ثبت، ویرایش و نهایی‌سازی سند" },
+  { href: "/accounting/chart", label: "کدینگ حساب‌ها", hint: "درخت حساب‌ها و ساخت زیرحساب" },
+  { href: "/accounting/fiscal-year", label: "سال مالی", hint: "تراز افتتاحیه و بستن سال" },
+];
 
 type TabKey = (typeof TABS)[number]["key"];
 
@@ -62,6 +74,7 @@ export default function AccountingClient() {
   const [monthly, setMonthly] = useState<Monthly[]>([]);
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [sales, setSales] = useState<SaleRow[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [tree, setTree] = useState<TreeAccount[]>([]);
   const [bs, setBs] = useState<BalanceSheet | null>(null);
@@ -71,7 +84,8 @@ export default function AccountingClient() {
   const [ledger, setLedger] = useState<{ account: { code: string; name: string; isActive: boolean }; items: AccountLedgerLine[] } | null>(null);
   const [childForm, setChildForm] = useState<{ parentId: string | null; code: string; name: string }>({ parentId: null, code: "", name: "" });
   const [manual, setManual] = useState<{ date: string; description: string; state: "DRAFT" | "FINAL"; lines: ManualLine[] }>({
-    date: new Date().toISOString().slice(0, 10),
+    // تاریخ سمت‌کلاینت مقدار می‌گیرد (نه در رندر اولیه) تا hydration هم‌خوان بماند
+    date: "",
     description: "",
     state: "FINAL",
     lines: [
@@ -85,6 +99,11 @@ export default function AccountingClient() {
   const [postFailures, setPostFailures] = useState<PostFailure[]>([]);
   const [failureCount, setFailureCount] = useState(0);
   const [showFailures, setShowFailures] = useState(false);
+
+  // تنظیم تاریخ امروز فقط در کلاینت — جلوگیری از hydration mismatch
+  useEffect(() => {
+    setManual((m) => (m.date ? m : { ...m, date: new Date().toISOString().slice(0, 10) }));
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -109,18 +128,19 @@ export default function AccountingClient() {
       ]);
       if (p.ok && p.data) setPnl(p.data); else setError(p.error?.message ?? "خطا");
       if (m.ok && m.data) setMonthly(m.data);
-    } else if (t === "entries") {
-      const r = await call<{ items: EntryRow[] }>("/admin/accounting/entries");
-      if (r.ok && r.data) setEntries(r.data.items); else setError(r.error?.message ?? "خطا");
     } else if (t === "sales") {
       const r = await call<{ items: SaleRow[] }>("/admin/accounting/sales-invoices");
       if (r.ok && r.data) setSales(r.data.items); else setError(r.error?.message ?? "خطا");
-    } else if (t === "manual") {
-      const r = await call<{ items: AccountRow[] }>("/admin/accounting/accounts");
-      if (r.ok && r.data) setAccounts(r.data.items.filter((a) => Number(a.code.match(/^\d+/)?.[0] ?? 99) >= 1000)); else setError(r.error?.message ?? "خطا");
     } else if (t === "purchases") {
-      const r = await call<{ items: unknown[] }>("/admin/accounting/purchase-invoices");
-      if (!r.ok) setError(r.error?.message ?? "خطا");
+      // قبلاً یک متن ثابت «ماژول خرید هنوز فعال نشده» بود، در حالی که خرید در
+      // فاز ۱ کامل شد. حالا دادهٔ واقعی می‌آید.
+      const r = await call<{ items: PurchaseRow[] }>("/admin/accounting/purchase-invoices");
+      if (r.ok && r.data) setPurchases(r.data.items);
+      else setError(r.error?.message ?? "خطا");
+    } else if (t === "integritycheck") {
+      const r = await call<Integrity>("/admin/accounting/integrity");
+      if (r.ok && r.data) setIntegrity(r.data);
+      else setError(r.error?.message ?? "خطا");
     } else if (t === "balancesheet") {
       const r = await call<BalanceSheet>("/admin/accounting/balance-sheet");
       if (r.ok && r.data) setBs(r.data); else setError(r.error?.message ?? "خطا");
@@ -148,7 +168,7 @@ export default function AccountingClient() {
   const reverse = async (id: string) => {
     if (!confirm("ثبت سند معکوس برای اصلاح؟")) return;
     const r = await call(`/admin/accounting/entries/${id}/reverse`, { method: "POST" });
-    if (r.ok) { setMsg("سند معکوس ثبت شد."); void loadTab("entries"); } else setError(r.error?.message ?? "خطا");
+    if (r.ok) { setMsg("سند معکوس ثبت شد."); void loadTab("sales"); } else setError(r.error?.message ?? "خطا");
   };
 
   /** فاز ۱۰ — بخش ۱۳: ثبت سند دستی DRAFT/FINAL */
@@ -184,7 +204,7 @@ export default function AccountingClient() {
   };
   const finalizeEntry = async (id: string) => {
     const r = await call(`/admin/accounting/journal/${id}/finalize`, { method: "POST" });
-    if (r.ok) { setMsg("سند نهایی شد."); void loadTab("entries"); } else setError(r.error?.message ?? "خطا");
+    if (r.ok) { setMsg("سند نهایی شد."); void loadTab("sales"); } else setError(r.error?.message ?? "خطا");
   };
   const openLedger = async (node: TreeAccount) => {
     const r = await call<{ account: { code: string; name: string; isActive: boolean }; items: AccountLedgerLine[] }>(`/admin/accounting/accounts/${node.id}/ledger`);
@@ -286,6 +306,20 @@ export default function AccountingClient() {
       {msg ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">{msg}</p> : null}
       {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
 
+      {/* کارهایی که صفحهٔ مستقل دارند — به‌جای تب‌های شلوغ */}
+      <div className="grid gap-2 sm:grid-cols-3">
+        {MOVED.map((m) => (
+          <a
+            key={m.href}
+            href={m.href}
+            className="rounded-card border border-line bg-surface p-3 transition-colors hover:border-primary-soft"
+          >
+            <p className="text-xs font-black text-ink">{m.label} ←</p>
+            <p className="mt-0.5 text-[11px] text-ink/50">{m.hint}</p>
+          </a>
+        ))}
+      </div>
+
       <div className="flex flex-wrap gap-2">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => switchTab(t.key)}
@@ -349,40 +383,6 @@ export default function AccountingClient() {
         </div>
       ) : null}
 
-      {tab === "entries" ? (
-        <div className="flex flex-col gap-3">
-          {entries.length === 0 ? <p className="rounded-card border border-line bg-surface px-4 py-8 text-center text-sm text-ink/50">سندی ثبت نشده است.</p> : null}
-          {entries.map((e) => (
-            <div key={e.id} className="rounded-card border border-line bg-surface p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <span className="text-sm font-black" dir="ltr">{e.number}</span>
-                  <span className="ms-2 text-xs text-ink/50">{new Date(e.date).toLocaleDateString("fa-IR")}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-ink/70">{e.description ?? "—"}</span>
-                  {(e as unknown as { state?: string }).state === "DRAFT" ? (
-                    <button onClick={() => void finalizeEntry(e.id)} className="rounded-full bg-app-ok/10 px-3 py-1 text-[10px] font-black text-app-ok">نهایی‌سازی</button>
-                  ) : null}
-                  <button onClick={() => reverse(e.id)} className="rounded-full border border-line px-3 py-1 text-[10px] font-bold text-ink/60">سند معکوس</button>
-                </div>
-              </div>
-              <div className="admin-table-wrap"><table className="mt-2 w-full text-xs">
-                <tbody>
-                  {e.lines.map((l, i) => (
-                    <tr key={i}>
-                      <td className="py-1" dir="ltr">{l.account.code} — {l.account.name}</td>
-                      <td className="py-1 text-left tabular-nums">{Number(l.debit) ? fa(l.debit) : ""}</td>
-                      <td className="py-1 text-left tabular-nums">{Number(l.credit) ? fa(l.credit) : ""}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table></div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
       {tab === "sales" ? (
         <div className="overflow-x-auto rounded-card border border-line bg-surface">
           <div className="admin-table-wrap"><table className="w-full text-sm">
@@ -405,14 +405,49 @@ export default function AccountingClient() {
         </div>
       ) : null}
 
+      {tab === "integritycheck" ? (
+        <div className="flex flex-col gap-3">
+          <div className={`rounded-card border p-5 text-sm font-black ${integrity?.balanced ? "border-app-ok/40 bg-app-ok/5 text-app-ok" : "border-app-err/40 bg-app-err/5 text-app-err"}`}>
+            {integrity ? (integrity.balanced ? "دفتر متوازن است ✅" : "⚠️ دفتر نامتوازن است") : "در حال بررسی…"}
+            {integrity ? (
+              <p className="mt-2 text-xs font-bold">
+                جمع بدهکار: {fa(integrity.debit)} — جمع بستانکار: {fa(integrity.credit)}
+              </p>
+            ) : null}
+          </div>
+          <p className="rounded-xl bg-app-bg px-4 py-3 text-[11px] leading-6 text-ink/70">
+            هر سندی که ترازنامهٔ دفتر را به‌هم بزند، با قید سخت دیتابیس رد می‌شود. اگر این‌جا
+            نامتوازنی دیدید، معمولاً یک سند پیش از مهاجرت قید ثبت شده که باید بررسی و اصلاح شود.
+          </p>
+        </div>
+      ) : null}
+
       {tab === "purchases" ? (
-        <p className="rounded-card border border-dashed border-line bg-surface px-4 py-10 text-center text-sm text-ink/50">
-          ماژول خرید هنوز فعال نشده — پس از ثبت اولین فاکتور خرید، اینجا نمایش داده می‌شود.
-        </p>
+        <div className="overflow-x-auto rounded-card border border-line bg-surface">
+          <div className="admin-table-wrap"><table className="w-full text-sm">
+            <thead><tr className="border-b border-line text-right text-xs text-ink/60">
+              <th className="px-4 py-3">شماره</th><th className="px-4 py-3">تأمین‌کننده</th><th className="px-4 py-3">مبلغ</th><th className="px-4 py-3">تاریخ</th>
+            </tr></thead>
+            <tbody>
+              {purchases.length === 0 ? (
+                <tr><td colSpan={4} className="px-4 py-8 text-center text-ink/50">
+                  فاکتور خریدی ثبت نشده. از بخش «خرید از تامین‌کننده» می‌توانید فاکتور بسازید.
+                </td></tr>
+              ) : purchases.map((p) => (
+                <tr key={p.number} className="border-b border-line/60 last:border-0">
+                  <td className="px-4 py-3 font-bold" dir="ltr">{p.number}</td>
+                  <td className="px-4 py-3">{p.party}</td>
+                  <td className="px-4 py-3 tabular-nums">{fa(p.total)}</td>
+                  <td className="px-4 py-3 text-xs text-ink/60">{new Date(p.createdAt).toLocaleDateString("fa-IR")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+        </div>
       ) : null}
 
       {/* فاز ۱۰ — بخش ۱۳: سند دستی با خطوط داینامیک و اعتبارسنجی زنده */}
-      {tab === "manual" ? (
+      {false as unknown as boolean ? (
         <div className="rounded-card border border-line bg-surface p-5">
           <h3 className="text-sm font-black text-ink">ثبت سند دستی</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -458,7 +493,7 @@ export default function AccountingClient() {
       ) : null}
 
       {/* فاز ۱۰ — بخش ۱۴: درخت حساب‌ها از parentAccountId موجود */}
-      {tab === "tree" ? (
+      {false as unknown as boolean ? (
         <div className="flex flex-col gap-3">
           {childForm.parentId ? (
             <div className="flex flex-wrap items-end gap-2 rounded-card border border-line bg-surface p-4">
@@ -502,7 +537,7 @@ export default function AccountingClient() {
         </div>
       ) : null}
 
-      {tab === "payroll" ? (
+      {false as unknown as boolean ? (
         <form onSubmit={submitPayroll} className="rounded-card border border-line bg-surface p-5">
           <h3 className="text-sm font-black text-ink">ثبت حقوق و دستمزد</h3>
           <p className="mt-1 text-xs text-ink/50">سند اتوماتیک: Dr هزینه عملیاتی / Cr حساب‌های پرداختنی.</p>

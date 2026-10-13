@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useCart } from "@/components/providers/CartProvider";
 import { Field, FaNumberInput } from "@/components/ui/Field";
@@ -11,6 +11,13 @@ import { faNum } from "@/lib/format";
 import { ensureCatalogClient, type ProductV2 } from "@/lib/catalog-repo";
 import type { VariantV2 } from "@/lib/catalog";
 
+/** خواندن توکن CSRF از کوکی (double-submit) و ساخت هدر */
+function csrfHeader(): Record<string, string> {
+  if (typeof document === "undefined") return {};
+  const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
+  return m ? { "x-csrf-token": decodeURIComponent(m[1]) } : {};
+}
+
 /**
  * Checkout مهمان — سه بلوک: اطلاعات تماس، آدرس (با پلاک/واحد — بند ۲۷)، ارسال.
  * اعتبارسنجی inline هنگام submit؛ خطا زیر فیلد.
@@ -19,9 +26,7 @@ import type { VariantV2 } from "@/lib/catalog";
  */
 
 /** کدهای تخفیف نمایشی — در نسخه واقعی از سرور اعتبارسنجی می‌شود */
-const DEMO_COUPONS: Record<string, { percent: number }> = {
-  GHASEDAK10: { percent: 10 },
-};
+/** کد تخفیف فقط از API اعتبارسنجی می‌شود — هیچ تخفیف ساختگی سمت کلاینت وجود ندارد. */
 
 /** روش ارسال از API — id رکورد DB است و به CheckoutInput.shippingMethodId می‌رود */
 export interface ShippingMethodDTO {
@@ -36,13 +41,30 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
   const { lines, clearCart, ready } = useCart();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  // کلید ضدتکرار پایدار برای این سبد — دوبار کلیک همان کلید را می‌فرستد و سرور سفارش دوم را ثبت نمی‌کند
+  const idemRef = useRef<string | null>(null);
   const [couponOpen, setCouponOpen] = useState(false);
   const [couponCode, setCouponCode] = useState("");
-  const [coupon, setCoupon] = useState<{ code: string; percent: number } | null>(null);
+  const [coupon, setCoupon] = useState<{ code: string; percent: number | null; discount: number } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponChecking, setCouponChecking] = useState(false);
 
   const [catalog, setCatalog] = useState<ProductV2[]>([]);
   useEffect(() => { void ensureCatalogClient().then(setCatalog); }, []);
+
+  // دادهٔ جغرافیایی از API (منبع حقیقت: دیتابیس) — استانها + شهرهای هر استان
+  const [provinces, setProvinces] = useState<Array<{ name: string; cities: Array<{ name: string }> }>>([]);
+  const [selectedProvince, setSelectedProvince] = useState("");
+  useEffect(() => {
+    let alive = true;
+    void fetch("/api/geo")
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((b: { items?: Array<{ name: string; cities: Array<{ name: string }> }> }) => {
+        if (alive) setProvinces(b.items ?? []);
+      })
+      .catch(() => { if (alive) setProvinces([]); });
+    return () => { alive = false; };
+  }, []);
 
   // روش‌های ارسال واقعی از API — بدون روش معتبر ثبت سفارش 400 می‌خورد
   const [fetchedMethods, setFetchedMethods] = useState<ShippingMethodDTO[] | null>(null);
@@ -75,7 +97,7 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
   }, [methods, shipping]);
   const activeMethod = methods.find((m) => m.id === shipping);
   const shippingCost = activeMethod ? (activeMethod.freeOverAmount != null && subtotal >= activeMethod.freeOverAmount ? 0 : activeMethod.cost) : 0;
-  const discount = coupon ? Math.round((subtotal * coupon.percent) / 100) : 0;
+  const discount = coupon ? coupon.discount : 0;
   const total = subtotal + shippingCost - discount;
 
   if (ready && lines.length === 0) {
@@ -128,12 +150,16 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
 
     setSubmitting(true);
     // فلو واقعی: ثبت سفارش سرور-محور (قیمت/موجودی/کد تخفیف همگی سمت سرور — بند ۵۱)
-    const idem =
-      (crypto.randomUUID?.() as string | undefined) ?? `co-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    // کلید فقط یک‌بار برای این سبد ساخته می‌شود؛ کلیک دوباره همان کلید را می‌فرستد (ضد سفارش تکراری)
+    if (!idemRef.current) {
+      idemRef.current =
+        (crypto.randomUUID?.() as string | undefined) ?? `co-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+    const idem = idemRef.current;
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-idempotency-key": idem },
+        headers: { "content-type": "application/json", "x-idempotency-key": idem, ...csrfHeader() },
         body: JSON.stringify({
           guestName: String(data.get("name") ?? ""),
           guestMobile: String(data.get("phone") ?? "").replace(/\D/g, "").replace(/^98/, "0"),
@@ -172,6 +198,7 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
       );
       // سبد فقط پس از پاسخ موفق سرور خالی می‌شود؛ redirect به درگاه/صفحه پرداخت
       clearCart();
+      idemRef.current = null; // سبدِ بعدی کلید تازه بگیرد
       window.location.href = body.redirectUrl;
     } catch {
       setErrors({ form: "خطای شبکه؛ اتصال اینترنت را بررسی کنید." });
@@ -179,15 +206,35 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
     }
   };
 
-  const applyCoupon = () => {
+  /**
+   * کد تخفیف را از API می‌پرسد و مبلغ واقعی را برمی‌گرداند.
+   * اگر API در دسترس نباشد، کد پذیرفته می‌شود ولی مبلغ نمایش‌داده‌شده
+   * دست‌نخورده می‌ماند — هرگز تخفیف تخمینی یا ساختگی نشان داده نمی‌شود.
+   */
+  const applyCoupon = async () => {
     const code = couponCode.trim().toUpperCase();
-    const hit = DEMO_COUPONS[code];
-    if (hit) {
-      setCoupon({ code, percent: hit.percent });
-      setCouponError(null);
-    } else {
+    if (!code) return;
+    setCouponChecking(true);
+    try {
+      const res = await fetch(`/api/quote/coupon?code=${encodeURIComponent(code)}&subtotal=${subtotal}`, {
+        signal: AbortSignal.timeout(8_000),
+      });
+      const body = (await res.json().catch(() => null)) as
+        | { valid: boolean; code?: string; discount?: number; percent?: number | null }
+        | null;
+      if (res.ok && body?.valid && body.code) {
+        setCoupon({ code: body.code, percent: body.percent ?? null, discount: body.discount ?? 0 });
+        setCouponError(null);
+      } else {
+        setCoupon(null);
+        setCouponError("کد تخفیف معتبر نیست.");
+      }
+    } catch {
+      // سرویس در دسترس نیست — صادقانه: بدون تخفیف نمایش بده، نه تخفیف ساختگی
       setCoupon(null);
-      setCouponError("کد تخفیف معتبر نیست.");
+      setCouponError("بررسی کد تخفیف ممکن نشد. بدون کد تخفیف ادامه دهید یا دوباره تلاش کنید.");
+    } finally {
+      setCouponChecking(false);
     }
   };
 
@@ -219,7 +266,8 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
             <select
               id="province"
               name="province"
-              defaultValue=""
+              value={selectedProvince}
+              onChange={(e) => setSelectedProvince(e.target.value)}
               aria-invalid={errors.province ? true : undefined}
               aria-describedby={errors.province ? "province-err" : undefined}
               className={cn(
@@ -228,13 +276,34 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
               )}
             >
               <option value="" disabled>انتخاب استان…</option>
-              {["تهران", "البرز", "اصفهان", "فارس", "خراسان رضوی", "آذربایجان شرقی", "گیلان", "مازندران"].map((p) => (
-                <option key={p} value={p}>{p}</option>
+              {provinces.map((p) => (
+                <option key={p.name} value={p.name}>{p.name}</option>
               ))}
             </select>
             {errors.province && <p id="province-err" role="alert" className="text-xs text-error">{errors.province}</p>}
           </div>
-          <Field id="city" name="city" label="شهر" error={errors.city} />
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="city" className="text-sm font-bold text-ink">شهر</label>
+            <select
+              id="city"
+              name="city"
+              key={selectedProvince || "empty"}
+              defaultValue=""
+              disabled={!selectedProvince}
+              aria-invalid={errors.city ? true : undefined}
+              aria-describedby={errors.city ? "city-err" : undefined}
+              className={cn(
+                "h-11 rounded-xl border bg-surface px-3 text-sm text-ink outline-none disabled:opacity-60",
+                errors.city ? "border-error" : "border-line focus:border-primary-strong",
+              )}
+            >
+              <option value="" disabled>{selectedProvince ? "انتخاب شهر…" : "اول استان را انتخاب کنید…"}</option>
+              {(provinces.find((p) => p.name === selectedProvince)?.cities ?? []).map((c) => (
+                <option key={c.name} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+            {errors.city && <p id="city-err" role="alert" className="text-xs text-error">{errors.city}</p>}
+          </div>
           <div className="sm:col-span-2">
             <label htmlFor="address" className="mb-1.5 block text-sm font-bold text-ink">خیابان</label>
             <textarea
@@ -318,7 +387,10 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
             {couponError && <p role="alert" className="mt-2 text-xs text-error">{couponError}</p>}
             {coupon && (
               <p className="mt-2 text-xs font-bold text-success">
-                کد «{coupon.code}» اعمال شد — {faNum(coupon.percent)}٪ تخفیف.
+                کد «{coupon.code}» اعمال شد —{" "}
+                {coupon.percent != null
+                  ? `${faNum(coupon.percent)}٪ تخفیف`
+                  : `${faNum(coupon.discount)} تومان تخفیف`}.
               </p>
             )}
           </div>

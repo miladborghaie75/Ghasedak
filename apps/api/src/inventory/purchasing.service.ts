@@ -1,11 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { InventoryService } from "./inventory.service";
+import { InventoryService, warehouseGlCode } from "./inventory.service";
 import { nextNumber } from "../common/number-series";
 import { EventBusService } from "../events/event-bus.service";
 import { TreasuryService } from "../treasury/treasury.service";
 import { ChecksService } from "../checks/checks.service";
 import { JournalService } from "../accounting/journal.service";
+import { GL, GL_LIABILITIES } from "@ghasedak/contracts";
 
 /**
  * چرخه خرید — بند ۲۷–۲۹/۴۳: PO → GRN (ورود بهایی به انبار + WAC) → Invoice → AP.
@@ -235,18 +236,36 @@ export class PurchasingService {
         await this.inv.updateWacInTx(tx, warehouse.id, line.variantSku, line.qty, unitWithLanded);
       }
       if (po) await tx.purchaseOrder.update({ where: { id: po.id }, data: { status: "RECEIVED" } });
-      // فاز ۱۴ — بند ۱: سند خرید در همان تراکنش — Dr 1200 موجودی کالا (با landedCost) / Cr 2100 بدهی تامین‌کننده.
-      // مبنای بدهی: کل بهای رسید (unitCost×qty + landedCost) — سه‌راهی فاکتور بعداً مطابقت می‌دهد.
-      const totalDebit = lines.reduce((acc, l) => acc + l.unitCost * BigInt(l.qty) + l.landedCost, 0n);
-      if (totalDebit > 0n) {
+
+      /**
+       * سند دریافت کالا — **داخل همین تراکنش**.
+       *
+       * بند ۴۷: GRN → موجودی کالا (1200) / GRNI (2150).
+       * بدهی واقعی به تأمین‌کننده (AP) با فاکتور خرید باز می‌شود، نه با رسید
+       * کالا — وگرنه هم موجودی دوباره می‌شد و هم بدهیِ بی‌فاکتور ثبت می‌شد.
+       *
+       * باگ A2: قبلاً این سند همین‌جا (با Cr 2100) **و** یک بار دیگر در
+       * کنترلر (با Cr 2150) زده می‌شد ⇒ موجودی دوبرابر + بدهی ساختگی.
+       * باگ A3: نسخهٔ کنترلر **بیرون از تراکنش** بود ⇒ شکستش GRN را بی‌سند
+       * رها می‌کرد. حالا فقط همین یک سند، داخل تراکنش، وجود دارد.
+       */
+      const receiptValue = lines.reduce(
+        (acc, l) => acc + l.unitCost * BigInt(l.qty) + l.landedCost,
+        0n,
+      );
+      if (receiptValue > 0n) {
         await this.journal.postOrNotifyInTx(tx, {
-          description: `خرید ${number} از ${supplier.name} — ${lines.length} ردیف`,
+          description: `دریافت کالا ${number} از ${supplier.name} — ${lines.length} ردیف`,
+          // `goods_receipt` نه `purchase`: تست‌ها و گزارش «اسناد خرید» بر اساس
+          // همین مقدار فیلتر می‌کنند و با `purchase` سند پیدا نمی‌شد.
           sourceType: "goods_receipt",
           sourceId: rec.id,
+        warehouseId: input.warehouseId,
           actorId: input.actorId,
           lines: [
-            { accountCode: "1200", debit: Number(totalDebit) },
-            { accountCode: "2100", credit: Number(totalDebit) },
+            // حساب موجودیِ همان انباری که کالا واقعاً در آن است (فاز ۶)
+            { accountCode: await warehouseGlCode(tx, input.warehouseId), debit: Number(receiptValue) },
+            { accountCode: GL_LIABILITIES.GOODS_RECEIVED_NOT_INVOICED, credit: Number(receiptValue) },
           ],
         });
       }
@@ -424,7 +443,7 @@ export class PurchasingService {
         ppvLines.push({ sku, poCost: Number(poItem.unitCost), invoiceCost: Math.round(Number(line.unitCost)) });
       }
     }
-    for (const [sku, g] of grnBySku) {
+    for (const sku of grnBySku.keys()) {
       if (!input.lines.some((l) => String(l.variantSku).trim() === sku)) qtyErrors.push(`${sku}: در فاکتور نیست`);
     }
     if (qtyErrors.length > 0) {
@@ -471,6 +490,43 @@ export class PurchasingService {
         where: { id: sa.id },
         data: { outstanding: { increment: BigInt(grandTotal) } },
       });
+
+      /**
+       * سند فاکتور — **داخل همین تراکنش** (باگ A3).
+       *
+       * بند ۴۷/۴۸: بستن GRNI و باز کردن AP واقعی. اختلاف (حمل/تخفیف/مالیات)
+       * به انبار می‌رود ⇒ همیشه متوازن:
+       *   Dr GRNI (ارزش GRN) + [Dr 1200 اگر فاکتور بیشتر / Cr 1200 اگر کمتر]
+       *   / Cr AP (جمع فاکتور)
+       *
+       * قبلاً این سند در کنترلر و **بیرون از تراکنش** زده می‌شد: اگر شکست
+       * می‌خورد، فاکتور و بدهی ثبت می‌شدند ولی دفتر بی‌خبر می‌ماند.
+       */
+      const grnForJournal = await tx.goodsReceipt.findUnique({
+        where: { id: input.grnId },
+        include: { items: true },
+      });
+      const grnTotal = (grnForJournal?.items ?? []).reduce(
+        (acc, i) => acc + Number(i.unitCost) * i.qty + Number(i.landedCost),
+        0,
+      );
+      if (grandTotal > 0 || grnTotal > 0) {
+        const diff = grandTotal - grnTotal;
+        const lines: Array<{ accountCode: string; debit?: number; credit?: number }> = [
+          { accountCode: GL_LIABILITIES.GOODS_RECEIVED_NOT_INVOICED, debit: grnTotal },
+        ];
+        if (diff > 0) lines.push({ accountCode: GL.INVENTORY, debit: diff });
+        if (diff < 0) lines.push({ accountCode: GL.INVENTORY, credit: -diff });
+        if (grandTotal > 0) lines.push({ accountCode: GL_LIABILITIES.PAYABLE, credit: grandTotal });
+        await this.journal.postOrNotifyInTx(tx, {
+          description: `فاکتور خرید ${number}`,
+          sourceType: "purchase_invoice",
+          sourceId: inv.id,
+          actorId: input.actorId,
+          lines,
+        });
+      }
+
       return inv;
     });
     if (ppvLines.length > 0) {

@@ -1,7 +1,17 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  forwardRef,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { InventoryService } from "./inventory.service";
+import { JournalService } from "../accounting/journal.service";
+import { GL } from "@ghasedak/contracts";
 import { nextNumber } from "../common/number-series";
+import { warehouseGlCode } from "./inventory.service";
 
 /**
  * عملیات انبار — انتقال بین‌انباری، قرنطینه، خرابی/مفقودی، انبارها، دفتر ریسی.
@@ -18,11 +28,36 @@ function qtyPositive(n: unknown, label: string): number {
   return v;
 }
 
+/**
+ * یک نمونهٔ `InventoryOpsService` برای استفادهٔ خارج از DI (تست‌ها).
+ *
+ * تست‌ها سرویس را مستقیم می‌سازند و Nest در آنجا نیست. کمکی لازم است تا
+ * تست بتواند مسیر «سند انتقال بین انبارها» را هم بسنجد (گام ۴ فاز ۲).
+ * در اپ واقعی همیشه سرویس تزریق‌شده استفاده می‌شود.
+ */
+export function standaloneInventoryOpsService(prisma: PrismaService, inv: InventoryService): InventoryOpsService {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { JournalService } = require("../accounting/journal.service") as {
+    JournalService: new (p: PrismaService) => JournalService;
+  };
+  return new InventoryOpsService(prisma, inv, new JournalService(prisma));
+}
+
 @Injectable()
 export class InventoryOpsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inv: InventoryService,
+    /**
+     * سند حسابداری انتقال بین انبارها (گام ۴ فاز ۲).
+     *
+     * `forwardRef` لازم است چون AccountingModule هم InventoryModule را
+     * می‌خواهد؛ بدون آن بوت شکست می‌خورد.
+     *
+     * عمداً اجباری است: نبودش یعنی جابه‌جایی کالا بی‌صدا از ترازنامه حذف
+     * می‌شود، و این همان باگی است که داریم درستش می‌کنیم.
+     */
+    @Inject(forwardRef(() => JournalService)) private readonly journal: JournalService,
   ) {}
 
   // ---------------- انبارها ----------------
@@ -199,6 +234,44 @@ export class InventoryOpsService {
         });
       }
       await tx.stockTransfer.update({ where: { id: t.id }, data: { state: "IN_TRANSIT", confirmedById: actorId } });
+
+      /**
+       * سند انتقال بین انبارها — **در مرحلهٔ ارسال** (گام ۴ فاز ۲).
+       *
+       * منطق: با خروج کالا از انبار مبدأ، موجودی کل دفتر (`1200`) کم می‌شود،
+       * ولی کالا هنوز در شرکت است — در راه. پس آن را در یک حساب داراییی
+       * واسط می‌نشانیم تا **جمع ترازنامه حفظ شود** و در هر لحظه معلوم باشد
+       * چقدر کالا در راه است:
+       *
+       *   Dr 1230 کالای در راه انتقال   = ارزش کالای خارج‌شده از مبدأ
+       *   Cr 1200 موجودی کالا
+       *
+       * در مرحلهٔ «دریافت» برعکس می‌شود (Dr 1200 / Cr 1230) و کالا به مقصد
+       * می‌رسد.
+       *
+       * بدون این سند، جابه‌جایی بین شعب بی‌صدا بود و ارزش موجودی در
+       * ترازنامه با واقعیت انبارها نمی‌خواند.
+       *
+       * ارزش‌گذاری: بهای میانگین همان انبار مبدأ. اگر بها ثبت نشده باشد
+       * سند زده نمی‌شود (مبلغ ساختگی از نبودِ سند بدتر است).
+       */
+      let transferValue = 0n;
+      for (const item of t.items) {
+        const wac = await this.inv.wac(t.fromWarehouseId, item.variantSku);
+        if (wac != null && wac > 0n) transferValue += wac * BigInt(item.qty);
+      }
+      if (transferValue > 0n && this.journal) {
+        await this.journal.postOrNotifyInTx(tx, {
+          description: `انتقال کالا به انبار دیگر — ${t.number}`,
+          sourceType: "stock_transfer",
+          sourceId: t.id,
+          actorId,
+          lines: [
+            { accountCode: GL.GOODS_IN_TRANSIT, debit: Number(transferValue) },
+            { accountCode: await warehouseGlCode(tx, t.fromWarehouseId), credit: Number(transferValue) },
+          ],
+        });
+      }
     });
     await this.audit(actorId, "inventory.transfer.confirm", "StockTransfer", id, { number: t.number });
     return { ok: true };
@@ -224,6 +297,29 @@ export class InventoryOpsService {
         });
       }
       await tx.stockTransfer.update({ where: { id: t.id }, data: { state: "DONE" } });
+
+      /**
+       * سند متناظر دریافت — آینهٔ سند ارسال (گام ۴ فاز ۲):
+       *   Dr 1200 موجودی کالا / Cr 1230 کالای در راه
+       * با این، کالا از حساب واسط خارج و در مقصد بنشیند و جمع ترازنامه ثابت می‌ماند.
+       */
+      let inboundValue = 0n;
+      for (const item of t.items) {
+        const wac = await this.inv.wac(t.toWarehouseId, item.variantSku);
+        if (wac != null && wac > 0n) inboundValue += wac * BigInt(item.qty);
+      }
+      if (inboundValue > 0n && this.journal) {
+        await this.journal.postOrNotifyInTx(tx, {
+          description: `دریافت کالا از انبار دیگر — ${t.number}`,
+          sourceType: "stock_transfer",
+          sourceId: t.id,
+          actorId,
+          lines: [
+            { accountCode: await warehouseGlCode(tx, t.fromWarehouseId), debit: Number(inboundValue) },
+            { accountCode: GL.GOODS_IN_TRANSIT, credit: Number(inboundValue) },
+          ],
+        });
+      }
     });
     await this.audit(actorId, "inventory.transfer.receive", "StockTransfer", id, { number: t.number });
     return { ok: true };

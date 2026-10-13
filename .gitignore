@@ -35,3 +35,16 @@ apps/data/media/
 # فایل آزمایشی و بذر موقت
 /test.jpg
 packages/database/.seed-dist/
+
+# پشتیبان‌های دیتابیس و ریزش‌دادهٔ محلی — داده‌اند، هرگز commit نمی‌شوند
+backup_*/
+backup_*.json
+*-data.json
+tmp-data-export.json
+
+# اسکریپت‌های یک‌بارمصرف موقت (runner خودش tmp-reset-rehearsal.mjs را می‌سازد)
+apps/api/tmp-*.mjs
+apps/api/dev.err
+
+# state ادیتور
+.kilo/

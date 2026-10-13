@@ -2,9 +2,9 @@ import { Controller, Get, Param, Res, NotFoundException } from "@nestjs/common";
 import type { Response } from "express";
 import * as fs from "fs";
 import * as path from "path";
+import { mediaDir, safeMediaPath } from "../common/media-dir";
 
 /** سرو فایل Media — فقط داخل دایرکتوری امن؛ بدون path traversal (بند ۱۱۰) */
-const MEDIA_DIR = process.env.MEDIA_DIR ?? path.resolve(process.cwd(), "../data/media");
 
 @Controller("media")
 export class MediaServeController {
@@ -14,8 +14,8 @@ export class MediaServeController {
     if (!/^[a-zA-Z0-9._-]+$/.test(key) || key.includes("..")) {
       throw new NotFoundException();
     }
-    const safe = path.resolve(MEDIA_DIR, key);
-    if (!safe.startsWith(MEDIA_DIR) || !fs.existsSync(safe)) {
+    const safe = safeMediaPath(key);
+    if (!safe || !fs.existsSync(safe)) {
       throw new NotFoundException();
     }
     const ext = path.extname(key).toLowerCase();

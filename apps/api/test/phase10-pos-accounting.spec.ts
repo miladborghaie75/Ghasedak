@@ -178,7 +178,12 @@ describe("Phase 10 — POS / Treasury / Accounting operations", () => {
     expect(dr).toBe(cr);
     expect(dr).toBe(BigInt(amount) + 200_000n); // 2×100,000 WAC
     expect(entry.lines.find((l) => l.account.code === "5000")?.debit).toBe(200_000n);
-    expect(entry.lines.find((l) => l.account.code === "1200")?.credit).toBe(200_000n);
+    // از فاز ۶، کاهش موجودی روی **حساب اختصاصی همان انبار** می‌نشیند
+    // (`1200-xx`)، نه روی گروه `1200`.
+    const invCredit = entry.lines
+      .filter((l) => (l.account.code === "1200" || l.account.code.startsWith("1200-")) && (l.credit ?? 0n) > 0n)
+      .reduce((a, l) => a + (l.credit ?? 0n), 0n);
+    expect(invCredit).toBe(200_000n);
 
     const after = await prisma.cashAccount.findUniqueOrThrow({ where: { id: "demo-cash-main" } });
     expect(after.currentBalance).toBe(before.currentBalance + BigInt(amount));

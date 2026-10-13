@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { JournalService } from "../accounting/journal.service";
 import { nextNumber } from "../common/number-series";
+import { GL, GL_COGS, GL_EQUITY, GL_EXPENSE, GL_LIABILITIES, GL_REVENUE } from "@ghasedak/contracts";
 
 /**
  * فاز ۸ — خزانه (بند ۵۹–۶۲ سند Master): نقد و بانک به‌عنوان دفتر معین روی GL.
@@ -15,12 +17,34 @@ import { nextNumber } from "../common/number-series";
  *  توجه: روابط Prisma روی CashAccount/BankAccount/CashierShift به include تکیه نمی‌کنیم؛
  *  GL همیشه صریح با glAccountId واکشی می‌شود (مقاوم به کلاینت تولیدشده).
  */
+/**
+ * نگاشت نوع هزینه به حساب زیرحساب (گام ۵ فاز ۲).
+ *
+ * اگر نوع ناشناس باشد، `null` برمی‌گرداند تا فراخوان به `6000` کلی برگردد —
+ * یعنی رفتار قدیمی، نه خطا.
+ */
+function expenseCodeFor(kind: string): string | null {
+  const table: Record<string, string> = {
+    shipping: GL_EXPENSE.SHIPPING_COST,
+    packaging: GL_EXPENSE.PACKAGING,
+    gatewayFee: GL_EXPENSE.GATEWAY_FEE,
+    salary: GL_EXPENSE.SALARY,
+    rent: GL_EXPENSE.RENT,
+    marketing: GL_EXPENSE.MARKETING,
+    utilities: GL_EXPENSE.UTILITIES,
+    bankFee: GL_EXPENSE.BANK_FEE,
+    general: GL_EXPENSE.GENERAL,
+  };
+  return table[kind] ?? null;
+}
+
 @Injectable()
 export class TreasuryService {
-  private static GL_CASH = "1000"; // موجودی نقد — seed
-  private static GL_BANK = "1100"; // بانک — seed
-  private static GL_EQUITY = "3000"; // سرمایه — مقابلِ واریز مالک
-  private static GL_EXPENSE = "6000"; // هزینه‌های عملیاتی — مقابلِ برداشت/هزینه نقدی
+  // کدهای حساب از منبع واحد می‌آیند (packages/contracts/account-codes) — نه رشتهٔ ثابت اینجا
+  private static readonly GL_CASH = GL.CASH; // موجودی نقد — seed
+  private static readonly GL_BANK = GL.BANK; // بانک — seed
+  private static readonly GL_EQUITY = GL_EQUITY.CAPITAL; // سرمایه — مقابلِ واریز مالک
+  private static readonly GL_EXPENSE = GL_EXPENSE.OPERATING; // هزینه‌های عملیاتی — مقابلِ برداشت/هزینه نقدی
 
   constructor(
     private readonly prisma: PrismaService,
@@ -162,16 +186,75 @@ export class TreasuryService {
 
   // ---------------- ساخت حساب ----------------
 
-  async createCashAccount(input: { name: string; kind?: string; glAccountCode?: string; openingBalance?: number; actorId?: string }) {
+  /**
+ * حساب GL برای یک صندوق جدید.
+ *
+ * تصمیم کاربر: هر صندوق و هر بانک **زیرحساب مستقل** بگیرد (گزینهٔ الف).
+ * دلیل: قبلاً همه روی `1000`/`1100` می‌نشستند، پس اگر سه بانک داشته باشید
+ * دفتر هر سه یکی است و مغایرت‌گیری بانکی جواب نمی‌دهد.
+ *
+ * اگر مدیر خودش یک حساب GL را انتخاب کرده، همان استفاده می‌شود.
+ * وگرنه اولین زیرحساب **بی‌استفاده** زیر همان گروه برداشته می‌شود؛ اگر
+ * همه پر شده باشند، زیرشاخهٔ تازه ساخته می‌شود.
+ */
+private async glAccountForNew(kind: "cash" | "bank", explicitCode?: string): Promise<{ id: string; code: string }> {
+    const groupCode = kind === "bank" ? TreasuryService.GL_BANK : TreasuryService.GL_CASH;
+
+    if (explicitCode && explicitCode !== groupCode) {
+      const gl = await this.prisma.account.findUnique({ where: { code: explicitCode } });
+      if (!gl) throw new BadRequestException({ code: "GL_MISSING", message: `حساب GL ${explicitCode} یافت نشد.` });
+      if (!gl.isActive) {
+        throw new BadRequestException({ code: "GL_INACTIVE", message: `حساب ${explicitCode} غیرفعال است.` });
+      }
+      return { id: gl.id, code: gl.code };
+    }
+
+    const group = await this.prisma.account.findUnique({ where: { code: groupCode } });
+    if (!group) throw new BadRequestException({ code: "GL_MISSING", message: `حساب GL ${groupCode} یافت نشد.` });
+
+    // زیرشاخهٔ بی‌استفاده
+    const used = await this.prisma.account.findMany({
+      where: { parentAccountId: group.id, isActive: true },
+      select: { code: true, cashAccounts: { select: { id: true } }, bankAccounts: { select: { id: true } } },
+    });
+    const free = used.find((u) => (kind === "bank" ? u.bankAccounts.length === 0 : u.cashAccounts.length === 0));
+    if (free) {
+      const gl = await this.prisma.account.findUnique({ where: { code: free.code } });
+      return { id: gl!.id, code: gl!.code };
+    }
+
+    // همه پر است → زیرشاخهٔ تازه می‌سازیم
+    const next = used.length + 1;
+    const code = `${groupCode}-${String(next).padStart(2, "0")}`;
+    const created = await this.prisma.account.create({
+      data: {
+        id: randomUUID(),
+        code,
+        name: `${kind === "bank" ? "حساب بانکی" : "صندوق"} شمارهٔ ${String(next).padStart(2, "0")}`,
+        type: "ASSET",
+        parentAccountId: group.id,
+        level: 2,
+        isActive: true,
+      },
+    });
+    return { id: created.id, code: created.code };
+  }
+
+  async createCashAccount(input: {
+    name: string;
+    kind?: string;
+    glAccountCode?: string;
+    openingBalance?: number;
+    actorId?: string;
+  }) {
     const name = (input.name ?? "").trim();
     if (!name) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نام صندوق الزامی است." });
     const kind = input.kind ?? "cash";
     if (!["cash", "bank", "card_settlement", "online_gateway", "petty"].includes(kind)) {
       throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نوع صندوق نامعتبر است." });
     }
-    const glCode = input.glAccountCode ?? (kind === "bank" ? TreasuryService.GL_BANK : TreasuryService.GL_CASH);
-    const gl = await this.prisma.account.findUnique({ where: { code: glCode } });
-    if (!gl) throw new BadRequestException({ code: "GL_MISSING", message: `حساب GL ${glCode} یافت نشد.` });
+    // هر صندوق زیرحساب مستقل خودش را می‌گیرد (تصمیم کاربر — گزینهٔ الف)
+    const gl = await this.glAccountForNew("cash", input.glAccountCode);
     const dup = await this.prisma.cashAccount.findFirst({ where: { name } });
     if (dup) throw new BadRequestException({ code: "DUPLICATE", message: "صندوقی با این نام وجود دارد." });
     // projection از مانده دفتری GL شروع می‌شود — نه از صفر و نه از عدد ساختگی
@@ -179,8 +262,8 @@ export class TreasuryService {
     const acc = await this.prisma.cashAccount.create({
       data: { name, kind, glAccountId: gl.id, openingBalance: opening, currentBalance: opening, active: true },
     });
-    await this.audit(input.actorId, "treasury.cash_account.create", "CashAccount", acc.id, { name, kind, glCode });
-    return acc;
+    await this.audit(input.actorId, "treasury.cash_account.create", "CashAccount", acc.id, { name, kind, glCode: gl.code });
+    return { ...acc, glCode: gl.code };
   }
 
   async createBankAccount(input: { name: string; bankName: string; accountNumber: string; iban?: string; glAccountCode?: string; openingBalance?: number; actorId?: string }) {
@@ -190,17 +273,37 @@ export class TreasuryService {
     if (!name || !bankName || !accountNumber) {
       throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نام/بانک/شماره حساب الزامی است." });
     }
-    const glCode = input.glAccountCode ?? TreasuryService.GL_BANK;
-    const gl = await this.prisma.account.findUnique({ where: { code: glCode } });
-    if (!gl) throw new BadRequestException({ code: "GL_MISSING", message: `حساب GL ${glCode} یافت نشد.` });
+    // هر بانک زیرحساب مستقل خودش را می‌گیرد (تصمیم کاربر — گزینهٔ الف).
+    // بدون این، همهٔ بانک‌ها روی `1100` می‌نشستند و مغایرت‌گیری بانکی
+    // نمی‌تواند بگوید کدام گردش مال کدام بانک است.
+    const gl = await this.glAccountForNew("bank", input.glAccountCode);
     const dup = await this.prisma.bankAccount.findFirst({ where: { name } });
     if (dup) throw new BadRequestException({ code: "DUPLICATE", message: "حساب بانکی با این نام وجود دارد." });
     const opening = await this.glBookBalance(gl.id);
     const acc = await this.prisma.bankAccount.create({
       data: { name, bankName, accountNumber, iban: input.iban ?? null, glAccountId: gl.id, openingBalance: opening, currentBalance: opening, active: true },
     });
-    await this.audit(input.actorId, "treasury.bank_account.create", "BankAccount", acc.id, { name, bankName, glCode });
-    return acc;
+    await this.audit(input.actorId, "treasury.bank_account.create", "BankAccount", acc.id, { name, bankName, glCode: gl.code });
+    return { ...acc, glCode: gl.code };
+  }
+
+  /**
+   * حساب‌های GL قابل انتخاب برای صندوق/بانک.
+   *
+   * فقط حساب‌های دارایی که زیرمجموعهٔ `1000` یا `1100` هستند — چون صندوق
+   * نباید به حساب درآمد یا هزینه وصل شود.
+   */
+  async listGlAccountsFor(kind: "cash" | "bank") {
+    const groupCode = kind === "bank" ? TreasuryService.GL_BANK : TreasuryService.GL_CASH;
+    const group = await this.prisma.account.findUnique({ where: { code: groupCode }, select: { id: true, code: true } });
+    if (!group) return [];
+    const kids = await this.prisma.account.findMany({
+      where: { parentAccountId: group.id, isActive: true },
+      orderBy: { code: "asc" },
+      select: { id: true, code: true, name: true },
+    });
+    const label = kind === "bank" ? "بانک‌ها" : "صندوق‌ها";
+    return [{ id: group.id, code: group.code, name: `${group.code} (گروه — همهٔ ${label})` }, ...kids];
   }
 
   // ---------------- واریز/برداشت/انتقال (بند ۶۱) ----------------
@@ -240,7 +343,17 @@ export class TreasuryService {
     const acc = await this.prisma.cashAccount.findUnique({ where: { id: input.accountId } });
     if (!acc || !acc.active) throw new NotFoundException({ code: "NOT_FOUND", message: "صندوق یافت نشد." });
     const glCode = await this.glCodeOf(acc.glAccountId);
-    const counterCode = input.counterAccountCode ?? TreasuryService.GL_EXPENSE;
+
+    /**
+     * تفکیک نوع هزینه (گام ۵ فاز ۲).
+     *
+     * قبلاً هر برداشت نقدی به `6000` می‌رفت — حقوق، اجاره و کارمزد بانکی
+     * قاطی هم. حالا مدیر می‌تواند بگوید این برداشت چه نوعی است و سند روی
+     * زیرحساب درست بنشیند (فاز ۵ گزارش هزینه را تغذیه می‌کند).
+     */
+    const kind = (input as { expenseKind?: string }).expenseKind;
+    const counterCode: string =
+      input.counterAccountCode ?? expenseCodeFor(kind ?? "") ?? TreasuryService.GL_EXPENSE;
     const counter = await this.prisma.account.findUnique({ where: { code: counterCode } });
     if (!counter) throw new BadRequestException({ code: "GL_MISSING", message: `حساب ${counterCode} یافت نشد.` });
 
@@ -739,7 +852,7 @@ export class TreasuryService {
       sourceId: input.invoiceId,
       actorId: input.actorId,
       lines: [
-        { accountCode: "2100", debit: amount },
+        { accountCode: GL_LIABILITIES.PAYABLE, debit: amount },
         { accountCode: glCode, credit: amount },
       ],
     });
@@ -771,7 +884,7 @@ export class TreasuryService {
       sourceId: input.refundId,
       actorId: input.actorId,
       lines: [
-        { accountCode: "4000", debit: amount },
+        { accountCode: GL_REVENUE.SALES, debit: amount },
         { accountCode: glCode, credit: amount },
       ],
     });
@@ -785,8 +898,8 @@ export class TreasuryService {
         sourceId: input.refundId,
         actorId: input.actorId,
         lines: [
-          { accountCode: "1200", debit: cogsReturn },
-          { accountCode: "5000", credit: cogsReturn },
+          { accountCode: GL.INVENTORY, debit: cogsReturn },
+          { accountCode: GL_COGS.COGS, credit: cogsReturn },
         ],
       });
     }

@@ -34,13 +34,5 @@ export class PublicThemeController {
     };
   }
 
-  /** سکشن‌های منتشرشده صفحه اصلی — فقط PUBLISHED + enabled */
-  @Get("home-sections")
-  async homeSections() {
-    const rows = await this.prisma.homeSection.findMany({
-      where: { enabled: true, publishStatus: "PUBLISHED" },
-      orderBy: { sortOrder: "asc" },
-    });
-    return { items: rows };
-  }
+  /** سکشن‌های صفحه اصلی از صفحه‌ساز زنده (`/cms/page/home`) می‌آیند؛ این مسیر حذف شد. */
 }

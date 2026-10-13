@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Shell } from "@/components/Shell";
-import { getIdentity, can } from "@/lib/session";
+import { can } from "@/lib/session";
+import { getIdentity } from "@/lib/session.server";
 import ProductsClient from "./ProductsClient";
 
 export const dynamic = "force-dynamic";

@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { PrismaModule } from "../prisma/prisma.module";
 import { AccountingModule } from "../accounting/accounting.module";
 import { EventsModule } from "../events/events.module";
@@ -14,7 +14,9 @@ import { InventoryController } from "./inventory.controller";
 import { PurchasingController } from "./purchasing.controller";
 
 @Module({
-  imports: [PrismaModule, AccountingModule, EventsModule, TreasuryModule, ChecksModule],
+  // `forwardRef` چون AccountingModule هم InventoryModule را می‌خواهد
+  // (سند انتقال بین انبارها — گام ۴ فاز ۲). بدون آن، بوت شکست می‌خورد.
+  imports: [PrismaModule, forwardRef(() => AccountingModule), EventsModule, TreasuryModule, ChecksModule],
   providers: [InventoryService, InventoryOpsService, InventoryReportsService, InventorySettingsService, PurchasingService, VendorNotifyService],
   controllers: [InventoryController, PurchasingController],
   exports: [InventoryService, InventoryOpsService, InventoryReportsService, InventorySettingsService, PurchasingService, VendorNotifyService],

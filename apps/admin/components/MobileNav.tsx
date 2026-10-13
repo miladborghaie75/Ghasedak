@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MENU } from "@/lib/menu";
+import { MENU, isSection, type MenuItem, type MenuSection } from "@/lib/menu";
 
 /**
  * ناوبری موبایل — فاز ۱۴ ریسپانسیو کردن پنل.
@@ -40,7 +40,10 @@ export function MobileNav({
 
   const visible = MENU.map((g) => ({
     title: g.title,
-    items: g.items.filter((i) => !i.permission || permissions.includes(i.permission)),
+    items: g.items.filter((i) => {
+      if (isSection(i)) return sectionLeaves(i, permissions).length > 0;
+      return !i.permission || permissions.includes(i.permission);
+    }),
   })).filter((g) => g.items.length > 0);
 
   return (
@@ -90,21 +93,29 @@ export function MobileNav({
                 <div key={group.title} className="mb-4">
                   <div className="mb-1.5 px-2 text-[11px] font-medium text-muted">{group.title}</div>
                   <ul className="space-y-0.5">
-                    {group.items.map((item) => {
-                      const active = pathname === item.href;
-                      return (
+                    {group.items.map((item) =>
+                      isSection(item) ? (
+                        <MobileSection
+                          key={item.title}
+                          section={item}
+                          pathname={pathname}
+                          permissions={permissions}
+                        />
+                      ) : (
                         <li key={item.href}>
                           <Link
                             href={item.href}
                             className={`block rounded-lg px-2.5 py-2 text-sm transition-colors ${
-                              active ? "bg-primary-soft font-bold text-primary-strong" : "text-ink hover:bg-primary-soft"
+                              pathname === item.href
+                                ? "bg-primary-soft font-bold text-primary-strong"
+                                : "text-ink hover:bg-primary-soft"
                             }`}
                           >
                             {item.title}
                           </Link>
                         </li>
-                      );
-                    })}
+                      ),
+                    )}
                   </ul>
                 </div>
               ))}
@@ -130,5 +141,76 @@ export function MobileNav({
         </div>
       ) : null}
     </>
+  );
+}
+
+/** آیتم‌های قابل‌دیدن یک زیربخش */
+function sectionLeaves(section: MenuSection, permissions: string[]): MenuItem[] {
+  if (section.items?.length) {
+    return section.items.filter((i) => !i.permission || permissions.includes(i.permission));
+  }
+  return section.href && (!section.permission || permissions.includes(section.permission))
+    ? [{ title: section.title, href: section.href }]
+    : [];
+}
+
+/**
+ * زیربخش در موبایل — تک‌صفحه‌ای لینک ساده، چندصفحه‌ای تاشو.
+ * همان قاعدهٔ دسکتاپ، چون دو سایدبار باید رفتار یکسان داشته باشند.
+ */
+function MobileSection({
+  section,
+  pathname,
+  permissions,
+}: {
+  section: MenuSection;
+  pathname: string;
+  permissions: string[];
+}) {
+  const leaves = sectionLeaves(section, permissions);
+  if (leaves.length === 1 && !section.items?.length) {
+    const only = leaves[0];
+    const active = pathname === only.href || pathname.startsWith(`${only.href}/`);
+    return (
+      <li>
+        <Link
+          href={only.href}
+          className={`block rounded-lg px-2.5 py-2 text-sm transition-colors ${
+            active ? "bg-primary-soft font-bold text-primary-strong" : "text-ink hover:bg-primary-soft"
+          }`}
+        >
+          {section.title}
+        </Link>
+      </li>
+    );
+  }
+
+  const active = leaves.some((l) => pathname === l.href || pathname.startsWith(`${l.href}/`));
+
+  return (
+    <li>
+      <details open={active} className="group">
+        <summary className="flex cursor-pointer list-none items-center gap-1 rounded-lg px-2.5 py-2 text-sm font-bold text-ink hover:bg-primary-soft">
+          <span className="flex-1">{section.title}</span>
+          <span className="text-[10px] text-muted transition-transform group-open:rotate-90" aria-hidden>
+            ◂
+          </span>
+        </summary>
+        <ul className="space-y-0.5 pr-2">
+          {section.items?.map((i) => (
+            <li key={i.href}>
+              <Link
+                href={i.href}
+                className={`block rounded-lg py-2 pe-2.5 text-[13px] transition-colors ${
+                  pathname === i.href ? "bg-primary-soft font-bold text-primary-strong" : "text-ink hover:bg-primary-soft"
+                }`}
+              >
+                {i.title}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </details>
+    </li>
   );
 }

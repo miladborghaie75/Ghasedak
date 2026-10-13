@@ -9,9 +9,12 @@
 import { useEffect, useState } from "react";
 import { useAdminApi, fa } from "@/components/useAdminApi";
 import ProductPicker, { type PickedVariant } from "@/components/commerce/ProductPicker";
+import ShipmentPanel from "./ShipmentPanel";
 
 interface OrderRow {
   id: string; code: string; status: string; paymentStatus: string;
+  trackingCode?: string | null;
+  shipments?: Array<{ id: string; status: string; trackingCode: string | null; provider: string | null; shippedAt: string | null; deliveredAt: string | null }>;
   total: string; guestName: string | null; guestMobile: string; createdAt: string;
 }
 interface EditLine { sku: string; productName: string; qty: string; }
@@ -35,6 +38,7 @@ export default function OrdersClient() {
   // تاریخچه
   const [revOrder, setRevOrder] = useState<OrderRow | null>(null);
   const [revs, setRevs] = useState<Revision[]>([]);
+  const [shipOrder, setShipOrder] = useState<OrderRow | null>(null);
 
   const canEdit = (permissions ?? []).includes("orders.update");
 
@@ -107,7 +111,12 @@ export default function OrdersClient() {
                 <td className="px-4 py-3 font-bold" dir="ltr">{o.code}</td>
                 <td className="px-4 py-3">{o.guestName ?? "مهمان"}</td>
                 <td className="px-4 py-3 tabular-nums" dir="ltr">{o.guestMobile}</td>
-                <td className="px-4 py-3">{STATUS_FA[o.status] ?? o.status}</td>
+                <td className="px-4 py-3">{STATUS_FA[o.status] ?? o.status}
+                  {/* کد رهگیری پستی — همان چیزی که مشتری می‌بیند */}
+                  {o.trackingCode ? (
+                    <p className="mt-1 text-[10px] font-bold text-primary-strong" dir="ltr">{o.trackingCode}</p>
+                  ) : null}
+                </td>
                 <td className="px-4 py-3">
                   <span className={o.paymentStatus === "PAID" ? "font-bold text-app-ok" : "font-bold text-app-warning"}>
                     {o.paymentStatus === "PAID" ? "پرداخت‌شده" : o.paymentStatus === "PENDING" ? "در انتظار" : o.paymentStatus}
@@ -120,7 +129,28 @@ export default function OrdersClient() {
                     {editable(o) ? (
                       <button onClick={() => void openEdit(o)} className="rounded-full bg-primary px-3 py-1 text-xs font-black text-on-accent">ویرایش</button>
                     ) : null}
+                    {o.paymentStatus === "PAID" ? (
+                      <button
+                        onClick={() => setShipOrder(o)}
+                        className="rounded-full border border-line px-3 py-1 text-xs font-bold"
+                        title="ساخت مرسوله و ثبت کد رهگیری پستی"
+                      >
+                        ارسال
+                      </button>
+                    ) : null}
                     <button onClick={() => void openRevs(o)} className="rounded-full border border-line px-3 py-1 text-xs font-bold">تاریخچه</button>
+                    {/* چاپ فاکتور فروش — فقط سفارش پرداخت‌شده فاکتور معتبر دارد */}
+                    {o.paymentStatus === "PAID" ? (
+                      <a
+                        href={`/orders/invoice-print/${encodeURIComponent(o.code)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-full border border-line px-3 py-1 text-xs font-bold"
+                        title="چاپ فاکتور فروش / ذخیره PDF"
+                      >
+                        چاپ فاکتور
+                      </a>
+                    ) : null}
                   </div>
                 </td>
               </tr>
@@ -198,6 +228,15 @@ export default function OrdersClient() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {shipOrder ? (
+        <ShipmentPanel
+          orderId={shipOrder.id}
+          orderCode={shipOrder.code}
+          paid={shipOrder.paymentStatus === "PAID"}
+          onClose={() => setShipOrder(null)}
+        />
       ) : null}
 
       <ProductPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={addPicked} title="افزودن کالا به سفارش" />

@@ -8,6 +8,8 @@ import { JournalService } from "../accounting/journal.service";
 import { PricingService } from "../pricing/pricing.service";
 import { nextNumber } from "../common/number-series";
 import * as crypto from "crypto";
+import { GL, GL_EXPENSE } from "@ghasedak/contracts";
+import { warehouseGlCode } from "../inventory/inventory.service";
 
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString("hex");
@@ -205,11 +207,16 @@ export class AdminPanelController {
   /** شروع انبارگردانی — snapshot همه واریانت‌های فعال انبار */
   @Post("stocktake")
   @RequirePermission("inventory.stocktake")
-  async startStocktake(@Body() body: { warehouseId?: string; note?: string }) {
+  async startStocktake(@Body() body: { warehouseId?: string; note?: string; toleranceQty?: number }) {
     const warehouse = body.warehouseId
       ? await this.prisma.warehouse.findUnique({ where: { id: body.warehouseId } })
       : await this.prisma.warehouse.findFirst({ where: { type: "main" } }) ?? await this.prisma.warehouse.findFirst();
     if (!warehouse) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "انبار یافت نشد." });
+    // رواداری این انبارگردانی — اگر داده نشود، تنظیم سراسری هنگام بستن اعمال می‌شود
+    const toleranceQty = body.toleranceQty != null ? Number(body.toleranceQty) : 0;
+    if (!Number.isSafeInteger(toleranceQty) || toleranceQty < 0) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "رواداری باید عدد صحیح نامنفی باشد." });
+    }
     const number = await this.prisma.$transaction(async (tx) => nextNumber(tx, "stocktake", "STK", 6));
     const variants = await this.prisma.productVariant.findMany({
       where: { status: "PUBLISHED", product: { deletedAt: null } },
@@ -220,10 +227,11 @@ export class AdminPanelController {
         number,
         warehouseId: warehouse.id,
         note: body.note ?? null,
+        toleranceQty,
         items: { create: variants.map((v) => ({ variantSku: v.sku, systemQty: v.stockQty })) },
       },
     });
-    return { id: st.id, number, items: variants.length };
+    return { id: st.id, number, items: variants.length, toleranceQty };
   }
 
   /** لیست انبارگردانی‌ها */
@@ -271,15 +279,22 @@ export class AdminPanelController {
 
   /**
    * بستن انبارگردانی — اختلاف هر ردیف به‌صورت ADJUSTMENT در Ledger؛
-   * سند حسابداری خسارت/کسر برای کل اختلاف منفی (بها میانگین) صادر می‌شود.
+   * برای هر دو حالت سند حسابداری خودکار صادر می‌شود:
+   *   کسری → بدهکار هزینهٔ کسری (6000) / بستانکار موجودی (1200)
+   *   مازاد → بدهکار موجودی (1200) / بستانکار هزینهٔ کسری (6000)
+   *
+   * چرا برای مازاد هم سند؟ چون مازاد هم یعنی موجودی کالا و بهای آن باید در
+   * دفاتر دیده شود؛ بدون سند، ارزش موجودی فروشگاه با انبار فیزیکی نمی‌خواند
+   * و تراز آزمایشی گمراه می‌شود.
    */
   @Post("stocktake/:id/close")
   @RequirePermission("inventory.stocktake")
   async closeStocktake(@Param("id") id: string, @Body() body: { actorId?: string }) {
     const st = await this.prisma.stocktake.findUnique({ where: { id }, include: { items: true } });
     if (!st || st.state !== "OPEN") throw new BadRequestException({ code: "NOT_OPEN", message: "انبارگردانی بازی نیست." });
-    // بند ۱۰۱: اختلاف‌های بالای تحمل (تنظیم inventory.adjustmentApprovalThreshold) پیش از بستن باید تایید شوند
-    const threshold = await this.settings.get<number>("adjustmentApprovalThreshold");
+    // بند ۱۰۱: اختلاف‌های بالای تحمل پیش از بستن باید تایید شوند —
+    // رواداریِ خودِ این انبارگردانی (toleranceQty) اولویت دارد؛ اگر صفر بود، تنظیم سراسری
+    const threshold = st.toleranceQty > 0 ? st.toleranceQty : await this.settings.get<number>("adjustmentApprovalThreshold");
     const needsApproval = st.items.some((i) => i.countedQty != null && Math.abs((i.countedQty ?? 0) - i.systemQty) > threshold);
     if (needsApproval && !st.approvedById) {
       throw new BadRequestException({
@@ -291,11 +306,48 @@ export class AdminPanelController {
     if (counted.length === 0) throw new BadRequestException({ code: "EMPTY_COUNT", message: "هیچ ردیفی شمارش نشده است." });
 
     let lossValue = 0n;
+    let surplusValue = 0n;
     const adjusted: Array<{ sku: string; diff: number }> = [];
+    /** ردیف‌هایی که بهای واقعی نداشتند و با قیمت فروش بهاگذاری شدند */
+    const noCostSkus: string[] = [];
+
+    /**
+     * بهای واحد یک واریانت — با اولویت و شفاف:
+     *   ۱) بهای خرید ثبت‌شده روی محصول
+     *   ۲) میانگین موزون (CostLayer) در همان انبار
+     *   ۳) قیمت فروش — تقریبی و اعلام‌شده
+     *
+     * چرا این‌قدر سخت‌گیرانه؟ قبلاً اگر costPrice خالی بود، واحد صفر می‌شد و
+     * کل سند حسابداری بی‌صدا حذف می‌شد؛ یعنی موجودی انبار تغییر می‌کرد ولی
+     * دفاتر بی‌خبر می‌ماندند — بدترین حالت ممکن در حسابداری. حالا سند همیشه
+     * ثبت می‌شود و اگر بهای واقعی نبوده، در پاسخ گزارش می‌شود.
+     */
+    const unitCostOf = async (sku: string): Promise<{ cost: number; estimated: boolean }> => {
+      const variant = await this.prisma.productVariant.findUnique({
+        where: { sku },
+        include: { product: { select: { costPrice: true, basePrice: true } } },
+      });
+      if (variant?.product?.costPrice != null) {
+        return { cost: Number(variant.product.costPrice), estimated: false };
+      }
+      const layer = await this.prisma.costLayer.findFirst({
+        where: { warehouseId: st.warehouseId, variantSku: sku },
+        orderBy: { updatedAt: "desc" },
+      });
+      const wac = layer?.avgUnitCost != null ? Number(layer.avgUnitCost) : 0;
+      if (wac > 0) return { cost: wac, estimated: false };
+      const fallback = variant?.product?.basePrice != null ? Number(variant.product.basePrice) : 0;
+      return { cost: fallback, estimated: true };
+    };
+
     for (const item of counted) {
       const diff = item.countedQty! - item.systemQty;
       if (diff === 0) continue;
+      const { cost: unitCost, estimated } = await unitCostOf(item.variantSku);
+      if (estimated) noCostSkus.push(item.variantSku);
+
       if (diff > 0) {
+        surplusValue += BigInt(diff * unitCost);
         await this.inv.move({
           warehouseId: st.warehouseId,
           variantSku: item.variantSku,
@@ -308,11 +360,6 @@ export class AdminPanelController {
           note: `انبارگردانی ${st.number} — مازاد`,
         });
       } else {
-        const variant = await this.prisma.productVariant.findUnique({
-          where: { sku: item.variantSku },
-          include: { product: { select: { costPrice: true } } },
-        });
-        const unitCost = variant?.product?.costPrice != null ? Number(variant.product.costPrice) : 0;
         lossValue += BigInt(-diff * unitCost);
         await this.inv.move({
           warehouseId: st.warehouseId,
@@ -323,25 +370,53 @@ export class AdminPanelController {
           refId: st.id,
           idempotencyKey: `stk:${st.id}:${item.variantSku}`,
           actorId: body.actorId,
-          note: `انبارگردانی ${st.number} — کسری` + (variant?.barcode ? ` [بارکد ${variant.barcode}]` : ""),
+          note: `انبارگردانی ${st.number} — کسری`,
         });
       }
       adjusted.push({ sku: item.variantSku, diff });
     }
+
+    // حساب موجودیِ همان انباری که انبارگردانی در آن انجام شده (فاز ۶)
+    const stInvCode = await warehouseGlCode(this.prisma, st.warehouseId);
+
+    // سند کسری — هزینه بدهکار، موجودی بستانکار
     if (lossValue > 0n) {
       await this.journal.postOrNotify({
         description: `کسری انبارگردانی ${st.number}`,
         sourceType: "stocktake",
         sourceId: st.id,
+        warehouseId: st.warehouseId,
         actorId: body.actorId,
         lines: [
-          { accountCode: "6000", debit: Number(lossValue) },
-          { accountCode: "1200", credit: Number(lossValue) },
+          { accountCode: GL_EXPENSE.OPERATING, debit: Number(lossValue) },
+          { accountCode: stInvCode, credit: Number(lossValue) },
         ],
       });
     }
+
+    // سند مازاد — موجودی بدهکار، هزینهٔ کسری بستانکار (آینهٔ سند بالا)
+    if (surplusValue > 0n) {
+      await this.journal.postOrNotify({
+        description: `مازاد انبارگردانی ${st.number}`,
+        sourceType: "stocktake",
+        sourceId: st.id,
+        warehouseId: st.warehouseId,
+        actorId: body.actorId,
+        lines: [
+          { accountCode: stInvCode, debit: Number(surplusValue) },
+          { accountCode: GL_EXPENSE.OPERATING, credit: Number(surplusValue) },
+        ],
+      });
+    }
+
     await this.prisma.stocktake.update({ where: { id: st.id }, data: { state: "CLOSED", closedAt: new Date() } });
-    return { adjusted: adjusted.length, lossValue: lossValue.toString() };
+    return {
+      adjusted: adjusted.length,
+      lossValue: lossValue.toString(),
+      surplusValue: surplusValue.toString(),
+      // اگر بهای واقعی نبود، به اپراتور می‌گوییم تا بهای خرید را وارد کند
+      noCostSkus: [...new Set(noCostSkus)],
+    };
   }
 
   /** عملیات گروهی وضعیت واریانت (فعال/غیرفعال) */

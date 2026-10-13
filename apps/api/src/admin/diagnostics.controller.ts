@@ -5,6 +5,7 @@ import { HealthService } from "../health/health.service";
 import { RequirePermission } from "../auth/permissions.guard";
 import { readBackupDirInfo, listBackupDirs, BACKUP_DIR, BACKUP_TASK_NAME } from "./backup-status.controller";
 import { readScheduledTask } from "./backup-status.controller";
+import { mediaDir } from "../common/media-dir";
 
 /**
  * بند ۸ — مرکز عیب‌یابی: یک endpoint تجمیعی «وضعیت واقعی سیستم» برای اپراتور پنل.
@@ -87,7 +88,7 @@ export class DiagnosticsController {
   }
 
   private async checkStorage(): Promise<Check> {
-    const dir = process.env.MEDIA_DIR ?? "N/A";
+    const dir = mediaDir();
     const { r, e, ms } = await this.timed(async () => {
       const root = fs.existsSync(dir) ? dir : null;
       if (!root) return null;

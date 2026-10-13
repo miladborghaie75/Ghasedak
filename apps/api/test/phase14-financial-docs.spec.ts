@@ -51,7 +51,7 @@ describe("Phase 14 item 1 — financial documents", () => {
     await prisma.$disconnect();
   });
 
-  it("GRN: سند Dr 1200 / Cr 2100 به مبلغ بهای رسید ساخته می‌شود", async () => {
+  it("GRN: سند Dr 1200 / Cr 2150 (GRNI) ساخته می‌شود — نه Dr 1200 / Cr 2100", async () => {
     // تامین‌کنندهٔ تستی + واریانت تستی با cleanup
     const supplier = await prisma.supplier.create({ data: { name: "تست تامین GRN (spec)" } });
     const warehouse = await prisma.warehouse.findFirst({ where: { active: true } });
@@ -74,10 +74,31 @@ describe("Phase 14 item 1 — financial documents", () => {
       include: { lines: { include: { account: true } } },
     });
     expect(je).toBeTruthy();
-    const dr1200 = je!.lines.filter((l) => l.account.code === "1200" && l.debit > 0).reduce((s, l) => s + Number(l.debit), 0);
-    const cr2100 = je!.lines.filter((l) => l.account.code === "2100" && l.credit > 0).reduce((s, l) => s + Number(l.credit), 0);
+    // سند دریافت کالا: Dr 1200 موجودی / Cr 2150 کالای دریافتی‌صورت‌حساب‌نشده (GRNI)
+    //
+    // تغییر در فاز ۱ (باگ A2): این تست قبلاً `Cr 2100` (بدهی تامین‌کننده) را
+    // انتظار می‌داشت، ولی آن رفتار **غلط** بود و در باگ A2 به این خود رسید که
+    // هر GRN دو سند می‌زد: یکی اینجا (Cr 2100) و یکی در کنترلر (Cr 2150).
+    // نتیجه: موجودی کالا دوبرابر + بدهی‌ای که هیچ فاکتوری پشتش نبود.
+    //
+    // سند درست (بند ۴۷): بدهی واقعی (AP) فقط با **فاکتور خرید** باز می‌شود؛ تا
+    // آن زمان کالای دریافتی در حساب GRNI می‌ماند تا در ترازنامه قابل ردیابی باشد.
+    // از فاز ۶، موجودی روی **حساب اختصاصی همان انبار** می‌نشیند
+    // (`1200-93` و…) نه روی گروه `1200`. پس هر خط بدهکارِ زیرمجموعهٔ
+    // ۱۲۰۰ قبول است — چه گروه باشد چه زیرحساب انبار.
+    const isInv = (code: string) => code === "1200" || code.startsWith("1200-");
+    const dr1200 = je!.lines.filter((l) => isInv(l.account.code) && l.debit > 0).reduce((s, l) => s + Number(l.debit), 0);
+    const crGrni = je!.lines.filter((l) => l.account.code === "2150" && l.credit > 0).reduce((s, l) => s + Number(l.credit), 0);
+    const crAp = je!.lines.filter((l) => l.account.code === "2100" && l.credit > 0).reduce((s, l) => s + Number(l.credit), 0);
     expect(dr1200).toBe(expected);
-    expect(cr2100).toBe(expected);
+    expect(crGrni).toBe(expected);
+    expect(crAp).toBe(0); // بدون فاکتور، بدهی تأمین‌کننده نباید باز شود
+
+    // و سند دومی نباید وجود داشته باشد (یعنی A2 واقعاً رفع شده)
+    const entriesForGrn = await prisma.journalEntry.findMany({
+      where: { sourceId: grn.id, sourceType: "goods_receipt" },
+    });
+    expect(entriesForGrn.length).toBe(1);
     // WAC به‌روز شده
     const wac = await inv.wac(warehouse!.id, sku);
     expect(wac).toBe(BigInt(unitCost));
@@ -125,7 +146,9 @@ describe("Phase 14 item 1 — financial documents", () => {
     const dr4000 = je!.lines.filter((l) => l.account.code === "4000" && l.credit > 0).reduce((s, l) => s + Number(l.credit), 0);
     expect(dr4000).toBe(240000);
     const dr5000 = je!.lines.filter((l) => l.account.code === "5000" && l.debit > 0).reduce((s, l) => s + Number(l.debit), 0);
-    const cr1200 = je!.lines.filter((l) => l.account.code === "1200" && l.credit > 0).reduce((s, l) => s + Number(l.credit), 0);
+    // از فاز ۶: کاهش موجودی روی حساب اختصاصی انبار (`1200-xx`)
+    const isInv = (code: string) => code === "1200" || code.startsWith("1200-");
+    const cr1200 = je!.lines.filter((l) => isInv(l.account.code) && l.credit > 0).reduce((s, l) => s + Number(l.credit), 0);
     expect(dr5000).toBe(Number(unitCost) * 2); // 100000
     expect(cr1200).toBe(Number(unitCost) * 2);
     const dr = je!.lines.reduce((s, l) => s + Number(l.debit), 0);

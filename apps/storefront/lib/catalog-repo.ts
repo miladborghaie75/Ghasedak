@@ -41,6 +41,10 @@ function apiOrigin(): string {
 
 function toV2(raw: Record<string, unknown>): ProductV2 {
   const variants = (raw.variants ?? []) as Array<Record<string, unknown>>;
+  // عکس اصلی — API آن را /api/media/<key> می‌دهد؛ به /media/<key> نرمال می‌شود
+  // تا با ریرایت هم‌مبدأ فروشگاه سرو شود (بند ۵۱ — داده دستکاری نمیشود، فقط مسیر)
+  const rawImage = (raw.image as string) ?? null;
+  const image = rawImage ? rawImage.replace(/^\/api\/media\//, "/media/") : null;
   return {
     id: String(raw.id),
     slug: String(raw.slug),
@@ -50,6 +54,7 @@ function toV2(raw: Record<string, unknown>): ProductV2 {
     short: (raw.short as string) ?? "",
     attributeIds: (raw.attributeIds as string[]) ?? [],
     createdAt: String(raw.createdAt ?? new Date().toISOString()),
+    image,
     variants: variants.map((v) => {
       const out: VariantV2 = {
         id: String(v.id),
@@ -125,7 +130,8 @@ export function hydrateCatalog(products: ProductV2[]): void {
 
 export async function ensureCatalogClient(): Promise<ProductV2[]> {
   const cached = g.__ghCatalog;
-  if (cached && cached.products.length > 0) return cached.products;
+  // TTL کلاینت: موجودی/قیمت بعد از خرید نباید تا ابد کهنه بماند — هر ۶۰ ثانیه تازه شود
+  if (cached && cached.products.length > 0 && Date.now() - cached.fetchedAt < TTL_MS) return cached.products;
   if (g.__ghCatalogInflight) return g.__ghCatalogInflight;
   const task = (async () => {
     try {
@@ -134,10 +140,12 @@ export async function ensureCatalogClient(): Promise<ProductV2[]> {
         const body = (await res.json()) as { items: Array<Record<string, unknown>> };
         const products = body.items.map(toV2);
         hydrateCatalog(products);
+        // hydrateCatalog فقط کش خالی را می‌نویسد — اینجا همیشه تازه‌سازی می‌کنیم
+        g.__ghCatalog = { products, fetchedAt: Date.now(), stale: false };
         return products;
       }
-    } catch { /* آفلاین/خطا — خالی برمی‌گردد */ }
-    return [];
+    } catch { /* آفلاین/خطا — کش کهنه بهتر از خالی است */ }
+    return cached?.products ?? [];
   })();
   g.__ghCatalogInflight = task;
   return task;

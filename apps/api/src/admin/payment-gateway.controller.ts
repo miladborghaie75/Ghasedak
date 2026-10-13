@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Inject, Post } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Inject, Param, Patch, Post } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
 import { ZarinpalProvider } from "../payments/zarinpal.provider";
@@ -54,6 +54,81 @@ export class PaymentGatewayController {
       /** فعال به معنای آمادگی آداپتور در payments/start است */
       adapterActive: this.zarinpal.isConfigured(),
     };
+  }
+
+  /**
+ * فهرست درگاه‌ها + تنظیم کارمزد و روزهای تسویه (فاز ۲٫۵ و ۷).
+ *
+ * این‌ها **به‌ازای هر درگاه** ذخیره می‌شوند چون هر درگاه شرایط خودش را دارد:
+ * ترب‌پی یک درصد، اسنپ‌پی یک روز تسویه. تنظیم سراسری جواب نمی‌دهد.
+ *
+ * `feeBorneBy` تعیین می‌کند کارمزد از جیب فروشگاه برود یا خریدار — و این
+ * مستقیماً مسیر سند را عوض می‌کند، پس با هر تغییر سیاست فروشگاه قابل
+ * عوض‌کردن است بدون تغییر کد.
+ */
+  @Get("list")
+  @RequirePermission("payments.view")
+  async list() {
+    const rows = await this.prisma.paymentProvider.findMany({
+      orderBy: [{ active: "desc" }, { priority: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        provider: true,
+        active: true,
+        settlementDays: true,
+        feePercentBps: true,
+        feeFlatToman: true,
+        feeBorneBy: true,
+      },
+    });
+    return {
+      items: rows.map((r) => ({ ...r, feeFlatToman: r.feeFlatToman != null ? String(r.feeFlatToman) : null })),
+    };
+  }
+
+  @Patch(":id")
+  @RequirePermission("payments.manage")
+  async update(
+    @Param("id") id: string,
+    @Body()
+    body: {
+      feePercentBps?: number | null;
+      feeFlatToman?: number | null;
+      feeBorneBy?: "MERCHANT" | "CUSTOMER";
+      settlementDays?: number | null;
+      active?: boolean;
+    },
+  ) {
+    const row = await this.prisma.paymentProvider.findUnique({ where: { id }, select: { id: true } });
+    if (!row) throw new BadRequestException({ code: "NOT_FOUND", message: "درگاه یافت نشد." });
+
+    // دامنه‌ها قید دیتابیسی دارند؛ این‌ها فقط پیام روشن‌تر می‌دهند
+    if (body.feePercentBps != null && (body.feePercentBps < 0 || body.feePercentBps > 10_000)) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "کارمزد باید بین ۰ تا ۱۰۰ درصد باشد." });
+    }
+    if (body.feeFlatToman != null && body.feeFlatToman < 0) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "کارمزد ثابت نمی‌تواند منفی باشد." });
+    }
+    if (body.settlementDays != null && (body.settlementDays < 1 || body.settlementDays > 90)) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "روزهای تسویه باید بین ۱ تا ۹۰ روز باشد." });
+    }
+
+    const updated = await this.prisma.paymentProvider.update({
+      where: { id },
+      data: {
+        ...(body.feePercentBps !== undefined ? { feePercentBps: body.feePercentBps } : {}),
+        ...(body.feeFlatToman !== undefined ? { feeFlatToman: body.feeFlatToman != null ? BigInt(Math.round(body.feeFlatToman)) : null } : {}),
+        ...(body.feeBorneBy !== undefined ? { feeBorneBy: body.feeBorneBy } : {}),
+        ...(body.settlementDays !== undefined ? { settlementDays: body.settlementDays } : {}),
+        ...(body.active !== undefined ? { active: body.active } : {}),
+      },
+      select: {
+        id: true, name: true, provider: true, active: true,
+        settlementDays: true, feePercentBps: true, feeFlatToman: true, feeBorneBy: true,
+      },
+    });
+    return { ...updated, feeFlatToman: updated.feeFlatToman != null ? String(updated.feeFlatToman) : null };
   }
 
   /** تست اتصال واقعی — درخواست پرداخت آزمایشی سندباکس زرین‌پال (بدون ساخت Attempt سفارش) */

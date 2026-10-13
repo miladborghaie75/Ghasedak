@@ -17,6 +17,7 @@ import { RequirePermission } from "../auth/permissions.guard";
 import { NotificationDispatcherService } from "../events/notification-dispatcher.service";
 import { SMS_PROVIDERS, SmsProvidersService, SmsProviderId } from "../events/sms-providers.service";
 import { CredentialsService } from "./credentials.service";
+import { mediaDir, safeMediaPath } from "../common/media-dir";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -35,7 +36,7 @@ const ALLOWED = new Map<string, { ext: string; magic: number[] }>([
   ["application/pdf", { ext: ".pdf", magic: [0x25, 0x50, 0x44, 0x46] }],
 ]);
 const MAX_UPLOAD = 10 * 1024 * 1024; // 10MB
-const MEDIA_DIR = process.env.MEDIA_DIR ?? path.resolve(process.cwd(), "../data/media");
+// MEDIA_DIR از common/media-dir می‌آید تا آپلود، سرو و پایش هرگز مسیر متفاوت نداشته باشند.
 
 /**
  * خواندن ابعاد تصویر از خود بایت‌ها (بدون وابستگی خارجی) — فاز ۱۴ شکاف رسانه.
@@ -179,7 +180,7 @@ export class CapabilitiesController {
   // ================== Media Library (بند ۳۵) ==================
   @Post("media")
   @RequirePermission("media.manage")
-  async upload(@Body() body: { filename: string; mime: string; dataBase64: string; alt?: string }) {
+  async upload(@Body() body: { filename: string; mime: string; dataBase64: string; alt?: string; title?: string }) {
     if (!body.dataBase64 || !body.mime || !ALLOWED.has(body.mime)) {
       throw new BadRequestException({ code: "MEDIA_TYPE", message: "فرمت مجاز: jpg/png/webp/pdf" });
     }
@@ -194,16 +195,16 @@ export class CapabilitiesController {
         throw new BadRequestException({ code: "MEDIA_MAGIC", message: "محتوای فایل با فرمت اعلام‌شده هم‌خوان نیست." });
       }
     }
-    fs.mkdirSync(MEDIA_DIR, { recursive: true });
+    fs.mkdirSync(mediaDir(), { recursive: true });
     const key = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}${spec.ext}`;
-    const safe = path.resolve(MEDIA_DIR, key);
-    if (!safe.startsWith(MEDIA_DIR)) throw new BadRequestException({ code: "PATH", message: "مسیر نامعتبر." });
+    const safe = path.resolve(mediaDir(), key);
+    if (!safe.startsWith(mediaDir())) throw new BadRequestException({ code: "PATH", message: "مسیر نامعتبر." });
     fs.writeFileSync(safe, buf);
     const dims = readImageSize(buf); // فاز ۱۴: ابعاد از محتوای واقعی فایل
     const media = await this.prisma.media.create({
-      data: { kind: body.mime === "application/pdf" ? "doc" : "image", storageKey: key, mime: body.mime, sizeBytes: BigInt(buf.length), width: dims?.w ?? null, height: dims?.h ?? null, alt: body.alt ?? null },
+      data: { kind: body.mime === "application/pdf" ? "doc" : "image", storageKey: key, mime: body.mime, sizeBytes: BigInt(buf.length), width: dims?.w ?? null, height: dims?.h ?? null, alt: body.alt ?? null, title: body.title ?? null },
     });
-    return { id: media.id, url: `/api/media/${key}`, key };
+    return { id: media.id, url: `/api/media/${key}`, storageKey: key, alt: media.alt, title: media.title, key };
   }
 
   @Get("media")
@@ -261,7 +262,7 @@ export class CapabilitiesController {
   async mediaDownload(@Param("id") id: string, @Res() res: Response) {
     const m = await this.prisma.media.findUnique({ where: { id } });
     if (!m) throw new BadRequestException({ code: "NOT_FOUND", message: "فایل یافت نشد." });
-    const buf = readMediaFile(MEDIA_DIR, m.storageKey);
+    const buf = readMediaFile(mediaDir(), m.storageKey);
     if (!buf) throw new BadRequestException({ code: "FILE_MISSING", message: "فایل روی دیسک یافت نشد." });
     res.setHeader("content-type", m.mime);
     res.setHeader("content-length", String(buf.length));
@@ -302,10 +303,10 @@ export class CapabilitiesController {
         throw new BadRequestException({ code: "MEDIA_MAGIC", message: "محتوای فایل با فرمت اعلام‌شده هم‌خوان نیست." });
       }
     }
-    fs.mkdirSync(MEDIA_DIR, { recursive: true });
+    fs.mkdirSync(mediaDir(), { recursive: true });
     const newKey = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}${spec.ext}`;
-    const safeNew = path.resolve(MEDIA_DIR, newKey);
-    if (!safeNew.startsWith(MEDIA_DIR)) throw new BadRequestException({ code: "PATH", message: "مسیر نامعتبر." });
+    const safeNew = path.resolve(mediaDir(), newKey);
+    if (!safeNew.startsWith(mediaDir())) throw new BadRequestException({ code: "PATH", message: "مسیر نامعتبر." });
     fs.writeFileSync(safeNew, buf);
     const newDims = readImageSize(buf); // فاز ۱۴: ابعاد فایل جدید از محتوای واقعی
     const updated = await this.prisma.media.update({
@@ -313,8 +314,8 @@ export class CapabilitiesController {
       data: { storageKey: newKey, mime: body.mime, kind: body.mime === "application/pdf" ? "doc" : "image", sizeBytes: BigInt(buf.length), width: newDims?.w ?? null, height: newDims?.h ?? null },
     });
     // حذف فایل قدیمی — بعد از موفقیت آپدیت (اگر وسطش crash شود فقط فایل یتیم می‌ماند، ردیف خراب نمی‌شود)
-    const oldSafe = path.resolve(MEDIA_DIR, m.storageKey);
-    if (oldSafe.startsWith(MEDIA_DIR) && m.storageKey !== newKey && fs.existsSync(oldSafe)) {
+    const oldSafe = path.resolve(mediaDir(), m.storageKey);
+    if (oldSafe.startsWith(mediaDir()) && m.storageKey !== newKey && fs.existsSync(oldSafe)) {
       try { fs.unlinkSync(oldSafe); } catch { /* فایل قبلی مهم نیست */ }
     }
     return { id: updated.id, url: `/api/media/${newKey}`, key: newKey, ok: true };
@@ -334,8 +335,8 @@ export class CapabilitiesController {
     if (inProducts + inBrands + inCategories > 0) {
       throw new BadRequestException({ code: "MEDIA_IN_USE", message: "فایل در حال استفاده است." });
     }
-    const safe = path.resolve(MEDIA_DIR, m.storageKey);
-    if (safe.startsWith(MEDIA_DIR) && fs.existsSync(safe)) fs.unlinkSync(safe);
+    const safe = safeMediaPath(m.storageKey);
+    if (safe && fs.existsSync(safe)) fs.unlinkSync(safe);
     await this.prisma.media.delete({ where: { id } });
     return { ok: true };
   }
@@ -467,50 +468,8 @@ export class CapabilitiesController {
       daily: [...map.values()].sort((a, b) => a.date.localeCompare(b.date)),
     };
   }
-
-  // ================== صفحه‌ساز — HomeSection (بند ۱۱۷) ==================
-  @Get("home-sections")
-  @RequirePermission("marketing.view")
-  async homeSections() {
-    const items = await this.prisma.homeSection.findMany({ orderBy: { sortOrder: "asc" } });
-    return { items };
-  }
-
-  @Post("home-sections")
-  @RequirePermission("marketing.manage")
-  async createSection(@Body() body: { type: string; config: unknown; sortOrder?: number; enabled?: boolean }) {
-    const allowed = ["HERO", "PRODUCT_CAROUSEL", "PRODUCT_GRID", "CATEGORY_GRID", "BRAND_GRID", "BANNER", "GUIDE_CARDS", "TRUST_CARDS", "NEED_FINDER", "RICH_TEXT", "NEWSLETTER", "IMAGE_TEXT"];
-    if (!allowed.includes(body.type)) {
-      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نوع سکشن نامعتبر است." });
-    }
-    if (typeof body.config !== "object" || body.config == null) {
-      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "config الزامی است." });
-    }
-    return this.prisma.homeSection.create({
-      data: { type: body.type as never, config: body.config as object, sortOrder: body.sortOrder ?? 0, enabled: body.enabled ?? true },
-    });
-  }
-
-  @Post("home-sections/:id")
-  @RequirePermission("marketing.manage")
-  async updateSection(
-    @Param("id") id: string,
-    @Body() body: { config?: unknown; sortOrder?: number; enabled?: boolean; publishStatus?: "DRAFT" | "PUBLISHED" },
-  ) {
-    const data: Record<string, unknown> = {};
-    if (body.config !== undefined) data.config = body.config;
-    if (body.sortOrder !== undefined) data.sortOrder = body.sortOrder;
-    if (body.enabled !== undefined) data.enabled = body.enabled;
-    if (body.publishStatus !== undefined) data.publishStatus = body.publishStatus;
-    return this.prisma.homeSection.update({ where: { id }, data });
-  }
-
-  @Delete("home-sections/:id")
-  @RequirePermission("marketing.manage")
-  async deleteSection(@Param("id") id: string) {
-    await this.prisma.homeSection.delete({ where: { id } });
-    return { ok: true };
-  }
+  // صفحه‌ساز قدیمیِ HomeSection حذف شد؛ جای آن «صفحه‌ساز زنده»
+  // (apps/api/src/cms — جدول CmsPage با انتشار، تاریخچه و پیش‌نمایش) است.
 
   // ================== فاز ۱۱ (P2-B) — Notifications workspace ==================
 

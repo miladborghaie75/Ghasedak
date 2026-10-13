@@ -58,11 +58,6 @@ export function Header() {
 
   return (
     <>
-      {/* نوار اطلاع Demo — صادقانه و همیشه بالای صفحه */}
-      <div className="bg-plum px-4 py-2 text-center text-[11px] font-medium text-on-accent/90">
-        {site.demoNotice}
-      </div>
-
       <header className="sticky top-0 z-40 px-3 pb-2 pt-2 sm:px-4">
         <div className="mx-auto max-w-7xl rounded-blob border border-line bg-surface/95 px-3 shadow-clay-1 backdrop-blur sm:px-5">
           {/* ── موبایل: ردیف ۱ — منو راست، لوگو وسط، اکشن‌ها چپ ── */}

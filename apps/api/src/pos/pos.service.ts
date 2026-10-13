@@ -13,6 +13,8 @@ import { PricingService } from "../pricing/pricing.service";
 import { TreasuryService } from "../treasury/treasury.service";
 import { ChecksService } from "../checks/checks.service";
 import { nextNumber } from "../common/number-series";
+import { GL, GL_COGS, GL_REVENUE } from "@ghasedak/contracts";
+import { warehouseGlCode } from "../inventory/inventory.service";
 
 export interface PosSaleLine {
   sku: string;
@@ -302,18 +304,33 @@ export class PosService {
       let cashAmt = 0;
       let bankAmt = 0;
       let checkAmt = 0;
+      /**
+       * باگ A1 (فاز ۱): فروش اعتباری/کیف‌پول هیچ سطر بدهکاری نمی‌ساخت، پس
+       * مجموع بدهکار از کل فروش کمتر می‌شد و سند نامتوازن می‌شد → کل فاکتور
+       * rollback می‌شد و این روش پرداخت عملاً از کار افتاده بود.
+       *
+       * درست: مبالغ اعتباری/کیف‌پول بدهیِ مشتری است، نه پول نقد. پس روی
+       * حساب دریافتنی تجاری (1210) بدهکار می‌شود.
+       */
+      let creditAmt = 0;
+      let walletAmt = 0;
       for (const p of input.payments) {
         const m = toPosMethod(p.methodCode);
         const amt = Math.round(p.amount);
         if (m === "CASH") cashAmt += amt;
         else if (m === "CARD" || m === "ONLINE" || m === "BANK_TRANSFER") bankAmt += amt;
         else if (m === "CHECK") checkAmt += amt;
+        else if (m === "CREDIT") creditAmt += amt;
+        else if (m === "WALLET") walletAmt += amt;
       }
       const lines: Array<{ accountCode: string; debit?: number; credit?: number }> = [];
-      if (cashAmt > 0) lines.push({ accountCode: "1000", debit: cashAmt });
-      if (bankAmt > 0) lines.push({ accountCode: "1100", debit: bankAmt });
-      if (checkAmt > 0) lines.push({ accountCode: "1220", debit: checkAmt });
-      lines.push({ accountCode: "4000", credit: Number(grandTotal) });
+      if (cashAmt > 0) lines.push({ accountCode: GL.CASH, debit: cashAmt });
+      if (bankAmt > 0) lines.push({ accountCode: GL.BANK, debit: bankAmt });
+      if (checkAmt > 0) lines.push({ accountCode: GL.CHECK_RECEIVABLE, debit: checkAmt });
+      // اعتبار و کیف‌پول: بدهیِ مشتری (Dr) — بدون این، سند نامتوازن و فروش ناممکن
+      if (creditAmt > 0) lines.push({ accountCode: GL.RECEIVABLE_TRADE, debit: creditAmt });
+      if (walletAmt > 0) lines.push({ accountCode: GL.RECEIVABLE_TRADE, debit: walletAmt });
+      lines.push({ accountCode: GL_REVENUE.SALES, credit: Number(grandTotal) });
 
       // فاز ۱۴ — بند ۱: سند بهای تمام‌شدهٔ فروش در همان تراکنش (Dr 5000 / Cr 1200).
       // بهای هر قلم = میانگین انبار (wacInTx) در لحظهٔ مصرف؛ بدون بهای ثبت‌شده → سند COGS زده نمی‌شود
@@ -327,8 +344,8 @@ export class PosService {
         }
       }
       if (cogsTotal > 0n) {
-        lines.push({ accountCode: "5000", debit: Number(cogsTotal) });
-        lines.push({ accountCode: "1200", credit: Number(cogsTotal) });
+        lines.push({ accountCode: GL_COGS.COGS, debit: Number(cogsTotal) });
+        lines.push({ accountCode: await warehouseGlCode(tx, warehouseId), credit: Number(cogsTotal) });
       }
       // تحلیل STEP 2 (درآمد فقط یک‌بار): فروش POS مستقیم = رویداد شناسایی درآمد — چکِ دریافتی خودِ دارایی است
       // (Dr 1220) و Cr 4000 دقیقاً یک‌بار زده می‌شود. جفتِ Dr 1220/Cr 1210 برای جریان دیگری است:
@@ -340,6 +357,8 @@ export class PosService {
         description: `فروش POS ${number} — ${itemLines}`,
         sourceType: "pos_invoice",
         sourceId: invoice.id,
+        // انبار فروش (فاز ۶) — تا گزارش سود هر انبار ممکن شود
+        warehouseId,
         actorId: cashierId,
         lines,
       });

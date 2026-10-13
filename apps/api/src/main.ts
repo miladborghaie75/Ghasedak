@@ -23,21 +23,21 @@ function loadEnvLocal(): void {
 }
 
 async function bootstrap(): Promise<void> {
-  loadEnvLocal();
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: ["error", "warn", "log"] });
+   loadEnvLocal();
+   const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: ["error", "warn", "log"] });
 
-  app.setGlobalPrefix("api/v1");
-  app.enableCors({ origin: corsOrigins(), credentials: true });
-  app.use(helmet({ contentSecurityPolicy: false }));
-  app.useGlobalFilters(new HttpExceptionFilter());
-  // آپلود رسانه base64 در JSON — سقف ~15MB بدنه (فایل ≤10MB بعد از انکودینگ)؛ بند ۳۵
-  app.useBodyParser("json", { limit: "15mb" });
+   app.setGlobalPrefix("api/v1");
+   app.enableCors({ origin: corsOrigins(), credentials: true });
+   app.use(helmet({ contentSecurityPolicy: false }));
+   app.useGlobalFilters(new HttpExceptionFilter());
+   // آپلود رسانه base64 در JSON — سقف ~15MB بدنه (فایل ≤10MB بعد از انکودینگ)؛ بند ۳۵
+   app.useBodyParser("json", { limit: "15mb" });
 
-  const rawPort = process.env.PORT;
-  const port = rawPort && Number(rawPort) > 0 ? Number(rawPort) : 4000;
-  await app.listen(port);
-  // eslint-disable-next-line no-console
-  console.log(`[ghasedak-api] listening on :${port}`);
+   const rawPort = process.env.PORT;
+   const port = rawPort && Number(rawPort) > 0 ? Number(rawPort) : 4000;
+   await app.listen(port);
+   // eslint-disable-next-line no-console
+   console.log(`[ghasedak-api] listening on :${port}`);
 }
 
 function corsOrigins(): string[] {

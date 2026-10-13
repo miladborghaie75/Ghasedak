@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Shell } from "@/components/Shell";
-import { getIdentity, can } from "@/lib/session";
+import { can } from "@/lib/session";
+import { getIdentity } from "@/lib/session.server";
 
 /** Wrapper سرورِ صفحات ادمین — سشن + مجوز سپس کلاینت (بند ۷) */
 export default async function PageShell({

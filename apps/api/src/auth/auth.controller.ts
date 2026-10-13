@@ -37,7 +37,13 @@ export class AuthController {
   @HttpCode(204)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
     await this.auth.logout(req);
-    res.clearCookie(SESSION_COOKIE, { path: "/" });
+    // پاک‌کردن با همان ویژگی‌های ست‌شدن (httpOnly/sameSite/secure/path) تا حذف کوکی قطعی باشد
+    res.clearCookie(SESSION_COOKIE, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    });
   }
 
   @Get("me")

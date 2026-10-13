@@ -9,7 +9,7 @@
 import "reflect-metadata";
 import { BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../src/prisma/prisma.service";
-import { ProductsService } from "../src/products/products.service";
+import { ProductsService, standaloneProductsService } from "../src/products/products.service";
 import { OrdersService } from "../src/orders/orders.service";
 import { PricingService } from "../src/pricing/pricing.service";
 import { EventBusService } from "../src/events/event-bus.service";
@@ -28,7 +28,9 @@ describe("Phase 14 wave1 — product opening stock is purchasable", () => {
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-    products = new ProductsService(prisma);
+    // کمکیِ تست: `JournalService` را هم می‌دهد تا مسیر «سند موجودی آغازین»
+    // در تست پوشش داده شود (در اپ، Nest آن را تزریق می‌کند).
+    products = standaloneProductsService(prisma);
     const inventory = new InventoryService(prisma, new InventorySettingsService(prisma));
     orders = new OrdersService(prisma, inventory, new PricingService(prisma, new EventBusService(prisma)));
     // روش ارسال واقعی از DB — همان قرارداد اندپوینت عمومی /shipping/methods

@@ -15,6 +15,25 @@ export class OrdersController {
     return { ...r, idempotencyKey: idem };
   }
 
+  /**
+   * بررسی کد تخفیف — عمومی، تا سبد مبلغ واقعی را نشان دهد.
+   * تخفیف همیشه از همان منطق `createGuestOrder` محاسبه می‌شود؛
+   * هیچ عددی سمت کلاینت ساخته نمی‌شود.
+   */
+  @Get("quote/coupon")
+  async quoteCoupon(@Query() q: { code?: string; subtotal?: string; mobile?: string }) {
+    const subtotal = Number(q.subtotal ?? 0);
+    if (!q.code || !Number.isFinite(subtotal) || subtotal < 0) {
+      return { valid: false as const };
+    }
+    try {
+      // موبایل اختیاری — اگر بود، سهمیهٔ perCustomerLimit هم در پیش‌نمایش رعایت می‌شود
+      return { valid: true as const, ...(await this.orders.quoteCoupon(q.code, subtotal, q.mobile || null)) };
+    } catch {
+      return { valid: false as const };
+    }
+  }
+
   @Post(":id/cancel")
   @RequirePermission("orders.update")
   async cancel(@Param("id") id: string, @Identity() actor?: { userId: string }) {
@@ -57,8 +76,18 @@ export class OrdersController {
     });
   }
 
+  /**
+   * سفارش با کد — دو نسخه:
+   *  - هویت ادمین با `orders.view` → کامل (فاکتور/لیست ادمین)
+   *  - عمومی (مهمانِ پرداخت) → بدون PII (اسم/موبایل/آدرس) — کد سریالی حدس‌پذیر است (ایمنی IDOR)
+   */
   @Get("by-code/:code")
-  byCode(@Param("code") code: string) {
-    return this.orders.byCode(code);
+  async byCode(
+    @Param("code") code: string,
+    @Identity() identity?: { permissions: string[] } | null,
+  ) {
+    const perms = identity?.permissions ?? [];
+    const full = perms.includes("*") || perms.includes("orders.view");
+    return full ? this.orders.byCode(code) : this.orders.byCodePublic(code);
   }
 }
