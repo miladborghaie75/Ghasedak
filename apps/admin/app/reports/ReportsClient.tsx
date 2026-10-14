@@ -121,7 +121,10 @@ interface ChecksResult {
 const faDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("fa-IR") : "—";
 const pct = (v: number | null) => (v == null ? "—" : `${(v * 100).toLocaleString("fa-IR", { maximumFractionDigits: 0 })}٪`);
-const money = (v: number) => fa(v.toLocaleString("fa-IR"));
+// مبلغ → رشتهٔ فارسی. قبلاً اینجا `fa(v.toLocaleString("fa-IR"))` بود؛ یعنی
+// رشتهٔ فارسیِ جداشده دوباره به Number تبدیل می‌شد → «ناعدد» برای همهٔ مبالغ
+// (کشف در گام ۳). fa خودش فرمت فارسی می‌دهد؛ تک‌مرحله کافی است.
+const money = (v: number | null | undefined) => fa(v ?? null);
 
 export default function ReportsClient() {
   const { call, loading } = useAdminApi();
@@ -139,6 +142,11 @@ export default function ReportsClient() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [withinDays, setWithinDays] = useState("30");
+
+  // F0-2 — اکشن «ثبت COGS عقب‌افتاده»: سند مکمل Dr 5000 / Cr موجودی
+  // برای سفارش‌هایی که در لحظهٔ پرداخت بهایشان معلوم نبود. idempotent.
+  const [cogsBusy, setCogsBusy] = useState(false);
+  const [cogsMsg, setCogsMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -170,6 +178,27 @@ export default function ReportsClient() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const runCogsBackfill = useCallback(async () => {
+    setCogsBusy(true);
+    setCogsMsg(null);
+    const r = await call<{ postedCount?: number; postedAmount?: string; scanned?: number; noCostCount?: number }>(
+      "/admin/accounting/cogs/backfill",
+      { method: "POST", body: JSON.stringify({ limit: 50 }) },
+    );
+    setCogsBusy(false);
+    if (r.ok && r.data) {
+      const posted = r.data.postedCount ?? 0;
+      setCogsMsg(
+        posted > 0
+          ? `ثبت شد: ${fa(String(posted))} سند به مبلغ ${fa(r.data.postedAmount ?? "0")} تومان — ${fa(String(r.data.noCostCount ?? 0))} سفارش هنوز بهای ثبت‌شده ندارد`
+          : `سند جدیدی لازم نبود — از ${fa(String(r.data.scanned ?? 0))} سفارش بررسی‌شده، ${fa(String(r.data.noCostCount ?? 0))} سفارش هنوز بهای ثبت‌شده ندارد`,
+      );
+      void load();
+    } else {
+      setCogsMsg(r.error?.message ?? "اجرای بازپرکردن ناموفق بود");
+    }
+  }, [call, load]);
 
   return (
     <div className="space-y-4">
@@ -221,11 +250,20 @@ export default function ReportsClient() {
           <button onClick={() => void load()} className="h-9 rounded-full border border-line px-3 text-[11px] font-bold">
             تازه‌سازی
           </button>
+          <button
+            onClick={() => void runCogsBackfill()}
+            disabled={cogsBusy}
+            title="برای سفارش‌های پرداخت‌شده‌ای که سند فروش‌شان سطر ۵۰۰۰ ندارد، سند مکمل ثبت می‌کند"
+            className="h-9 rounded-full border border-app-primary/40 px-3 text-[11px] font-bold text-app-primary-strong disabled:opacity-50"
+          >
+            {cogsBusy ? "در حال ثبت…" : "ثبت COGS عقب‌افتاده"}
+          </button>
         </div>
       </div>
 
       {busy && <p className="text-xs text-ink/50">در حال محاسبه…</p>}
       {error && <p className="rounded-xl bg-app-err/10 px-4 py-2 text-xs font-bold text-app-err">{error}</p>}
+      {cogsMsg && <p className="rounded-xl bg-app-primary/10 px-4 py-2 text-xs font-bold text-app-primary-strong">{cogsMsg}</p>}
 
       {/* ── بدهکاران و بستانکاران ── */}
       {tab === "ar-ap" && arAp && (

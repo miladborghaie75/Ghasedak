@@ -31,7 +31,9 @@ export class ProfitController {
 
     const lines = await this.prisma.journalLine.findMany({
       where: {
-        entry: { date: { gte: from, lte: to }, sourceType: "order" },
+        // F0-2: سند مکمل COGS (sourceType=`order-cogs-backfill`) هم باید در
+        // KPI دیده شود؛ وگرنه جدول بهای را می‌داند ولی عدد کلی عقب می‌ماند.
+        entry: { date: { gte: from, lte: to }, sourceType: { in: ["order", "order-cogs-backfill"] } },
         accountId: { in: [revId, cogsId, ...expenseIds].filter((x): x is string => Boolean(x)) },
       },
       select: { accountId: true, debit: true, credit: true },
