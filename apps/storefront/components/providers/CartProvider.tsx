@@ -71,6 +71,16 @@ function saveLocal(lines: CartLine[], wishlist: string[]) {
   } catch {}
 }
 
+/** مقایسهٔ محتوایی خط‌ها — state بی‌دلیل نباید رفرنس تازه بگیرد (ریشهٔ حلقهٔ F0-1) */
+function linesEqual(a: CartLine[], b: CartLine[]): boolean {
+  return a.length === b.length && a.every((l, i) => l.variantId === b[i].variantId && l.qty === b[i].qty);
+}
+
+/** مقایسهٔ شناسه‌ها — wishlist بدون تغییر محتوایی نباید رفرنس تازه بگیرد */
+function sameIds(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
 /** تمیزکردن خط‌ها — qty نامعتبر نباید شمارنده را خراب کند */
 function sanitize(lines: CartLine[]): CartLine[] {
   return (Array.isArray(lines) ? lines : [])
@@ -86,7 +96,26 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [quickAddKey, setQuickAddKey] = useState<string | null>(null);
   const inFlight = useRef(false);
 
-  /** خواندن سبد از سرور — منبع حقیقت */
+  /**
+   * ریشهٔ باگ F0-1: `refresh` به `[wishlist]` وابسته بود و افکت hydrate به
+   * `[refresh]`؛ hydrate هر بار `setWishlist(local.wishlist)` با آرایهٔ تازه
+   * می‌زد → وابستگی تازه → افکت دوباره → حلقهٔ بی‌پایان + سیل `/api/cart`.
+   *
+   * حالا fetchها (refresh/mutate) هویت پایدار دارند و wishlist/lines را از
+   * ref می‌خوانند؛ رفرنس‌های state فقط وقتی محتوا واقعاً عوض شود تغییر می‌کند.
+   */
+  const wishlistRef = useRef<string[]>([]);
+  const linesRef = useRef<CartLine[]>([]);
+
+  // آینهٔ state در ref — خواندن تازه داخل fetchها بدون وابستگی چرخه‌ای
+  useEffect(() => {
+    wishlistRef.current = wishlist;
+  }, [wishlist]);
+  useEffect(() => {
+    linesRef.current = lines;
+  }, [lines]);
+
+  /** خواندن سبد از سرور — منبع حقیقت (هویت پایدار: یک‌بار ساخته میشود) */
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/cart", { cache: "no-store" });
@@ -94,17 +123,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const body = (await res.json().catch(() => null)) as { lines?: CartLine[]; count?: number } | null;
       if (!body) return;
       const next = sanitize(body.lines ?? []);
-      setLines(next);
-      saveLocal(next, wishlist);
+      saveLocal(next, wishlistRef.current);
+      // بدون تفاوت واقعی همان آرایهٔ قبلی برمی‌گردد — رندر و افکت بی‌دلیل حذف می‌شود
+      setLines((prev) => (linesEqual(prev, next) ? prev : next));
     } catch {
       // خطای شبکه — وضعیت محلی حفظ می‌شود (fallback)
     }
-  }, [wishlist]);
+  }, []);
 
   // hydrate اولیه: محلی را سریع نشان بده، بعد سرور را بخوان
+  // (refresh هویت پایدار دارد؛ این افکت فقط یک‌بار اجرا می‌شود)
   useEffect(() => {
     const local = readLocal();
-    setWishlist(local.wishlist);
+    setWishlist((prev) => (sameIds(prev, local.wishlist) ? prev : local.wishlist));
     void refresh().finally(() => setHydrated(true));
   }, [refresh]);
 
@@ -126,7 +157,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     async (method: "POST" | "DELETE", path: string, body?: unknown, optimistic?: CartLine[]) => {
       if (optimistic) {
         setLines(optimistic);
-        saveLocal(optimistic, wishlist);
+        saveLocal(optimistic, wishlistRef.current);
       }
       if (inFlight.current) return;
       inFlight.current = true;
@@ -141,7 +172,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         if (next) {
           const nextLines = sanitize(next.lines ?? []);
           setLines(nextLines);
-          saveLocal(nextLines, wishlist);
+          saveLocal(nextLines, wishlistRef.current);
         }
       } catch {
         // خطای شبکه — وضعیت خوش‌بینانه باقی می‌ماند و دفعه بعد sync می‌شود
@@ -149,7 +180,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         inFlight.current = false;
       }
     },
-    [wishlist],
+    [],
   );
 
   const addLine = useCallback(
@@ -157,7 +188,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const next = sanitize([...lines.filter((l) => l.variantId !== variantId), { variantId, qty: (lines.find((l) => l.variantId === variantId)?.qty ?? 0) + qty }]);
       void mutate("POST", "/api/cart/items", { variantId, qty: next.find((l) => l.variantId === variantId)?.qty ?? qty }, next);
     },
-    [lines, mutate, wishlist],
+    [lines, mutate],
   );
 
   const setQty = useCallback(
@@ -165,7 +196,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const next = sanitize(qty <= 0 ? lines.filter((l) => l.variantId !== variantId) : lines.map((l) => (l.variantId === variantId ? { ...l, qty } : l)));
       void mutate("POST", "/api/cart/items", { variantId, qty }, next);
     },
-    [lines, mutate, wishlist],
+    [lines, mutate],
   );
 
   const removeLine = useCallback(
@@ -173,12 +204,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const next = sanitize(lines.filter((l) => l.variantId !== variantId));
       void mutate("DELETE", `/api/cart/items/${encodeURIComponent(variantId)}`, undefined, next);
     },
-    [lines, mutate, wishlist],
+    [lines, mutate],
   );
 
   const clearCart = useCallback(() => {
     void mutate("DELETE", "/api/cart", undefined, []);
-  }, [mutate, wishlist]);
+  }, [mutate]);
 
   const toggleWishlist = useCallback((productId: string) => {
     setWishlist((prev) =>
@@ -188,12 +219,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  // نگهداری wishlist در localStorage (سمت سرور در فاز بعد)
+  // نگهداری wishlist در localStorage (سمت سرور در فاز بعد) — خط‌ها از ref می‌آید
+  // تا نسخهٔ تازهٔ state روی دیسک بنشیند، نه مقدار قدیمی محبوس در closure
   useEffect(() => {
     if (!hydrated) return;
-    const local = readLocal();
-    if (JSON.stringify(local.wishlist) !== JSON.stringify(wishlist)) saveLocal(lines, wishlist);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    saveLocal(linesRef.current, wishlist);
   }, [wishlist, hydrated]);
 
   /**
