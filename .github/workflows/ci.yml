@@ -79,4 +79,23 @@ jobs:
       - name: seed دمو (همان دادهٔ مستندشدهٔ DEMO)
         run: pnpm --filter @ghasedak/database db:seed
       - name: تست کامل API
-        run: pnpm --filter @ghasedak/api test
+        id: api-tests
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --filter @ghasedak/api test 2>&1 | tee /tmp/jest.log
+      # تشخیص بدون نیاز به لاگین: نام سوئیت/تست‌های افتاده به‌صورت annotation عمومی
+      # (قابل خواندن از API چک‌ران‌ها) و خلاصه در تب Summary ران نوشته می‌شود.
+      - name: گزارش خطاهای تست (annotation + summary)
+        if: failure() && steps.api-tests.outcome == 'failure'
+        shell: bash
+        run: |
+          {
+            echo "### خطاهای تست API"
+            echo '```'
+            grep -E "^(FAIL|Test Suites:|Tests:)" /tmp/jest.log | head -20 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^  ● " /tmp/jest.log | sort -u | head -15 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
