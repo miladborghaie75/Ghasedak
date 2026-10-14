@@ -100,7 +100,21 @@ describe("PurchasingService (integration با DB dev)", () => {
     }
     // ۵) محصول تستی — بعد از حذف واریانت‌ها
     await prisma.productVariant.deleteMany({ where: { sku: { in: testSkus } } });
-    await prisma.product.deleteMany({ where: { slug: { startsWith: "test-prc-" } } });
+    // باقی‌ماندهٔ اجراهای قدیمی (همین پیشوند): اگر واریانتی به سند واقعی انبار
+    // (مثلاً StocktakeItem) ارجاع داشته باشد، حذف با FK restrict رد می‌شود.
+    // آن ردیف تاریخی را دست نمی‌زنیم؛ فقط هشدار می‌دهیم تا پاک‌سازی خودِ تست
+    // (ردیف‌های همین اجرا) هرگز قربانی یک یتیم قدیمی نشود.
+    const leftovers = await prisma.product.findMany({
+      where: { slug: { startsWith: "test-prc-" } },
+      select: { id: true, slug: true },
+    });
+    for (const leftover of leftovers) {
+      try {
+        await prisma.product.delete({ where: { id: leftover.id } });
+      } catch {
+        console.warn(`[purchasing.spec] پاک‌سازی ${leftover.slug} ممکن نشد (ارجاع از سند واقعی انبار) — دست‌نخورده ماند`);
+      }
+    }
     // ۶) تامین‌کننده
     await prisma.supplierAccount.deleteMany({ where: { supplierId } });
     await prisma.supplier.deleteMany({ where: { id: supplierId } });

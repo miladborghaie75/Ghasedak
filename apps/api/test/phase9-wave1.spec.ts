@@ -183,10 +183,13 @@ describe("Phase 9 Wave 1 — R1/R3", () => {
       expect(dr).toBe(cr); // متوازن
       expect(lines.find((l) => l.account.code === "1220")?.debit).toBe(BigInt(amount));
       expect(lines.find((l) => l.account.code === "4000")?.credit).toBe(BigInt(amount));
-      // بند ۱: سند فروش شامل COGS (Dr 5000/Cr 1200 به بهای تمام‌شده) — جمع سند = فروش + COGS
+      // بند ۱: سند فروش شامل COGS (Dr 5000/Cr موجودی به بهای تمام‌شده) — جمع سند = فروش + COGS
+      // از فاز ۶ کاهش موجودی روی حساب اختصاصی انبار (`1200-xx`) می‌نشیند، نه
+      // گروه `1200` — همان قاعده‌ای که phase10/phase14 هم بررسی می‌کنند.
+      const isInventory = (code: string) => code === "1200" || code.startsWith("1200-");
       const cogs = dr - BigInt(amount);
       const dr5000 = lines.filter((l) => l.account.code === "5000").reduce((a, l) => a + l.debit, 0n);
-      const cr1200 = lines.filter((l) => l.account.code === "1200").reduce((a, l) => a + l.credit, 0n);
+      const cr1200 = lines.filter((l) => isInventory(l.account.code)).reduce((a, l) => a + l.credit, 0n);
       expect(dr5000).toBe(cogs);
       expect(cr1200).toBe(cogs);
       expect(dr).toBe(BigInt(amount) + cogs);

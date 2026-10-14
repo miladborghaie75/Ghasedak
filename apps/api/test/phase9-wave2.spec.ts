@@ -31,13 +31,38 @@ describe("Phase 9 Wave 2 — Check domain", () => {
   let bus: EventBusService;
   let actor: string;
   const tag = `w2${Date.now()}${Math.floor(Math.random() * 100000)}`;
+  /** بانک فیکسچرِ خودِ این تست — فقط اگر روی GL ۱۱۰۰ بانک فعالی نباشد ساخته می‌شود */
+  let ownBankId = "";
 
   const day = (n: number) => new Date(Date.now() + n * 86_400_000);
 
   /** بانکی که service بدون treasuryBankAccountId انتخاب می‌کند — primaryBankAccount با همین ترتیب */
   const primaryBank = async () => {
     const glBank = await prisma.account.findUniqueOrThrow({ where: { code: "1100" } });
-    return prisma.bankAccount.findFirstOrThrow({ where: { glAccountId: glBank.id, active: true }, orderBy: { name: "asc" } });
+    const existing = await prisma.bankAccount.findFirst({
+      where: { glAccountId: glBank.id, active: true },
+      orderBy: { name: "asc" },
+    });
+    if (existing) return existing;
+    // ایزولاسیون (Hardening Gate §3): حساب بانکی دمو به زیرحساب (`1100-0x`) منتقل
+    // شده و روی GL ۱۱۰۰ بانک فعالی نمانده؛ پیش‌تر این تست به بانکِ باقی‌ماندهٔ
+    // یک سوئیت دیگر تکیه می‌کرد و با تغییر ترتیب اجرا می‌افتاد. حالا اگر بانکی
+    // نبود، خودش می‌سازد (نام با حرف لاتین تا با `orderBy name asc` قطعاً همانی
+    // باشد که سرویس هم انتخاب می‌کند) و در پایان پاکش می‌کند.
+    if (!ownBankId) {
+      ownBankId = `test-bank-${tag}-primary`;
+      await prisma.bankAccount.create({
+        data: {
+          id: ownBankId,
+          name: `AAA TEST BANK ${tag}`,
+          bankName: "بانک تست",
+          accountNumber: "primary",
+          glAccountId: glBank.id,
+          currentBalance: 0n,
+        },
+      });
+    }
+    return prisma.bankAccount.findFirstOrThrow({ where: { id: ownBankId } });
   };
 
   beforeAll(async () => {
@@ -103,6 +128,12 @@ describe("Phase 9 Wave 2 — Check domain", () => {
       await prisma.customerAccount.deleteMany({ where: { customerId: c.id } }).catch(() => undefined);
       await prisma.customer.deleteMany({ where: { id: c.id } }).catch(() => undefined);
     }
+    // بانک فیکسچر خودمان (اگر ساخته باشیم)
+    if (ownBankId) {
+      await prisma.bankStatementMatch.deleteMany({ where: { statement: { bankAccountId: ownBankId } } }).catch(() => undefined);
+      await prisma.bankStatement.deleteMany({ where: { bankAccountId: ownBankId } }).catch(() => undefined);
+      await prisma.bankAccount.deleteMany({ where: { id: ownBankId } }).catch((e) => console.warn(`[phase9-wave2] پاک‌سازی بانک فیکسچر ممکن نشد: ${String(e).slice(0, 80)}`));
+    }
     await prisma.$disconnect();
   });
 
@@ -122,11 +153,10 @@ describe("Phase 9 Wave 2 — Check domain", () => {
     return c;
   };
 
-  const makeReceivedCheck = async (amount = 1_200_000, dueIn = 10) => {
-    const c = await makeCustomer();
+  const makeReceivedCheck = async (amount = 1_200_000, dueIn = 10) => {    const c = await makeCustomer();
     // بانک خزانه‌داری صریح — تا projection وصول/برگشت قطعی روی همان بانک تست باشد
-    const glBank = await prisma.account.findUniqueOrThrow({ where: { code: "1100" } });
-    const bank = await prisma.bankAccount.findFirstOrThrow({ where: { glAccountId: glBank.id, active: true }, orderBy: { name: "asc" } });
+    // (فیکسچر مشترک با خودِ service تا انتخاب قطعی باشد — ایزولاسیون §3)
+    const bank = await primaryBank();
     const chk = await checks.create({
       direction: "RECEIVED",
       number: `CH-${tag}-${Math.floor(Math.random() * 100000)}`,

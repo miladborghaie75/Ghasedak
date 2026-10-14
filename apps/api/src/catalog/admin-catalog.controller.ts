@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
+import { assertCleanFields, assertCleanText } from "../common/text-guard";
 import { randomUUID } from "crypto";
 
 function slugify(input: string): string {
@@ -41,6 +42,8 @@ export class AdminCatalogController {
     if (!body.name?.trim()) {
       throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نام دسته الزامی است." });
     }
+    // گارد متن خراب (F0-3): نام/توضیح دسته هم از فرم ادمین می‌آید
+    assertCleanFields({ name: body.name, description: body.description });
     // عمق حداکثر ۵ (سطح ۱ تا ۵)
     let depth = 0;
     let pid = body.parentId ?? null;
@@ -79,6 +82,7 @@ export class AdminCatalogController {
     @Body() body: { name?: string; parentId?: string | null; description?: string; sortOrder?: number; iconMediaId?: string | null; imageMediaId?: string | null; status?: "PUBLISHED" | "DRAFT" | "ARCHIVED" },
   ) {
     // جلوگیری از حلقه: والد نمی‌تواند خودِ زیرشاخه باشد
+    assertCleanFields({ name: body.name, description: body.description });
     if (body.parentId === id) {
       throw new BadRequestException({ code: "VALIDATION_ERROR", message: "والد نمی‌تواند خود دسته باشد." });
     }
@@ -134,6 +138,7 @@ export class AdminCatalogController {
   @RequirePermission("brands.manage")
   async createBrand(@Body() body: { name: string; website?: string; description?: string; logoMediaId?: string | null; sortOrder?: number }) {
     if (!body.name?.trim()) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نام برند الزامی است." });
+    assertCleanFields({ name: body.name, description: body.description });
     let slug = slugify(body.name);
     if (await this.prisma.brand.findUnique({ where: { slug } })) {
       slug = `${slug}-${randomUUID().slice(0, 4)}`;
@@ -156,6 +161,7 @@ export class AdminCatalogController {
     @Param("id") id: string,
     @Body() body: { name?: string; website?: string; description?: string; logoMediaId?: string | null; sortOrder?: number; status?: "PUBLISHED" | "DRAFT" | "ARCHIVED" },
   ) {
+    assertCleanFields({ name: body.name, description: body.description });
     const data: Record<string, unknown> = {};
     if (body.name !== undefined) data.name = body.name.trim();
     if (body.website !== undefined) data.website = body.website;
@@ -192,6 +198,7 @@ export class AdminCatalogController {
   @RequirePermission("attributes.manage")
   async createAttribute(@Body() body: { name: string; type?: string; isFilterable?: boolean; isVariantAxis?: boolean; terms?: Array<{ value: string; hex?: string }> }) {
     if (!body.name?.trim()) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نام ویژگی الزامی است." });
+    assertCleanText(body.name, "name");
     const slug = slugify(body.name);
     if (await this.prisma.attribute.findUnique({ where: { slug } })) {
       throw new BadRequestException({ code: "DUPLICATE", message: "ویژگی هم‌نام وجود دارد." });
@@ -215,6 +222,7 @@ export class AdminCatalogController {
   @RequirePermission("attributes.manage")
   async addTerm(@Param("id") id: string, @Body() body: { value: string; hex?: string }) {
     if (!body.value?.trim()) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "مقدار الزامی است." });
+    assertCleanText(body.value, "value");
     return this.prisma.attributeTerm.create({
       data: { attributeId: id, value: body.value.trim(), slug: slugify(body.value), hex: body.hex ?? null },
     });

@@ -153,7 +153,11 @@ start_api() {
   local pid code=000 i
   # گیت کارهای پس‌زمینه برای محیط توسعه محلی — تایمرهای خودکار روشن نمی‌شوند مگر GHASEDAK_WORKERS=on
   local workers_flag="${GHASEDAK_WORKERS:-off}"
+  # گام F0-5: allowlist بازگشت درگاه — در dev همان origin فروشگاه محلی؛
+  # در production این متغیر روی دامنهٔ واقعی تنظیم می‌شود (بدون آن پرداخت آغاز نمی‌شود).
+  local callback_origins="${PAYMENT_CALLBACK_ORIGINS:-http://localhost:${SF_PORT},http://127.0.0.1:${SF_PORT}}"
   pid=$(PORT="$API_PORT" DATABASE_URL="$(db_url)" GHASEDAK_WORKERS="$workers_flag" \
+    PAYMENT_CALLBACK_ORIGINS="$callback_origins" \
     spawn_detached "api" "$ROOT/apps/api" "$RUN_DIR/api.log" "$NODE_EXE" "dist/main.js")
   for i in $(seq 1 30); do
     sleep 1
@@ -209,7 +213,10 @@ cmd_start() {
   fi
   start_db || failed=1
   start_api || failed=1
-  start_frontend "storefront" "$SF_PORT" "$ROOT/apps/storefront" || failed=1
+  # گام F0-7: صفحهٔ درگاه آزمایشی در build تولیدی بسته است (404)؛ اجرای local هم
+  # روی build تولیدی است، پس فقط برای همین محیط صریحاً روشن می‌شود.
+  local mock_gateway="${GHASEDAK_MOCK_GATEWAY:-on}"
+  GHASEDAK_MOCK_GATEWAY="$mock_gateway" start_frontend "storefront" "$SF_PORT" "$ROOT/apps/storefront" || failed=1
   start_frontend "admin" "$ADMIN_PORT" "$ROOT/apps/admin" || failed=1
   say ""
   if [ "$failed" = "0" ]; then

@@ -1,16 +1,28 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 /**
- * درگاه پرداخت آزمایشی (dev) — بند ۱۱۱: هرگز production نیست.
+ * درگاه پرداخت آزمایشی (dev) — بند ۱۱۱: در production وجود ندارد.
  * دکمه موفق → callback با Status=OK؛ دکمه ناموفق → Status=NOK.
+ *
+ * گام F0-7: این صفحه یک اثر dev است و در UI تولید نباید دیده شود. در تولید
+ * فقط با سوییچ صریح `GHASEDAK_MOCK_GATEWAY=on` باز می‌شود (برای محیط تمرین)
+ * وگرنه 404 می‌دهد — «فرض نکن که کسی لینکش را ندارد».
+ * سمت API هم mock در production ثبت نمی‌شود، پس حتی در صورت ساخت attempt،
+ * verify هرگز PAID نمی‌شود.
  */
+function mockGatewayEnabled(): boolean {
+  if (process.env.NODE_ENV !== "production") return true;
+  return process.env.GHASEDAK_MOCK_GATEWAY === "on";
+}
 export default async function MockGatewayPage({
   searchParams,
 }: {
   searchParams: Promise<{ authority?: string; amount?: string; order?: string }>;
 }) {
+  if (!mockGatewayEnabled()) notFound();
   const { authority, amount, order } = await searchParams;
   const cb = `/api/pay/callback?authority=${encodeURIComponent(authority ?? "")}&order=${encodeURIComponent(order ?? "")}`;
   const fa = (n: string) => Number(n).toLocaleString("fa-IR");

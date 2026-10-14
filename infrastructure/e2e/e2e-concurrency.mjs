@@ -153,7 +153,8 @@ async function main() {
     orderId: r1.body.orderId ?? r1.body.order?.id ?? r1.body.id,
     methodId: (await get("/api/v1/payments/methods")).body?.find((m) => m.code === "online")?.id,
     idempotencyKey: `conc-pay-${Date.now()}`,
-    callbackUrl: `${BASE}/api/v1/payments/callback/mock`,
+    // گام F0-5: آدرس بازگشت نسبی (روی دامنهٔ مجاز resolve می‌شود)
+    callbackUrl: "/api/pay/callback",
   });
   const authority =
     start.body?.authority ??
@@ -186,8 +187,8 @@ async function main() {
   const orderId3 = r3.body.orderId ?? r3.body.order?.id ?? r3.body.id;
   const onlineId = (await get("/api/v1/payments/methods")).body?.find((m) => m.code === "online")?.id;
   const [s1, s2] = await Promise.all([
-    post("/api/v1/payments/start", { orderId: orderId3, methodId: onlineId, idempotencyKey: `clickA-${Date.now()}`, callbackUrl: `${BASE}/api/v1/payments/callback/mock` }),
-    post("/api/v1/payments/start", { orderId: orderId3, methodId: onlineId, idempotencyKey: `clickB-${Date.now()}`, callbackUrl: `${BASE}/api/v1/payments/callback/mock` }),
+    post("/api/v1/payments/start", { orderId: orderId3, methodId: onlineId, idempotencyKey: `clickA-${Date.now()}`, callbackUrl: "/api/pay/callback" }),
+    post("/api/v1/payments/start", { orderId: orderId3, methodId: onlineId, idempotencyKey: `clickB-${Date.now()}`, callbackUrl: "/api/pay/callback" }),
   ]);
   const okCount = [s1, s2].filter((x) => x.ok).length;
   if (okCount === 0) return fail("هر دو کلیک پرداخت رد شدند — یکی باید موفق می‌شد");
@@ -196,8 +197,8 @@ async function main() {
   // ۴) رفتار واقعی UI: دو کلیک با یک کلید پایدار → یک attempt بیشتر ساخته نمی‌شود
   const stableKey = `click-stable-${Date.now()}`;
   const [c1, c2] = await Promise.all([
-    post("/api/v1/payments/start", { orderId: orderId3, methodId: onlineId, idempotencyKey: stableKey, callbackUrl: `${BASE}/api/v1/payments/callback/mock` }),
-    post("/api/v1/payments/start", { orderId: orderId3, methodId: onlineId, idempotencyKey: stableKey, callbackUrl: `${BASE}/api/v1/payments/callback/mock` }),
+    post("/api/v1/payments/start", { orderId: orderId3, methodId: onlineId, idempotencyKey: stableKey, callbackUrl: "/api/pay/callback" }),
+    post("/api/v1/payments/start", { orderId: orderId3, methodId: onlineId, idempotencyKey: stableKey, callbackUrl: "/api/pay/callback" }),
   ]);
   const idA = c1.body?.attemptId;
   const idB = c2.body?.attemptId;

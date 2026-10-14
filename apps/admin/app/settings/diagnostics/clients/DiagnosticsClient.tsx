@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAdminApi, fa } from "@/components/useAdminApi";
+import DataHealthCard from "./DataHealthCard";
 
 interface Check {
   key: string;
@@ -76,8 +77,10 @@ export default function DiagnosticsClient() {
         ))}
       </div>
 
+      <DataHealthCard />
+
       <p className="text-[11px] text-muted">
-        این صفحه فقط-خواندنی است؛ هیچ عملیاتی انجام نمی‌دهد. اقدام‌های مرتبط: صف‌ها در «اعلان‌ها و صف ارسال»، کلیدها در «پیامک و درگاه پرداخت»، وضعیت بکاپ در «پشتیبان‌گیری».
+        بررسی‌های بالا فقط-خواندنی‌اند؛ تنها اکشن این صفحه «کیفیت داده» است (با AuditLog). اقدام‌های مرتبط: صف‌ها در «اعلان‌ها و صف ارسال»، کلیدها در «پیامک و درگاه پرداخت»، وضعیت بکاپ در «پشتیبان‌گیری».
       </p>
     </div>
   );

@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { nextBarcodeForCategory } from "./barcode.util";
 import { GL, GL_EQUITY } from "@ghasedak/contracts";
 import { JournalService } from "../accounting/journal.service";
+import { assertCleanFields } from "../common/text-guard";
 import type { Prisma } from "@prisma/client";
 
 /**
@@ -127,6 +128,19 @@ export class ProductsService {
     attributeTermIds?: string[];
   }): Promise<unknown> {
     if (!data.name?.trim()) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نام محصول الزامی است." });
+    // متن خراب (U+FFFD/کنترلی) همان لحظهٔ نوشتن رد می‌شود — گام F0-3.
+    // پیش‌تر چنین ورودی‌ای ذخیره می‌شد و نام محصول به U+FFFD و اسلاگ به `-`
+    // فرو می‌ریخت (دو ردیف منتشرشده در کاتالوگ عمومی).
+    assertCleanFields({
+      name: data.name,
+      slug: data.slug,
+      shortDescription: data.shortDescription,
+      description: data.description,
+      seoTitle: data.seo?.seoTitle,
+      metaDescription: data.seo?.metaDescription,
+      ogTitle: data.seo?.ogTitle,
+      ogDescription: data.seo?.ogDescription,
+    });
     if (!Number.isSafeInteger(data.basePrice) || data.basePrice < 0) {
       throw new BadRequestException({ code: "VALIDATION_ERROR", fieldErrors: { basePrice: ["قیمت باید عدد صحیح تومان باشد"] } });
     }
@@ -517,6 +531,7 @@ export class ProductsService {
   }>): Promise<unknown> {
     const product = await this.prisma.product.findFirst({ where: { id, deletedAt: null } });
     if (!product) throw new NotFoundException({ code: "NOT_FOUND", message: "محصول یافت نشد." });
+    assertCleanFields({ name: data.name, shortDescription: data.shortDescription, description: data.description });
     return this.prisma.product.update({
       where: { id },
       data: {
@@ -555,6 +570,18 @@ export class ProductsService {
       include: { category: { select: { slug: true, parentId: true } } },
     });
     if (!product) throw new NotFoundException({ code: "NOT_FOUND", message: "محصول یافت نشد." });
+
+    // همان گارد متن خراب روی ویرایش کامل (نام/توضیحات/SEO) — F0-3
+    assertCleanFields({
+      name: data.name,
+      slug: data.slug,
+      shortDescription: data.shortDescription,
+      description: data.description,
+      seoTitle: data.seo?.seoTitle,
+      metaDescription: data.seo?.metaDescription,
+      ogTitle: data.seo?.ogTitle,
+      ogDescription: data.seo?.ogDescription,
+    });
 
     return this.prisma.$transaction(async (tx) => {
       const pd: Record<string, unknown> = {};

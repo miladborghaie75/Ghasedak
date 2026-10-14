@@ -144,7 +144,9 @@ async function main() {
   const pay = await j(await fetch(`${BASE}/api/v1/payments/start`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ orderId: order.id, idempotencyKey: `e2e-pay-${stamp}`, callbackUrl: "http://localhost:3000/api/pay/callback" }),
+    // گام F0-5: آدرس بازگشت باید نسبی (یا روی دامنهٔ مجاز) باشد — دامنهٔ
+    // هاردکد‌شده فقط وابستگی به پورت/محیط می‌سازد و حالا رد می‌شود.
+    body: JSON.stringify({ orderId: order.id, idempotencyKey: `e2e-pay-${stamp}`, callbackUrl: "/api/pay/callback" }),
   }));
   if (!pay.attemptId || !pay.redirectUrl) throw new Error(`پاسخ start ناقص: ${JSON.stringify(pay).slice(0, 300)}`);
   const authority = new URL(pay.redirectUrl, BASE).searchParams.get("authority") ?? new URL(pay.redirectUrl, BASE).pathname.split("/").pop();

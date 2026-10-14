@@ -12,6 +12,7 @@ import { TreasuryService } from "../treasury/treasury.service";
 import type { PaymentProviderAdapter, PaymentRequestContext } from "./provider";
 import { ZarinpalProvider } from "./zarinpal.provider";
 import { MockPaymentProvider } from "./mock.provider";
+import { resolveCallbackUrl } from "./callback-url";
 import { GL, GL_COGS, GL_EXPENSE, GL_REVENUE, gatewayFeeAmount } from "@ghasedak/contracts";
 import { warehouseGlCode } from "../inventory/inventory.service";
 
@@ -125,6 +126,11 @@ export class PaymentsService implements OnModuleInit {
     callbackUrl: string;
     guestMobile?: string;
   }): Promise<{ attemptId: string; redirectUrl: string }> {
+    // گام F0-5 (P1-1): آدرس بازگشت از بدنهٔ درخواست می‌آید؛ تا اینجا هیچ
+    // بررسی‌ای نداشت و به درگاه پاس داده می‌شد → بازگشت به دامنهٔ بیرونی
+    // (فیشینگ بعد از پرداخت واقعی). اینجا — تنها گلوگاه — اعتبارسنجی و نرمال
+    // می‌شود: نسبی روی دامنهٔ مجاز، مطلق فقط با origin مجاز، وگرنه رد.
+    const callbackUrl = resolveCallbackUrl(input.callbackUrl);
     const existing = await this.prisma.paymentAttempt.findUnique({
       where: { idempotencyKey: input.idempotencyKey },
     });
@@ -139,7 +145,7 @@ export class PaymentsService implements OnModuleInit {
         amount: Number(existing.amount),
         description: "ادامه پرداخت سفارش — قاصدک",
         mobile: input.guestMobile ?? null,
-        callbackUrl: input.callbackUrl,
+        callbackUrl,
       });
       return { attemptId: existing.id, redirectUrl: red.redirectUrl };
     }
@@ -189,7 +195,7 @@ export class PaymentsService implements OnModuleInit {
               amount: Number(winner.amount),
               description: "ادامه پرداخت سفارش — قاصدک",
               mobile: input.guestMobile ?? null,
-              callbackUrl: input.callbackUrl,
+              callbackUrl,
             });
             return { attemptId: winner.id, redirectUrl: red.redirectUrl };
           }
@@ -208,7 +214,7 @@ export class PaymentsService implements OnModuleInit {
       amount: Number(order.total),
       description: `سفارش ${order.code} — لباس زیر قاصدک`,
       mobile: input.guestMobile ?? null,
-      callbackUrl: input.callbackUrl,
+      callbackUrl,
     };
     let redirectUrl: string;
     try {

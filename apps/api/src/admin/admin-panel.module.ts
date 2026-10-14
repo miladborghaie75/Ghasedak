@@ -15,12 +15,14 @@ import { CredentialsController } from "./credentials.controller";
 import { CredentialsService } from "./credentials.service";
 import { BackupStatusController } from "./backup-status.controller";
 import { DiagnosticsController } from "./diagnostics.controller";
+import { DataHealthController } from "./data-health.controller";
+import { DataHealthService } from "./data-health.service";
 import { PaymentGatewayController } from "./payment-gateway.controller";
 import { ZarinpalProvider } from "../payments/zarinpal.provider";
 
 @Module({
   imports: [PrismaModule, InventoryModule, AccountingModule, PricingModule, EventsModule, HealthModule, PaymentsModule],
-  controllers: [AdminPanelController, DashboardController, PublicThemeController, CapabilitiesController, MediaServeController, CredentialsController, BackupStatusController, DiagnosticsController, PaymentGatewayController],
-  providers: [CredentialsService],
+  controllers: [AdminPanelController, DashboardController, PublicThemeController, CapabilitiesController, MediaServeController, CredentialsController, BackupStatusController, DiagnosticsController, DataHealthController, PaymentGatewayController],
+  providers: [CredentialsService, DataHealthService],
 })
 export class AdminPanelModule {}

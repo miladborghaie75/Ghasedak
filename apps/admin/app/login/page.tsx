@@ -87,10 +87,13 @@ export default async function LoginPage({
         <a href="/forgot-password" className="mt-3 block text-center text-xs text-muted hover:underline">
           رمز عبور را فراموش کرده‌اید؟
         </a>
-        <p className="mt-4 rounded-xl bg-primary-soft px-3 py-2 text-[11px] leading-5 text-deep">
-          حساب‌های توسعه (DEMO): <span dir="ltr">admin@ghasedak.demo</span> · رمز:{" "}
-          <span dir="ltr">Ghasedak#Demo1</span>
-        </p>
+        {/* گام F0-7: راهنمای حساب DEMO فقط برای توسعه است — در تولید این بلوک در HTML هم رندر نمی‌شود */}
+        {process.env.NODE_ENV !== "production" ? (
+          <p className="mt-4 rounded-xl bg-primary-soft px-3 py-2 text-[11px] leading-5 text-deep">
+            حساب‌های توسعه (DEMO): <span dir="ltr">admin@ghasedak.demo</span> · رمز:{" "}
+            <span dir="ltr">Ghasedak#Demo1</span>
+          </p>
+        ) : null}
       </form>
     </div>
   );

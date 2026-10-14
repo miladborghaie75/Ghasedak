@@ -37,12 +37,19 @@ pnpm install
 ```ini
 NODE_ENV=production
 TZ=Asia/Tehran
+# روی سرور، همان پورت/سوکت سرویس postgres خود سرور (معمولاً 5432 — این «پورت dev» نیست).
 DATABASE_URL=postgresql://USER:PASS@127.0.0.1:5432/ghasedak
-PORT=4000
+PORT=4000                     # هشدار F0-4: PORT=0 در Node یعنی پورت تصادفی — هرگز ۰ نگذارید
 CORS_ORIGINS=https://shop.example.com,https://admin.example.com
+PAYMENT_CALLBACK_ORIGINS=https://shop.example.com   # گام F0-5 — بدون این، پرداخت آغاز نمی‌شود
+GHASEDAK_MOCK_GATEWAY=        # گام F0-7 — خالی/خاموش در production (صفحهٔ درگاه آزمایشی 404)
 ZARINPAL_SANDBOX=false        # فقط پس از درست‌بودن Merchant ID واقعی
 # GHASEDAK_WORKERS را برای تک‌پروسه ساده unset کنید؛ برای چند worker = on
 ```
+
+**پورت‌های کانونیکال (F0-4 — بدون ابهام):** لوکال dev: API ۴۰۰۰ · فروشگاه ۳۱۱۱ · پنل ۳۲۰۰ · کلستر اصلی `5433` · کلستر تمرین `55433`. روی سرور production فقط همان پورتی که سرویس‌ها واقعاً گوش می‌دهند (معمولاً API ۴۰۰۰ پشت reverse-proxy و postgres ۵۴۳۲). `run-local.sh` این‌ها را یک‌جا ست می‌کند.
+
+**گارد بوت (F0-4):** API اگر به دیتابیس نرسد **بالا نمی‌آید** و پیام فارسی با هدف اتصال (`host:port/db`، بدون رمز) و پورت‌های کانونیکال در لاگ می‌نویسد؛ پس شکست اتصال در استقرار بلافاصله دیده می‌شود، نه در اولین درخواست مشتری.
 
 فایل `apps/api/.env.local` را دستی نسازید — پنل خودش می‌نویسد (کلیدها را از کارت‌های «پیامک و درگاه پرداخت» و «وب‌سرویس» وارد کنید).
 

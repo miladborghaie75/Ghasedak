@@ -191,7 +191,8 @@ post.pur = await snap();
 {
   const ord = await q(`SELECT id FROM "Order" ORDER BY "createdAt" LIMIT 1`);
   const orderId = ord.rows[0]?.id;
-  const r = await api("POST", "/payments/start", { orderId, idempotencyKey: "rehearsal-smoke-pay-" + Date.now(), callbackUrl: "http://localhost:3000/callback" });
+  // گام F0-5: آدرس بازگشت نسبی (روی دامنهٔ مجاز resolve می‌شود)
+  const r = await api("POST", "/payments/start", { orderId, idempotencyKey: "rehearsal-smoke-pay-" + Date.now(), callbackUrl: "/api/pay/callback" });
   const graceful = r.status === 200 || r.status === 201 || (r.status >= 400 && r.json?.code !== undefined);
   R("online_payment_graceful", graceful, { status: r.status, body: r.json });
 }
