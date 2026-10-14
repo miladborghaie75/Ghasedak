@@ -189,9 +189,14 @@ allowlist/نسبی‌سازی callback؛ تست منفی (URL خارجی → ر�
 
 ### ایستگاه ۲ — قفل دستاوردها
 
-#### گام ۸ — `[F2-1]` CI پایه (توصیه: همین ابتدا) — ⬜ · ✅ ریپو GitHub موجود: `miladborghaie75/Ghasedak`
+#### گام ۸ — `[F2-1]` CI پایه (توصیه: همین ابتدا) — 🟡 پیاده‌شده؛ منتظر اولین ران واقعی · ✅ ریپو GitHub عمومی: `miladborghaie75/Ghasedak`
 GitHub Actions (پیش‌نیاز استقرار خودکار گام ۴۰-۱): install→typecheck→تست‌های API (DB سرویس‌دار)→build هر دو اپ؛ **اگر دسترسی ادمین فراهم نشد:** اسکریپت معادل `check-all` (typecheck+test+build) به‌عنوان pre-push + گام ۴۰-۱ محدود به pull دستی.
 **پذیرش:** PR نمونه سبز (شاهد لینک) · **اندازه:** M · **باقی‌مانده:** تأیید دسترسی ادمین/خصوصی‌بودن ریپو و روشن‌بودن Actions هنگام شروع گام.
+
+**[F2-1] پیاده‌سازی (۲۰۲۶-۱۰-۱۴):** [.github/workflows/ci.yml](.github/workflows/ci.yml) — دو job مستقل: `quality` (install --frozen-lockfile → Prisma generate → `pnpm typecheck` → `pnpm build`) و `api-tests` (سرویس **تازه**‌ی postgres:16 در هر اجرا → `migrate deploy` از خود ریپو → seed دمو → `jest --runInBand` کامل)؛ تراگیر: push به main + PR + اجرای دستی. `gh` CLI روی ماشین نیست؛ نتیجهٔ ران از API عمومی Actions خوانده می‌شود.
+**کشف جانبی که همین گام قفل کرد:** `packages/database/scripts/seed.ts` از کامیت `84c60a4` یک `}` اضافه داشت (بلوک جدید CoA جلوتر بسته شد و بستنِ قدیمی `if (fy)` جا ماند) — هیچ tsconfigای این فایل را پوشش نمی‌داد، پس `db seed` با tsx در `TransformError` می‌افتاد و محیط تست از `.seed-dist/seed.js` (خارج git) تغذیه می‌شد. رفع: حذف آکولاد اضافه + `packages/database/tsconfig.json` + تسک `typecheck` + `@types/node` + اعلام وابستگی `@ghasedak/contracts` (که در عمل هم resolve نمی‌شد) → turbo حالا ۷ پکیج را typecheck می‌کند.
+**شاهد محلی (۲۰۲۶-۱۰-۱۴):** روی DB کاملاً تازهٔ `ci_probe_f0` (کلستر تمرین): `migrate deploy` → هر ۱۸ migration؛ `pnpm db:seed` → `SEED COMPLETE`؛ سوئیت کامل API → **۳۸/۳۸ سوئیت · ۲۱۰/۲۱۰ تست** PASS؛ `pnpm install --frozen-lockfile` سبز؛ `pnpm typecheck` → **۱۰/۱۰ تسک** سبز (شامل database)؛ DB کاوش پس از سنجش حذف شد.
+**باقی‌ماندهٔ گام:** push → اولین ران واقعی سبز روی GitHub (شاهد لینک از API عمومی)؛ branch protection/PR نمونه اختیاری.
 
 ### ایستگاه ۳ — طراحی و پایه‌های UX
 

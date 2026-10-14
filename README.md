@@ -51,8 +51,8 @@ bash infrastructure/run-local.sh stop    # خاموشی کامل
 
 ```bash
 cd packages/database
-npx prisma migrate dev          # migration کامل شِما
-npx tsx scripts/seed.ts         # داده DEMO (کاربران/انبار/کانال/قیمت/محصول/COA)
+pnpm db:migrate                 # migration کامل شِما (dev)
+pnpm db:seed                    # داده DEMO (کاربران/انبار/کانال/قیمت/محصول/COA) — از tsx استفاده می‌کند
 ```
 
 ⚠️ همه داده seed برچسب **DEMO** دارد (بند ۹۶). هیچ بج/مجوز/مودیانی جعل نمی‌شود.

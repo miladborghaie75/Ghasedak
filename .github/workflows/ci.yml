@@ -1,0 +1,82 @@
+# CI پایه (ایستگاه ۲ — گام F2-1)
+#
+# هدف: هیچ رگرسیونی بی‌صدا رد نشود. دو کار مستقل:
+#   ۱) quality   — نصب frozen، Prisma generate، typecheck و build سه اپ
+#   ۲) api-tests — تست کامل API روی پستگرس کاملاً تازه در هر اجرا
+#      (migrationها از خود ریپو اعمال و seed دمو اجرا می‌شود؛ هیچ DB مشترکی
+#       بین اجراها وجود ندارد — همان چیزی که env گاردِ jest.setup می‌خواهد).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: typecheck + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: نصب وابستگی‌ها
+        run: pnpm install --frozen-lockfile
+      - name: تولید Prisma Client
+        run: pnpm db:generate
+      - name: typecheck همهٔ پکیج‌ها
+        run: pnpm typecheck
+      - name: build (API + فروشگاه + پنل)
+        run: pnpm build
+
+  api-tests:
+    name: API tests (postgres تازه)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ghasedak
+          POSTGRES_PASSWORD: ghasedak-ci
+          POSTGRES_DB: ghasedak_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ghasedak -d ghasedak_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://ghasedak:ghasedak-ci@127.0.0.1:5432/ghasedak_ci?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: نصب وابستگی‌ها
+        run: pnpm install --frozen-lockfile
+      - name: تولید Prisma Client
+        run: pnpm db:generate
+      - name: build قراردادها (seed و تست‌ها از dist می‌خوانند)
+        run: pnpm --filter @ghasedak/contracts build
+      - name: اعمال migrationها روی DB تازه
+        run: pnpm --filter @ghasedak/database db:deploy
+      - name: seed دمو (همان دادهٔ مستندشدهٔ DEMO)
+        run: pnpm --filter @ghasedak/database db:seed
+      - name: تست کامل API
+        run: pnpm --filter @ghasedak/api test

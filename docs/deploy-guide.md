@@ -56,8 +56,8 @@ ZARINPAL_SANDBOX=false        # فقط پس از درست‌بودن Merchant ID
 ### ۳.۳ دیتابیس
 ```bash
 cd packages/database
-npx prisma migrate deploy     # ساخت شِما از migrationهای خود ریپو
-npx prisma db seed            # فقط بار اول: کانال/انبار/حساب‌ها/کاربر ادمین
+pnpm db:deploy                # ساخت شِما از migrationهای خود ریپو
+pnpm db:seed                  # فقط بار اول: کانال/انبار/حساب‌ها/کاربر ادمین (tsx)
 ```
 > برای rehearsal/تست محلی همین الگو با پورت و نام DB جدا (مثلاً `55433/p11dev`) بدون تغییر دیگری کار می‌کند.
 

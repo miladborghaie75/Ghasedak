@@ -6,13 +6,18 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio"
+    "db:seed": "tsx scripts/seed.ts",
+    "db:studio": "prisma studio",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@ghasedak/contracts": "workspace:*",
     "@prisma/client": "^6.3.0"
   },
   "devDependencies": {
+    "@types/node": "^22.20.4",
     "prisma": "^6.3.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.8.3"
   }
 }
