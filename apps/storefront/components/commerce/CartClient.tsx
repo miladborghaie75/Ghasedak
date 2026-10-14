@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useCart } from "@/components/providers/CartProvider";
 import { ProductArt, type ArtKind } from "./ProductArt";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { DataUnavailable } from "@/components/ui/DataUnavailable";
 import { Price } from "@/components/ui/Price";
 import { faNum } from "@/lib/format";
 import { getTerm } from "@/lib/attributes";
@@ -31,7 +33,14 @@ function variantLabel(v: VariantV2): string {
 export function CartClient() {
   const { lines, setQty, removeLine, ready } = useCart();
   const [catalog, setCatalog] = useState<ProductV2[]>([]);
-  useEffect(() => { void ensureCatalogClient().then(setCatalog); }, []);
+  // loaded جدا از خالی: «هنوز نیامده» با «آمد ولی خالی/قطع بود» یکی نیست
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    void ensureCatalogClient().then((p) => {
+      setCatalog(p);
+      setLoaded(true);
+    });
+  }, []);
 
   const detailed = useMemo<Detail[]>(() => {
     const byId = new Map(catalog.flatMap((p) => p.variants.map((v) => [v.id, { v, p }] as const)));
@@ -43,8 +52,39 @@ export function CartClient() {
     return result;
   }, [lines, catalog]);
 
-  if (!ready || catalog.length === 0) {
-    return <p className="py-16 text-center text-sm text-muted">در حال بارگذاری سبد…</p>;
+  if (!ready || !loaded) {
+    // اسکلتون هم‌شکل سبد واقعی: دو خط کالا + کارت جمع — انتظار بی‌تنش
+    return (
+      <div role="status" aria-label="در حال بارگذاری سبد خرید" className="flex flex-col gap-3">
+        {[0, 1].map((i) => (
+          <div key={i} className="flex gap-3 rounded-card border border-line bg-surface p-3 shadow-clay-1">
+            <Skeleton className="size-24 shrink-0 rounded-xl" />
+            <div className="flex min-w-0 flex-1 flex-col gap-2 py-1">
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-3 w-1/3" />
+              <div className="mt-auto flex items-center justify-between pt-2">
+                <Skeleton className="h-9 w-24 rounded-full" />
+                <Skeleton className="h-5 w-20" />
+              </div>
+            </div>
+          </div>
+        ))}
+        <div className="rounded-card border border-line bg-surface p-4 shadow-clay-1">
+          <Skeleton className="h-4 w-1/2" />
+          <Skeleton className="mt-3 h-12 w-full rounded-full" />
+        </div>
+      </div>
+    );
+  }
+
+  // سبد پر ولی کاتالوگ نیامده → صادقانه بگو نمایش ندادیم (نه «سبد خالی است»)
+  if (catalog.length === 0 && lines.length > 0) {
+    return (
+      <DataUnavailable
+        title="سبد خرید الان قابل نمایش نیست"
+        hint="ارتباط با فروشگاه برقرار نشد. سبد شما محفوظ است؛ اتصال اینترنت را بررسی کنید و دوباره تلاش کنید."
+      />
+    );
   }
 
   if (detailed.length === 0) {

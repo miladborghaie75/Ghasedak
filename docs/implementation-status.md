@@ -1,6 +1,6 @@
 # وضعیت پیاده‌سازی — Ghasedak (بند ۲/۱۱۸ سند Master)
 
-> آخرین به‌روزرسانی: ۲۰۲۶-۱۰-۱۴ — ایستگاه ۲/`F2-1`: CI پایهٔ GitHub Actions سبز (job کیفیت: typecheck+build؛ job تست: migrate+seed روی پستگرس تازهٔ هر اجرا + کل سوئیت؛ گزارش تشخیصی شکست بدون لاگین). سوئیت محلی ۳۸/۳۸ · ۲۱۲/۲۱۲.
+> آخرین به‌روزرسانی: ۲۰۲۶-۱۰-۱۵ — ایستگاه ۳/`F1-13` (طراحی بصری نهایی): سند تثبیت توکن‌ها + اسکلتون بارگذاری (علاقه‌مندی‌ها/سبد) + OG/سوشال-کارت ۱۲۰۰×۶۳۰ با فونت برند + آیکون اپ ادمین + شات‌لیست عکاسی؛ بازبینی دو تم با اسکرین‌شات و چک RTL/LTR مختلط. سوئیت محلی ۳۸/۳۸ · ۲۱۲/۲۱۲.
 > تعریف «پیاده‌سازی‌شده»: مسیر runtime کامل کار کند (بند ۱۱۴/۱۱۸). Schema و سند به‌تنهایی «پیاده‌شده» نیست.
 
 ## استقرار پیش از لانچ — ایستگاه ۱ (۲۰۲۶-۱۰-۱۴) — runtime-tested
@@ -19,6 +19,20 @@
 | CI پایه GitHub Actions: job کیفیت (install frozen → Prisma generate → typecheck → build سه اپ) + job تست API روی postgres:16 کاملاً تازه (migrate deploy → seed دمو → کل سوئیت) | ✅ IMPLEMENTED | ران سبز [38551035038](https://github.com/miladborghaie75/Ghasedak/actions/runs/38551035038) روی `b352fa5` — تست API ۷۰s · typecheck+build ۷۷s |
 | گزارش تشخیصی شکست تست بدون لاگین (annotation عمومی `::error::` + Summary ران) | ✅ IMPLEMENTED | ران‌های قرمز ۱ و ۲: همین مسیر ریشه را نشان داد (ادعاهای ماشین عملیات بکاپ روی رانر Linux) |
 | سوئیت تست portable — ادعاهای ماشین عملیات (بکاپ واقعی + Scheduled Task) با `OPS_MACHINE` گیت شده و پوشش fixture معادل دارد | ✅ IMPLEMENTED | `phase14-backup-status`/`phase14-diagnostics`؛ شبیه‌سازی CI: ۳ تست ops صریحاً skip + ۱۱ تست portable سبز |
+
+## ایستگاه ۳ (F1-13 — طراحی بصری نهایی) — ۲۰۲۶-۱۰-۱۵ · 🟡 در جریان
+| قابلیت | وضعیت | مدرک |
+|---|---|---|
+| سند مرجع طراحی: پالت خاک‌رس، سه سطح سایهٔ clay، توکن‌های معنایی + بازتعریف شب، وزیرمتن/لاله‌زار، قاعدهٔ «فقط توکن، بدون رنگ هاردکد تم-آگاه» | ✅ IMPLEMENTED | [design-system.md](design-system.md) — منطبق با `globals.css` فعلی (همان مقادیر) |
+| حالت بارگذاری (اسکلتون) با زبان clay: نبض ملایم، گردی کارت، فقط توکن؛ `role=status` + `aria-label` | ✅ IMPLEMENTED | [Skeleton.tsx](../apps/storefront/components/ui/Skeleton.tsx)؛ `/wishlist` و `/cart` بدون پرش چیدمان روی build تولیدی |
+| حالت خطای داده: «سبد/علاقه‌مندی الان قابل نمایش نیست — محفوظ است» + تلاش دوباره (نه ادعای خالی‌بودن، نه اسکلتون ابدی) | ✅ IMPLEMENTED | [DataUnavailable.tsx](../apps/storefront/components/ui/DataUnavailable.tsx)؛ تست زنده: دِو با `API_ORIGIN` مرده (پروکسی `{"items":[]}`) → هر دو صفحه پیام صادقانه را نشان دادند |
+| رفع رگرسیون fallback سبد: خطوط سبد در قطع API از localStorage برمی‌گردند (تعهد سرصفحهٔ CartProvider که اجرا نمی‌شد) | ✅ IMPLEMENTED | [CartProvider.tsx](../apps/storefront/components/providers/CartProvider.tsx)؛ با API مرده سبد برمی‌گردد؛ روی سرور سالم سبد واقعی بی‌تغییر درست رندر می‌شود |
+| OG/سوشال-کارت ۱۲۰۰×۶۳۰ با هویت برند (نشان قاصدک، لاله‌زار/وزیرمتن، پیل دامنه) — بدون فونت شبکه‌ای | ✅ IMPLEMENTED | `GET /opengraph-image` → `200 image/png`، `PNG 1200x630`؛ در build استاتیک prerender شد (`○ /opengraph-image`)؛ TTFهای استاتیک در `apps/storefront/app/og-fonts` (قید: satori فقط sfnt/TTF می‌فهمد، woff2 رد می‌شود) |
+| آیکون اپ ادمین (همان نشان روی زمینهٔ آلو) — تمایز ابزار داخلی با هویت مشترک | ✅ IMPLEMENTED | [apps/admin/app/icon.svg](../apps/admin/app/icon.svg)؛ فروشگاه از قبل آیکون داشت |
+| بازبینی دو تم با اسکرین‌شات + چک RTL/LTR مختلط | ✅ IMPLEMENTED | `/`، `/p/tst-Lmv7z66pr`، `/wishlist`، `/cart` در روشن/شب؛ نام لاتین محصول + اعداد فارسی + breadcrumb + هندل اینستاگرام بدون شکست bidi؛ صفر خطای کنسول |
+| شات‌لیست عکاسی واقعی (کادرها، نسبت، نور، نام فایل تحویل) | ✅ IMPLEMENTED | [photography-shotlist.md](photography-shotlist.md) |
+| عکاسی واقعی + حذف تصویرسازی جانشین از صفحات لانچ | ⬜ NOT YET | وابسته به تحویل عکس؛ تا آن زمان جانشین **عمداً** می‌ماند (رکورد در نقشه) |
+| ممیزی کپی‌رایتینگ همهٔ CTA/حالت‌های خالی و خطا · سبک چاپ · بازبینی نهایی موشن | ⬜ NOT YET | باقی‌ماندهٔ گام ۹ در نقشه |
 
 ## فاز ۱۳ (۲۰۲۶-۰۹-۳۰) — runtime-tested
 | قابلیت | وضعیت | مدرک |

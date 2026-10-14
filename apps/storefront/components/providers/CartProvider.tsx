@@ -135,6 +135,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   // (refresh هویت پایدار دارد؛ این افکت فقط یک‌بار اجرا می‌شود)
   useEffect(() => {
     const local = readLocal();
+    // fallback آفلاین (همان تعهد سرصفحهٔ این فایل): آخرین سبد محلی را نشان بده تا
+    // با سرورِ در دسترس‌نبودن، خرید نشکند. سبد سرور authoritative است و اگر جواب
+    // بدهد، refresh دقیقاً همان را جایگزین می‌کند (با گارد مقایسهٔ محتوایی → بی‌حلقه).
+    setLines((prev) => (linesEqual(prev, local.lines) ? prev : local.lines));
     setWishlist((prev) => (sameIds(prev, local.wishlist) ? prev : local.wishlist));
     void refresh().finally(() => setHydrated(true));
   }, [refresh]);
