@@ -125,6 +125,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * سواچ رنگ (واریانت محصول/فیلتر) — رنگ از متغیر می‌آید، نه مستقیم.
+ * دلیل: در چاپ قاعدهٔ «پس‌زمینه‌ها شفاف شوند» همه‌چیز را می‌بلعد، ولی رنگِ
+ * سواچ **محتواست** (کدام رنگ موجود است)؛ با متغیر می‌توان همان مقدار را
+ * در بلوک چاپ دوباره اعمال کرد.
+ */
+[data-swatch] {
+  background-color: var(--swatch, transparent);
+}
+
 /* ورود Bottom Sheet */
 @keyframes sheet-up {
   from {
@@ -255,4 +265,142 @@ body {
   outline: 3px solid var(--color-primary-strong);
   outline-offset: 2px;
   border-radius: 6px;
+}
+
+/* ============================================================
+   سبک چاپ (گام ۹ — F1-13): برگهٔ مشخصات محصول و فاکتور سفارش باید
+   روی کاغذ A4 خوانا باشند. قاعده‌ها دو بخش‌اند:
+   ۱) این بلوک — نرمال‌سازی سراسری (کاغذ سفید، بی‌تزئین، بی‌پرش).
+   ۲) در کامپوننت‌ها — کروم سایت و کنترل‌های تعاملی با `print:hidden`
+      علامت خورده‌اند (هدر/فوتر/شیت/چسبنده/قلب/دکمهٔ افزودن).
+   تم شب روی کاغذ بی‌معناست؛ همیشه سفید/سیاه چاپ می‌شود.
+   ============================================================ */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm 12mm 14mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /*
+   * توکن‌ها در چاپ خنثی می‌شوند — مهم‌ترین قاعدهٔ این بلوک.
+   * ریشهٔ باگی که با تست واقعی چاپ پیدا شد: در تم شب `--color-ink`
+   * برابر #f0eaf6 است؛ روی کاغذ سفید، هر متنی با `text-ink` تقریباً
+   * نامرئی چاپ می‌شد (فاکتور کاربر دارک‌مود ناخوانا). اینجا هر دو
+   * خانوادهٔ توکن (Tailwind + معنایی) به مقادیر چاپی بازنویسی می‌شوند
+   * و چون این بلوک آخرِ فایل است، تساوی specificity را می‌برد.
+   */
+  /*
+   * چرا `html:root` و `!important`: تنظیمات تم (Setting ادمین) در `<body>`
+   * یک <style> تزریق می‌کند که توکن‌ها را با همان `:root` تعریف می‌کند و
+   * چون بعد از این فایل می‌آید، در تساوی specificity برنده می‌شد — یعنی
+   * اگر تمِ پیش‌فرض سایت تیره باشد، متن روی کاغذ سفید سفید چاپ می‌شد.
+   * پس این بلوک عمداً با specificity بالاتر و !important نوشته شده:
+   * روی کاغذ، خوانایی از تم وب مهم‌تر است.
+   */
+  html:root,
+  html[data-theme="dark"] {
+    --color-bg: #ffffff !important;
+    --color-surface: #ffffff !important;
+    --color-ink: #000000 !important;
+    --color-muted: #333333 !important;
+    --color-line: #bfbfbf !important;
+    --color-plum: #000000 !important;
+    --color-primary: #333333 !important;
+    --color-primary-hover: #333333 !important;
+    --color-primary-strong: #000000 !important;
+    --color-primary-light: #f2f2f2 !important;
+    --color-primary-tint: #f7f7f7 !important;
+    --color-primary-soft: #ececec !important;
+    --color-primary-press: #000000 !important;
+    --color-sage: #333333 !important;
+    --color-dusty-rose: #333333 !important;
+    --color-success: #000000 !important;
+    --color-error: #000000 !important;
+    --color-on-accent: #ffffff !important;
+    --app-bg: #ffffff !important;
+    --app-surface: #ffffff !important;
+    --app-elevated: #ffffff !important;
+    --app-ink: #000000 !important;
+    --app-muted: #333333 !important;
+    --app-line: #bfbfbf !important;
+    --app-primary: #333333 !important;
+    --app-primary-hover: #333333 !important;
+    --app-primary-active: #000000 !important;
+    --app-primary-tint: #f7f7f7 !important;
+    --app-primary-soft: #ececec !important;
+    --app-on-accent: #ffffff !important;
+    --app-success: #000000 !important;
+    --app-error: #000000 !important;
+    --app-warning: #000000 !important;
+    --app-info: #000000 !important;
+    --app-focus-ring: #000000 !important;
+  }
+
+  /*
+   * موشن روی کاغذ معنا ندارد. بلوک‌های `data-motion=reveal` تا وقتی JS
+   * کلاس `.motion-in` را ندهد `opacity: 0` می‌مانند؛ در چاپ نتیجه‌اش
+   * صفحهٔ **سفیدِ نامرئی** است (جا اشغال می‌شود، محتوا دیده نمی‌شود).
+   * این باگ در PDF واقعی دیده شد: صفحهٔ اول برگهٔ محصول خالی چاپ می‌شد.
+   */
+  [data-motion="reveal"] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+
+  /* پس‌زمینه‌های رنگی → کاغذ سفید؛ تفکیک با حاشیه، نه رنگ */
+  * {
+    background-color: transparent !important;
+  }
+
+  /* تزئین حذف، محتوا می‌ماند (جوهر کمتر، کنتراست بیشتر) */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    backdrop-filter: none !important;
+    background-image: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* سواچ رنگی محتواست، نه تزئین — از قاعدهٔ «پس‌زمینه شفاف» مستثناست */
+  [data-swatch] {
+    background-color: var(--swatch, transparent) !important;
+    border-color: #7a7a7a !important;
+  }
+
+  /* کارت‌ها: حاشیهٔ نازک خاکستری + بی‌پرش در وسط */
+  .rounded-card,
+  .rounded-blob {
+    border: 1px solid #bfbfbf !important;
+    break-inside: avoid;
+  }
+
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+
+  img,
+  svg {
+    max-width: 100% !important;
+  }
+
+  /* فاکتور: سرخط جدول در هر صفحه تکرار شود، سطرها نصفه نشوند */
+  thead {
+    display: table-header-group;
+  }
+
+  tr,
+  li {
+    break-inside: avoid;
+  }
 }

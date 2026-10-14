@@ -77,7 +77,7 @@ export default async function RootLayout({
         <AppProviders>
           <a
             href="#main"
-            className="sr-only focus:not-sr-only focus:absolute focus:start-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-plum focus:px-4 focus:py-2 focus:text-sm focus:text-on-accent"
+            className="sr-only focus:not-sr-only focus:absolute focus:start-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-plum focus:px-4 focus:py-2 focus:text-sm focus:text-on-accent print:hidden"
           >
             پرش به محتوای اصلی
           </a>

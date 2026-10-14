@@ -173,7 +173,9 @@ export function ProductCard({ product }: CardProps) {
                     "size-4 rounded-full border transition-transform",
                     isActive ? "border-ink scale-110" : "border-line hover:scale-105",
                   )}
-                  style={{ backgroundColor: t.hex }}
+                  data-swatch
+                  /* رنگ از متغیر می‌آید تا در چاپ حفظ شود (به‌جای backgroundColor مستقیم) */
+                  style={{ "--swatch": t.hex } as React.CSSProperties}
                 />
               );
             })}

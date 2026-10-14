@@ -58,7 +58,8 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 px-3 pb-2 pt-2 sm:px-4">
+      {/* روی کاغذ، منوی سایت معنا ندارد — برگه با هویت چاپی خودش می‌آید */}
+      <header className="sticky top-0 z-40 px-3 pb-2 pt-2 sm:px-4 print:hidden">
         <div className="mx-auto max-w-7xl rounded-blob border border-line bg-surface/95 px-3 shadow-clay-1 backdrop-blur sm:px-5">
           {/* ── موبایل: ردیف ۱ — منو راست، لوگو وسط، اکشن‌ها چپ ── */}
           <div className="flex h-14 items-center justify-between md:hidden">

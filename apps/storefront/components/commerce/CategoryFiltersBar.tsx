@@ -183,7 +183,9 @@ export function CategoryFiltersBar({ category, filters, sort }: BarProps) {
                           "size-9 rounded-full border-2 transition-transform",
                           sel ? "border-primary-strong scale-110" : "border-line hover:scale-105",
                         )}
-                        style={{ backgroundColor: t.hex }}
+                        data-swatch
+                        /* رنگ از متغیر می‌آید تا در چاپ حفظ شود */
+                        style={{ "--swatch": t.hex } as React.CSSProperties}
                       />
                     );
                   })}

@@ -123,7 +123,9 @@ export function VariantMatrix({ product, axes, showHeader = false, preselect }: 
                                 : "cursor-not-allowed border-line bg-primary-tint/50 text-muted line-through",
                           )
                     }
-                    style={isColor ? { backgroundColor: t.hex } : undefined}
+                    data-swatch={isColor ? "" : undefined}
+                    /* رنگ از متغیر می‌آید تا در چاپ حفظ شود (به‌جای backgroundColor مستقیم) */
+                    style={isColor ? ({ "--swatch": t.hex } as React.CSSProperties) : undefined}
                   >
                     {!isColor && t.label}
                   </button>
@@ -153,7 +155,8 @@ export function VariantMatrix({ product, axes, showHeader = false, preselect }: 
           onClick={handleAdd}
           disabled={!variant || !ready}
           className={cn(
-            "inline-flex h-12 min-w-44 items-center justify-center rounded-full text-sm font-bold transition-all active:scale-[0.98]",
+            // برگهٔ چاپی نمی‌تواند چیزی به سبد اضافه کند — دکمه روی کاغذ می‌آید و می‌رود
+            "inline-flex h-12 min-w-44 items-center justify-center rounded-full text-sm font-bold transition-all active:scale-[0.98] print:hidden",
             variant
               ? added
                 ? "bg-success text-on-accent"

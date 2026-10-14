@@ -22,6 +22,7 @@ import {
   salePriceOf,
 } from "@/lib/catalog-repo";
 import { CATEGORIES } from "@/lib/categories";
+import { SITE_URL, site } from "@/lib/site";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -77,7 +78,9 @@ export default async function ProductPage({ params }: PageProps) {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-3 pb-28 sm:px-4 lg:pb-0">
+    // در چاپ پدینگِ نوار چسبندهٔ موبایل لازم نیست — همان ۷rem باعث می‌شد
+    // کارت‌ها با break-inside:avoid به صفحهٔ بعد بروند (تست واقعی PDF: ۳ → ۱)
+    <div className="mx-auto max-w-7xl px-3 pb-28 sm:px-4 lg:pb-0 print:pb-0">
       <nav aria-label="مسیر صفحه" className="py-3 text-[12px] text-muted">
         <ol className="flex flex-wrap items-center gap-1.5">
           <li><Link href="/" className="hover:text-primary-strong">خانه</Link></li>
@@ -91,7 +94,8 @@ export default async function ProductPage({ params }: PageProps) {
       <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
         {/* ۱) گالری */}
         <section aria-label="تصویر محصول" className="self-start lg:sticky lg:top-24">
-          <div className="relative rounded-blob border border-line bg-gradient-to-b from-primary-tint to-surface shadow-clay-1">
+          {/* در چاپ گالری جمع می‌شود تا برگهٔ مشخصات، صفحهٔ کامل را نگیرد */}
+          <div className="relative rounded-blob border border-line bg-gradient-to-b from-primary-tint to-surface shadow-clay-1 print:mx-auto print:max-w-[72mm]">
             <div className="absolute start-4 top-4 z-10">
               <WishlistButton productId={product.id} name={product.name} />
             </div>
@@ -177,6 +181,17 @@ export default async function ProductPage({ params }: PageProps) {
                 به دلایل بهداشتی، لباس زیر فقط با پلمب بازنشده قابل بازگشت است.
               </p>
             </div>
+          </div>
+
+          {/* فقط-چاپ: برگهٔ کاغذی باید بگوید از کجا آمده و چطور تماس بگیریم */}
+          <div className="hidden print:mt-4 print:block">
+            <p className="text-[12px] font-extrabold text-ink">{site.fullName}</p>
+            <p className="mt-1 text-[11px] leading-5 text-muted">
+              {site.phoneDisplay} · @{site.instagramHandle} · {site.workingHours}
+            </p>
+            <p className="mt-1 text-[11px] leading-5 text-muted" dir="ltr">
+              {SITE_URL}
+            </p>
           </div>
         </section>
       </div>

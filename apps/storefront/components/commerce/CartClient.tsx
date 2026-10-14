@@ -132,7 +132,7 @@ export function CartClient() {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-label="پیشرفت تا ارسال رایگان"
-            className="mt-2 h-2 overflow-hidden rounded-full bg-surface"
+            className="mt-2 h-2 overflow-hidden rounded-full bg-surface print:hidden"
           >
             <div
               className="h-full rounded-full bg-primary transition-all"
@@ -163,6 +163,10 @@ export function CartClient() {
               </Link>
               <p className="mt-1 text-[11px] text-muted">{variantLabel(d.variant)}</p>
               <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+                {/* روی کاغذ تعداد به‌صورت متن، نه کنترل − / + */}
+                <span className="hidden text-[11px] text-muted print:inline">
+                  تعداد: {faNum(d.qty)}
+                </span>
                 <QtyStepper qty={d.qty} onChange={(q) => setQty(d.variant.id, q)} />
                 <Price price={unitPrice(d) * d.qty} compareAtPrice={d.variant.salePrice != null ? d.variant.price * d.qty : undefined} size="sm" />
               </div>
@@ -171,7 +175,7 @@ export function CartClient() {
               type="button"
               onClick={() => removeLine(d.variant.id)}
               aria-label={`حذف ${d.product.name} از سبد`}
-              className="self-start rounded-full p-2 text-muted hover:bg-primary-tint hover:text-error"
+              className="self-start rounded-full p-2 text-muted hover:bg-primary-tint hover:text-error print:hidden"
             >
               <svg viewBox="0 0 24 24" className="size-4.5" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
                 <path d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13" strokeLinecap="round" strokeLinejoin="round" />
@@ -205,11 +209,11 @@ export function CartClient() {
         </div>
         <Link
           href="/checkout"
-          className="mt-4 flex h-12 items-center justify-center rounded-full bg-primary text-sm font-bold text-on-accent shadow-clay-1 transition-all hover:bg-primary-press hover:shadow-clay-2 active:scale-[0.98]"
+          className="mt-4 flex h-12 items-center justify-center rounded-full bg-primary text-sm font-bold text-on-accent shadow-clay-1 transition-all hover:bg-primary-press hover:shadow-clay-2 active:scale-[0.98] print:hidden"
         >
           ادامه خرید و پرداخت
         </Link>
-        <p className="mt-2.5 text-center text-[11px] leading-5 text-muted">
+        <p className="mt-2.5 text-center text-[11px] leading-5 text-muted print:hidden">
           نیازی به ثبت‌نام نیست — به‌عنوان مهمان ادامه دهید.
         </p>
       </div>
@@ -219,7 +223,7 @@ export function CartClient() {
 
 function QtyStepper({ qty, onChange }: { qty: number; onChange: (q: number) => void }) {
   return (
-    <div className="flex items-center gap-1 rounded-full border border-line">
+    <div className="flex items-center gap-1 rounded-full border border-line print:hidden">
       <button
         type="button"
         onClick={() => onChange(qty - 1)}

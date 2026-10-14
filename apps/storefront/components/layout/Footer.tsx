@@ -4,7 +4,8 @@ import { CATEGORIES as categories } from "@/lib/categories";
 
 export function Footer() {
   return (
-    <footer className="mt-16 px-3 pb-24 sm:px-4 lg:pb-8">
+    // روی کاغذ تکرار نمی‌شود — اطلاعات تماس در برگهٔ چاپی خودش می‌آید
+    <footer className="mt-16 px-3 pb-24 sm:px-4 lg:pb-8 print:hidden">
       <div className="mx-auto max-w-7xl rounded-blob border border-line bg-surface p-6 shadow-clay-1 sm:p-10">
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           <div>

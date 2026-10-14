@@ -44,7 +44,7 @@ export function StickyBuyBar({ product }: { product: ProductV2 }) {
   return (
     <div
       className={cn(
-        "fixed inset-x-0 bottom-0 z-40 lg:hidden",
+        "fixed inset-x-0 bottom-0 z-40 lg:hidden print:hidden",
         "border-t border-line bg-surface/95 px-3 py-2.5 shadow-clay-3 backdrop-blur",
       )}
     >
