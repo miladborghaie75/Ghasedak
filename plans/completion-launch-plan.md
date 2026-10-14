@@ -189,7 +189,7 @@ allowlist/نسبی‌سازی callback؛ تست منفی (URL خارجی → ر�
 
 ### ایستگاه ۲ — قفل دستاوردها
 
-#### گام ۸ — `[F2-1]` CI پایه (توصیه: همین ابتدا) — 🟡 پیاده‌شده؛ منتظر اولین ران واقعی · ✅ ریپو GitHub عمومی: `miladborghaie75/Ghasedak`
+#### گام ۸ — `[F2-1]` CI پایه (توصیه: همین ابتدا) — ✅ بسته‌شده · ✅ ریپو GitHub عمومی: `miladborghaie75/Ghasedak`
 GitHub Actions (پیش‌نیاز استقرار خودکار گام ۴۰-۱): install→typecheck→تست‌های API (DB سرویس‌دار)→build هر دو اپ؛ **اگر دسترسی ادمین فراهم نشد:** اسکریپت معادل `check-all` (typecheck+test+build) به‌عنوان pre-push + گام ۴۰-۱ محدود به pull دستی.
 **پذیرش:** PR نمونه سبز (شاهد لینک) · **اندازه:** M · **باقی‌مانده:** تأیید دسترسی ادمین/خصوصی‌بودن ریپو و روشن‌بودن Actions هنگام شروع گام.
 
@@ -200,7 +200,7 @@ GitHub Actions (پیش‌نیاز استقرار خودکار گام ۴۰-۱): i
 **ران‌های واقعی روی GitHub:** ران ۱ (`9f357e0`) و ران ۲ (`77b3777`) — job کیفیت سبز؛ job تست API قرمز. لاگ‌ها بدون دسترسی ادمین خوانده نمی‌شوند → همان گام گزارش تشخیصی را قفل کرد: در شکست، نام سوئیت‌ها/تست‌های افتاده به‌صورت annotation عمومی (`::error::`) + خلاصه در Summary ران (قابل خواندن از API بدون لاگین).
 **ریشهٔ قرمز (تشخیص از annotationها):** `phase14-backup-status.spec.ts` و `phase14-diagnostics.spec.ts` حقایق ماشین عملیات را assert می‌کردند (پوشهٔ واقعی `C:/ghasedak-backups` + Scheduled Task ویندوزی `GhasedakDailyBackup`) — روی رانر Linux قابل‌برقراری نیستند.
 **رفع:** همان دو سوئیت با گیت `OPS_MACHINE` (ویندوز + پوشهٔ واقعی بکاپ) فقط روی ماشین عملیات اجرا و بیرون آن صریحاً skip می‌شوند؛ در عوض پوشش portable با fixture موقت اضافه شد (listBackupDirs مرتب، manifest کامل + verify.json + ماسک db). سوئیت کامل محلی: **۳۸/۳۸ سوئیت · ۲۱۲/۲۱۲ تست**.
-**باقیماندهٔ گام:** ران سوم سبز روی GitHub (لینک از API)؛ branch protection/PR نمونه اختیاری.
+**ران سبز (پذیرش):** ران [38551035038](https://github.com/miladborghaie75/Ghasedak/actions/runs/38551035038) روی `b352fa5` — `status: completed · conclusion: success` از API عمومی. هر دو job سبز: `api-tests` ۷۰s (migrate deploy + seed + کل سوئیت روی پستگرس تازه) و `quality` 77s (typecheck + build هر دو اپ)؛ step گزارش تشخیصی روی ران سبز طبق طراحی skip شد. branch protection/PR نمونه: اختیاری، بیرون از این گام.
 
 ### ایستگاه ۳ — طراحی و پایه‌های UX
 

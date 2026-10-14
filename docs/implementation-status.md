@@ -1,6 +1,6 @@
 # وضعیت پیاده‌سازی — Ghasedak (بند ۲/۱۱۸ سند Master)
 
-> آخرین به‌روزرسانی: فاز ۱۳ — رسانهٔ حرفه‌ای (جزئیات/جایگزینی/حذف)، گاوصندوق credential، لایهٔ چند-اپراتور پیامک (۶ اپراتور)، ابزار گیت انتشار B1، ابزار فایل‌های بی‌صاحب، ۱۳۰/۱۳۰ آزمون سبز، محیط واقعی بالا با اسکریپت اصلاح‌شده.
+> آخرین به‌روزرسانی: ۲۰۲۶-۱۰-۱۴ — ایستگاه ۲/`F2-1`: CI پایهٔ GitHub Actions سبز (job کیفیت: typecheck+build؛ job تست: migrate+seed روی پستگرس تازهٔ هر اجرا + کل سوئیت؛ گزارش تشخیصی شکست بدون لاگین). سوئیت محلی ۳۸/۳۸ · ۲۱۲/۲۱۲.
 > تعریف «پیاده‌سازی‌شده»: مسیر runtime کامل کار کند (بند ۱۱۴/۱۱۸). Schema و سند به‌تنهایی «پیاده‌شده» نیست.
 
 ## استقرار پیش از لانچ — ایستگاه ۱ (۲۰۲۶-۱۰-۱۴) — runtime-tested
@@ -11,7 +11,14 @@
 | سیاست اصلاح صادقانه: نام غیرقابل‌بازیابی ← «نام اصلی از دست رفته — SKU: …» + اسلاگ `recovered-*` + ARCHIVED (بدون حذف سفارش/انبار) | ✅ IMPLEMENTED | `STAR-BRA-BLK-M` / `TEST-AUTO-1` با Audit قبل/بعد؛ اجرای دوباره `repaired=0` |
 | حلقهٔ بی‌پایان سبد خرید (CartProvider) — ۲۳۰→۱ فراخوانی `/api/cart`، Checkout ۵۳.۸s→۲۵۴ms | ✅ IMPLEMENTED | شاهد قبل/بعد روی build تولیدی (گام ۱ و ۲ نقشه) |
 | COGS عقب‌افتاده: `CogsBackfillService` + اکشن ادمین + worker (KPI گزارش سود = جدول = ۱۷۱٬۴۲۸) | ✅ IMPLEMENTED | JE-00459 روی ORD-000001؛ تست `phase14-cogs-backfill` |
-| سوئیت کامل API روی DB تمرین | ✅ IMPLEMENTED | `npx jest --runInBand` → **۳۸/۳۸ سوئیت · ۲۱۰/۲۱۰ تست** (شامل phase15-data-health، phase15-callback-url، phase15-boot-config) |
+| سوئیت کامل API روی DB تمرین | ✅ IMPLEMENTED | `npx jest --runInBand` → **۳۸/۳۸ سوئیت · ۲۱۲/۲۱۲ تست** (شامل phase15-data-health، phase15-callback-url، phase15-boot-config و پوشش fixture بکاپ) |
+
+## ایستگاه ۲ (F2 — قفل دستاوردها) — ۲۰۲۶-۱۰-۱۴
+| قابلیت | وضعیت | مدرک |
+|---|---|---|
+| CI پایه GitHub Actions: job کیفیت (install frozen → Prisma generate → typecheck → build سه اپ) + job تست API روی postgres:16 کاملاً تازه (migrate deploy → seed دمو → کل سوئیت) | ✅ IMPLEMENTED | ران سبز [38551035038](https://github.com/miladborghaie75/Ghasedak/actions/runs/38551035038) روی `b352fa5` — تست API ۷۰s · typecheck+build ۷۷s |
+| گزارش تشخیصی شکست تست بدون لاگین (annotation عمومی `::error::` + Summary ران) | ✅ IMPLEMENTED | ران‌های قرمز ۱ و ۲: همین مسیر ریشه را نشان داد (ادعاهای ماشین عملیات بکاپ روی رانر Linux) |
+| سوئیت تست portable — ادعاهای ماشین عملیات (بکاپ واقعی + Scheduled Task) با `OPS_MACHINE` گیت شده و پوشش fixture معادل دارد | ✅ IMPLEMENTED | `phase14-backup-status`/`phase14-diagnostics`؛ شبیه‌سازی CI: ۳ تست ops صریحاً skip + ۱۱ تست portable سبز |
 
 ## فاز ۱۳ (۲۰۲۶-۰۹-۳۰) — runtime-tested
 | قابلیت | وضعیت | مدرک |
