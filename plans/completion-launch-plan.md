@@ -196,7 +196,11 @@ GitHub Actions (پیش‌نیاز استقرار خودکار گام ۴۰-۱): i
 **[F2-1] پیاده‌سازی (۲۰۲۶-۱۰-۱۴):** [.github/workflows/ci.yml](.github/workflows/ci.yml) — دو job مستقل: `quality` (install --frozen-lockfile → Prisma generate → `pnpm typecheck` → `pnpm build`) و `api-tests` (سرویس **تازه**‌ی postgres:16 در هر اجرا → `migrate deploy` از خود ریپو → seed دمو → `jest --runInBand` کامل)؛ تراگیر: push به main + PR + اجرای دستی. `gh` CLI روی ماشین نیست؛ نتیجهٔ ران از API عمومی Actions خوانده می‌شود.
 **کشف جانبی که همین گام قفل کرد:** `packages/database/scripts/seed.ts` از کامیت `84c60a4` یک `}` اضافه داشت (بلوک جدید CoA جلوتر بسته شد و بستنِ قدیمی `if (fy)` جا ماند) — هیچ tsconfigای این فایل را پوشش نمی‌داد، پس `db seed` با tsx در `TransformError` می‌افتاد و محیط تست از `.seed-dist/seed.js` (خارج git) تغذیه می‌شد. رفع: حذف آکولاد اضافه + `packages/database/tsconfig.json` + تسک `typecheck` + `@types/node` + اعلام وابستگی `@ghasedak/contracts` (که در عمل هم resolve نمی‌شد) → turbo حالا ۷ پکیج را typecheck می‌کند.
 **شاهد محلی (۲۰۲۶-۱۰-۱۴):** روی DB کاملاً تازهٔ `ci_probe_f0` (کلستر تمرین): `migrate deploy` → هر ۱۸ migration؛ `pnpm db:seed` → `SEED COMPLETE`؛ سوئیت کامل API → **۳۸/۳۸ سوئیت · ۲۱۰/۲۱۰ تست** PASS؛ `pnpm install --frozen-lockfile` سبز؛ `pnpm typecheck` → **۱۰/۱۰ تسک** سبز (شامل database)؛ DB کاوش پس از سنجش حذف شد.
-**باقی‌ماندهٔ گام:** push → اولین ران واقعی سبز روی GitHub (شاهد لینک از API عمومی)؛ branch protection/PR نمونه اختیاری.
+**باقی‌ماندهٔ گام:** ران‌های واقعی روی GitHub در جریان (شاهد زیر).
+**ران‌های واقعی روی GitHub:** ران ۱ (`9f357e0`) و ران ۲ (`77b3777`) — job کیفیت سبز؛ job تست API قرمز. لاگ‌ها بدون دسترسی ادمین خوانده نمی‌شوند → همان گام گزارش تشخیصی را قفل کرد: در شکست، نام سوئیت‌ها/تست‌های افتاده به‌صورت annotation عمومی (`::error::`) + خلاصه در Summary ران (قابل خواندن از API بدون لاگین).
+**ریشهٔ قرمز (تشخیص از annotationها):** `phase14-backup-status.spec.ts` و `phase14-diagnostics.spec.ts` حقایق ماشین عملیات را assert می‌کردند (پوشهٔ واقعی `C:/ghasedak-backups` + Scheduled Task ویندوزی `GhasedakDailyBackup`) — روی رانر Linux قابل‌برقراری نیستند.
+**رفع:** همان دو سوئیت با گیت `OPS_MACHINE` (ویندوز + پوشهٔ واقعی بکاپ) فقط روی ماشین عملیات اجرا و بیرون آن صریحاً skip می‌شوند؛ در عوض پوشش portable با fixture موقت اضافه شد (listBackupDirs مرتب، manifest کامل + verify.json + ماسک db). سوئیت کامل محلی: **۳۸/۳۸ سوئیت · ۲۱۲/۲۱۲ تست**.
+**باقیماندهٔ گام:** ران سوم سبز روی GitHub (لینک از API)؛ branch protection/PR نمونه اختیاری.
 
 ### ایستگاه ۳ — طراحی و پایه‌های UX
 

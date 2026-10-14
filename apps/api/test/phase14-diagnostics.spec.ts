@@ -1,6 +1,11 @@
 /**
  * بند ۸ — مرکز عیب‌یابی: endpoint تجمیعی، read-only، همهٔ چک‌ها واقعی.
  * روی rehearsal و دیسک واقعی اجرا می‌شود؛ هیچ mutationی ندارد.
+ *
+ * نکتهٔ CI: تست «backup check» حقایق ماشین عملیات (بکاپ واقعی + Scheduled Task
+ * ویندوز) را می‌سنجد و روی رانر Linux قابل‌برقراری نیست — با it.skipIf فقط روی
+ * همان ماشین اجرا می‌شود؛ حتی بیرون از آن، تست نخست حضور چک backup و detail
+ * غیرخالی را (portable) تضمین می‌کند.
  */
 import "reflect-metadata";
 import * as fs from "fs";
@@ -9,6 +14,7 @@ import * as path from "path";
 import { PrismaService } from "../src/prisma/prisma.service";
 import { HealthService } from "../src/health/health.service";
 import { DiagnosticsController } from "../src/admin/diagnostics.controller";
+import { BACKUP_DIR, listBackupDirs } from "../src/admin/backup-status.controller";
 
 jest.setTimeout(120_000);
 
@@ -48,7 +54,16 @@ describe("Phase 14 item8 — diagnostics center", () => {
     expect(db.state).toBe("OK");
   });
 
-  it("backup check آخرین بکاپ واقعی را می‌بیند و تسک واقعی را گزارش می‌کند", async () => {
+/** ماشین عملیات = ویندوز + پوشهٔ بکاپ واقعی (همان قاعدهٔ spec بکاپ) */
+const OPS_MACHINE = (() => {
+  try {
+    return process.platform === "win32" && fs.existsSync(BACKUP_DIR) && listBackupDirs(BACKUP_DIR).length > 0;
+  } catch {
+    return false;
+  }
+})();
+
+  (OPS_MACHINE ? it : it.skip)("backup check آخرین بکاپ واقعی را می‌بیند و تسک واقعی را گزارش می‌کند", async () => {
     const r = (await ctl.run()) as { checks: Array<{ key: string; state: string; data?: Record<string, unknown> }> };
     const b = r.checks.find((c) => c.key === "backup")!;
     expect(b.data?.latest).toBeTruthy();

@@ -3,6 +3,11 @@
  * عمداً از C:/ghasedak-backups واقعی و تسک واقعی GhasedakDailyBackup استفاده می‌کند —
  * این همان اثبات عملیاتی است: فایل‌ها محصول ابزار رسمی بکاپ‌اند نه fixture ساختگی.
  * بدون فیک (بند ۱۱۱): مسیر خراب → available=false؛ تسک غایب → found=false.
+ *
+ * نکتهٔ CI: دو تستِ «دیسک واقعی» و «endpoint + تسک» حقایق همین ماشین عملیات را
+ * می‌سنجند (بکاپ واقعی + Scheduled Task ویندوز) و روی رانر Linux قابل‌برقراری نیستند —
+ * با it.skipIf روی ماشین عملیات اجرا و بیرون آن (CI) صریحاً skip می‌شوند؛ کدِ همان
+ * مسیرها با fixtureهای موقت (بدون ماشین عملیات) پوشش داده شده است.
  */
 import "reflect-metadata";
 import * as fs from "fs";
@@ -54,7 +59,67 @@ describe("Phase 14 item4 — backup status endpoint", () => {
     }
   });
 
-  it("دیسک واقعی: تازه‌ترین بکاپ کامل است و summary واقعی دارد", () => {
+/** ماشین عملیات = ویندوز + پوشهٔ بکاپ واقعی با حداقل یک manifest؛ بیرون از آن تست‌های ops معنا ندارند */
+const OPS_MACHINE = (() => {
+  try {
+    return process.platform === "win32" && fs.existsSync(BACKUP_DIR) && listBackupDirs(BACKUP_DIR).length > 0;
+  } catch {
+    return false;
+  }
+})();
+
+describe("Phase 14 item4 — مسیرهای قابل‌حمل (fixture موقت، بدون ماشین عملیات)", () => {
+  it("listBackupDirs فقط پوشه‌های دارای manifest را مرتب برمی‌گرداند", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gh-bk-list-"));
+    try {
+      fs.mkdirSync(path.join(root, "2026-10-01T00-00-00"));
+      fs.writeFileSync(path.join(root, "2026-10-01T00-00-00", "manifest.json"), "{}");
+      fs.mkdirSync(path.join(root, "2026-10-03T00-00-00"));
+      fs.writeFileSync(path.join(root, "2026-10-03T00-00-00", "manifest.json"), "{}");
+      fs.mkdirSync(path.join(root, "no-manifest"));
+      fs.writeFileSync(path.join(root, "loose.txt"), "x");
+      expect(listBackupDirs(root)).toEqual(["2026-10-01T00-00-00", "2026-10-03T00-00-00"]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("manifest کامل → complete=true با summary واقعی و db ماسک‌شده؛ verify.json درست → verifyOk=true", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gh-bk-full-"));
+    try {
+      const dir = path.join(root, "2026-10-05T02-00-00");
+      fs.mkdirSync(dir);
+      fs.writeFileSync(
+        path.join(dir, "manifest.json"),
+        JSON.stringify({
+          kind: "ghasedak-backup",
+          version: 1,
+          database: "postgresql://postgres:secret-pw@127.0.0.1:55433/ghasedak",
+          startedAt: "2026-10-05T02:00:00.000Z",
+          finishedAt: "2026-10-05T02:03:00.000Z",
+          tables: { users: {}, orders: {} },
+          summary: { tables: 2, tablesOk: 2, tablesFailed: 0, totalBytes: 1024, totalRows: 12 },
+        }),
+      );
+      fs.writeFileSync(path.join(dir, "verify.json"), JSON.stringify({ ok: true, at: "2026-10-05T02:04:00.000Z" }));
+      const info = readBackupDirInfo(root, "2026-10-05T02-00-00");
+      expect(info).not.toBeNull();
+      expect(info!.complete).toBe(true);
+      expect(info!.summary!.tables).toBe(2);
+      expect(info!.summary!.tablesFailed).toBe(0);
+      expect(info!.summary!.totalRows).toBe(12);
+      expect(info!.database).toContain("***");
+      expect(info!.database).not.toContain("secret-pw");
+      expect(info!.verifyOk).toBe(true);
+      expect(info!.verifyAt).toBe("2026-10-05T02:04:00.000Z");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+  // ── اثبات عملیاتی ماشین واقعی (ویندوز + بکاپ واقعی + Scheduled Task) — روی CI صریحاً skip ──
+  (OPS_MACHINE ? it : it.skip)("دیسک واقعی: تازه‌ترین بکاپ کامل است و summary واقعی دارد", () => {
     const names = listBackupDirs(BACKUP_DIR);
     expect(names.length).toBeGreaterThan(0);
     const latest = readBackupDirInfo(BACKUP_DIR, names[names.length - 1]);
@@ -66,7 +131,7 @@ describe("Phase 14 item4 — backup status endpoint", () => {
     expect(typeof latest!.verifyOk).toBe("boolean");
   });
 
-  it("endpoint وضعیت: latest + history + تسک واقعی + retention", async () => {
+  (OPS_MACHINE ? it : it.skip)("endpoint وضعیت: latest + history + تسک واقعی + retention", async () => {
     const prisma = new PrismaService(); // بدون $connect — endpoint به DB وابسته نیست
     const ctl = new BackupStatusController(prisma);
     const r = (await ctl.status()) as {
