@@ -81,6 +81,7 @@ describe("Phase 14 wave3 — real profit report", () => {
     const order = await prisma.order.create({
       data: {
         code: `TST-${tag}`,
+        createdAt: new Date("2019-03-04T12:00:00.000Z"),
         channelId: channel!.id,
         warehouseId,
         guestName: "تست سود",
@@ -111,7 +112,7 @@ describe("Phase 14 wave3 — real profit report", () => {
     const entry = await prisma.journalEntry.create({
       data: {
         number: `TST-${tag}`,
-        date: new Date(),
+        date: new Date("2019-03-04T12:00:00.000Z"),
         description: "سند تست گزارش سود",
         sourceType: "order",
         sourceId: order.id,
@@ -127,7 +128,10 @@ describe("Phase 14 wave3 — real profit report", () => {
     });
     entryId = entry.id;
 
-    const res = await ctl.profit({ from: new Date(Date.now() - 3600_000).toISOString(), to: new Date(Date.now() + 3600_000).toISOString() });
+    // پنجرهٔ انحصاری: اسناد و سفارشِ تست در گذشتهٔ دور تاریخ‌گذاری می‌شوند تا
+    // اسناد فروش e2e که همزمان «الان» ثبت می‌شوند در مجموعِ اعداد کلی نشت نکنند.
+    const QUIET = new Date("2019-03-04T12:00:00.000Z");
+    const res = await ctl.profit({ from: new Date(QUIET.getTime() - 3600_000).toISOString(), to: new Date(QUIET.getTime() + 3600_000).toISOString() });
 
     // اعداد کلی از GL
     expect(res.revenue).toBe("700000");

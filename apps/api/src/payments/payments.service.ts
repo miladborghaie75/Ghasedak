@@ -158,18 +158,50 @@ export class PaymentsService implements OnModuleInit {
     const adapter = this.adapter(code);
     const providerId = await this.providerRowId(code);
 
-    const attempt = await this.prisma.paymentAttempt.create({
-      data: {
-        orderId: order.id,
-        methodId: method.id,
-        providerId,
-        channelId: order.channelId,
-        amount: order.total,
-        state: "CREATED",
-        idempotencyKey: input.idempotencyKey,
-        expiresAt: new Date(Date.now() + 30 * 60_000),
-      },
-    });
+    let attempt;
+    try {
+      attempt = await this.prisma.paymentAttempt.create({
+        data: {
+          orderId: order.id,
+          methodId: method.id,
+          providerId,
+          channelId: order.channelId,
+          amount: order.total,
+          state: "CREATED",
+          idempotencyKey: input.idempotencyKey,
+          expiresAt: new Date(Date.now() + 30 * 60_000),
+        },
+      });
+    } catch (e) {
+      // کلید هم‌زمان ثبت شده (دو کلیک موازی) — برنده را پیدا کن و همان را ادامه بده (بند ۱۱۶)
+      const errCode = (e as { code?: string })?.code;
+      if (errCode === "P2002") {
+        // برنده ممکن است هنوز requestPayment را تمام نکرده باشد — کوتاه صبر کن تا REDIRECTED شود
+        for (let i = 0; i < 20; i++) {
+          const winner = await this.prisma.paymentAttempt.findUnique({
+            where: { idempotencyKey: input.idempotencyKey },
+            include: { provider: true },
+          });
+          if (winner?.authority && winner.state === "REDIRECTED") {
+            const wCode = winner.provider?.provider ?? code;
+            const red = await this.adapter(wCode).requestPayment({
+              attemptId: winner.id,
+              amount: Number(winner.amount),
+              description: "ادامه پرداخت سفارش — قاصدک",
+              mobile: input.guestMobile ?? null,
+              callbackUrl: input.callbackUrl,
+            });
+            return { attemptId: winner.id, redirectUrl: red.redirectUrl };
+          }
+          if (winner?.state === "FAILED") {
+            throw new BadRequestException({ code: "PAYMENT_REQUEST_FAILED", message: "درخواست پرداخت ناموفق بود؛ دوباره تلاش کنید." });
+          }
+          await new Promise((r) => setTimeout(r, 150));
+        }
+        throw new BadRequestException({ code: "PAYMENT_IN_PROGRESS", message: "پرداخت این سفارش از قبل در جریان است؛ چند لحظه بعد دوباره تلاش کنید." });
+      }
+      throw e;
+    }
 
     const ctx: PaymentRequestContext = {
       attemptId: attempt.id,
