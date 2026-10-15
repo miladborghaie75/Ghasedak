@@ -605,6 +605,141 @@ export class CapabilitiesController {
     return this.sms.providersStatus().filter((p) => p.id === id)[0] ?? { ok: true };
   }
 
+  // ================== دستیار AI (تصمیم #۱۵ — گام ۱۸-۲) ==================
+
+  /** وضعیت اتصال AI — سازگار OpenAI؛ credential از env/.env.local (بند ۴۵)، بدون فیک (بند ۱۱۱) */
+  @Get("ai")
+  @RequirePermission("settings.view")
+  async aiStatus() {
+    const items = this.credentials.status().items;
+    const baseUrl = process.env.AI_BASE_URL ?? "";
+    return {
+      configured: Boolean(baseUrl && process.env.AI_API_KEY && process.env.AI_MODEL),
+      baseUrl,
+      model: process.env.AI_MODEL ?? "",
+      key: items["AI_API_KEY"] ?? null,
+    };
+  }
+
+  /** ذخیرهٔ تنظیمات AI (نشانی/کلید/مدل) — از همان گاوصندوق credential (هرگز DB) */
+  @Post("ai/settings")
+  @RequirePermission("settings.manage")
+  async saveAiSettings(@Body() body: { baseUrl?: string; apiKey?: string; model?: string }) {
+    const updates: Record<string, string> = {};
+    const fields: Array<["AI_BASE_URL" | "AI_API_KEY" | "AI_MODEL", string | undefined]> = [
+      ["AI_BASE_URL", body.baseUrl],
+      ["AI_API_KEY", body.apiKey],
+      ["AI_MODEL", body.model],
+    ];
+    for (const [key, value] of fields) {
+      if (value === undefined) continue;
+      const val = String(value).trim();
+      if (val.length > 2048) {
+        throw new BadRequestException({ code: "VALIDATION_ERROR", message: "مقدار بیش از حد بلند است." });
+      }
+      if (key === "AI_BASE_URL" && val && !/^https?:\/\//.test(val)) {
+        throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نشانی سرویس AI باید با http یا https شروع شود." });
+      }
+      updates[key] = val;
+    }
+    if (Object.keys(updates).length === 0) {
+      throw new BadRequestException({ code: "EMPTY", message: "چیزی برای ذخیره ارسال نشده است." });
+    }
+    const saved = await this.credentials.save(updates);
+    return { ...saved, status: await this.aiStatus() };
+  }
+
+  /** پیکربندی AI یا خطای صریح — بدون فیک، بند ۱۱۱ */
+  private aiConfig() {
+    const baseUrl = (process.env.AI_BASE_URL ?? "").replace(/\/+$/, "");
+    const apiKey = process.env.AI_API_KEY ?? "";
+    const model = process.env.AI_MODEL ?? "";
+    if (!baseUrl || !apiKey || !model) {
+      throw new BadRequestException({
+        code: "REQUIRES_CREDENTIAL",
+        message: "تنظیمات AI کامل نیست — نشانی، کلید و مدل را در کارت دستیار وارد کن.",
+      });
+    }
+    return { baseUrl, apiKey, model };
+  }
+
+  /** فراخوانی chat completion سازگار OpenAI — تنها مسیر گفتگو با سرویس AI */
+  private async aiChat(messages: Array<{ role: "system" | "user"; content: string }>, maxTokens: number) {
+    const { baseUrl, apiKey, model } = this.aiConfig();
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages, temperature: 0.2, max_tokens: maxTokens }),
+      signal: AbortSignal.timeout(30_000),
+    }).catch((e) => {
+      throw new BadRequestException({ code: "AI_PROVIDER_ERROR", message: `اتصال به سرویس AI برقرار نشد: ${String(e)}` });
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new BadRequestException({ code: "AI_PROVIDER_ERROR", message: `پاسخ سرویس AI: ${res.status} — ${text.slice(0, 200)}` });
+    }
+    const json = (await res.json().catch(() => null)) as { choices?: Array<{ message?: { content?: string } }> } | null;
+    const content = (json?.choices?.[0]?.message?.content ?? "").trim();
+    if (!content) {
+      throw new BadRequestException({ code: "AI_EMPTY", message: "سرویس AI پاسخ خالی داد؛ مدل یا نشانی را بررسی کن." });
+    }
+    return content;
+  }
+
+  /** تست اتصال — یک فراخوانی واقعی و کوچک با همان کلید و مدل ذخیره‌شده */
+  @Post("ai/test")
+  @RequirePermission("settings.manage")
+  async aiTest() {
+    const reply = await this.aiChat([{ role: "user", content: "یک کلمه بنویس: سلام" }], 32);
+    return { ok: true, reply: reply.slice(0, 120) };
+  }
+
+  /** پیشنهاد جایگزین برای متنِ خارج از چارچوب لحن — دستیار ممیزی لحن در پنل ادمین */
+  @Post("ai/suggest")
+  @RequirePermission("settings.view")
+  async aiSuggest(@Body() body: { text?: string; rule?: string; detail?: string; formal?: boolean; file?: string }) {
+    const text = String(body?.text ?? "").trim();
+    if (!text || text.length > 600) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "متن برای پیشنهاد نامعتبر است." });
+    }
+    const rule = String(body?.rule ?? "R1").slice(0, 8);
+    const detail = String(body?.detail ?? "").slice(0, 300);
+    const file = String(body?.file ?? "").slice(0, 200);
+    const formal = body?.formal === true;
+    const system =
+      "تو ویراستار متن‌های فارسی رابط کاربر فروشگاه اینترنتی قاصدک هستی. " +
+      "متن کاربر را در چارچوب لحن زیر بازنویسی کن: " +
+      "لحن پیش‌فرض صمیمی و دوم‌شخص مفرد است (تو) با نگارش معیار فارسی: «را» نه «رو»، «می‌توانی» نه «می‌تونی». " +
+      "اگر لحن هدف رسمی بود، دوم‌شخص جمع (شما) با همان نگارش معیار. " +
+      "«لطفاً» ممنوع است؛ گرمی از فعل کوتاه و بی‌تعارفه می‌آید. " +
+      "به‌جای «کلیک»، فعلِ خودِ کار را نام ببر («انتخاب کن»، «بزن»). " +
+      "پیام خطا همیشه راه‌حل می‌دهد؛ الگوی «چه شد؛ چه کار کن». " +
+      "اصطلاح فنی و داخلی (توکن، nonce و مانند آن) در متن کاربر نمی‌آید؛ با زبان کاربر توصیفش کن. " +
+      "معنا، اطلاعات و طول متن را تا جای ممکن حفظ کن؛ فقط لحن و نگارش اصلاح شود. " +
+      "فقط و فقط متن جایگزین نهایی را بنویس: بدون توضیح، بدون مقدمه، بدون نقل‌قول، بدون Markdown.";
+    const raw = await this.aiChat(
+      [
+        { role: "system", content: system },
+        {
+          role: "user",
+          content:
+            `فایل: ${file}\nقاعدهٔ نقض‌شده: ${rule} — ${detail}\n` +
+            `لحن هدف: ${formal ? "رسمی (شما)" : "صمیمی (تو)"}\nمتن فعلی:\n${text}`,
+        },
+      ],
+      400,
+    );
+    // مدل‌ها گاهی پاسخ را در fence یا نقل‌قول می‌پیچند — برای متنِ رابط کاربر فقط خودِ متن لازم است
+    const suggestion = raw
+      .replace(/```[a-z]*\n?/g, "")
+      .replace(/```/g, "")
+      .trim()
+      .replace(/^["'«»]+/, "")
+      .replace(/["'«»]+$/, "")
+      .trim();
+    return { suggestion };
+  }
+
   // ================== فاز ۱۲ (گام ۴) — Outbox workspace ==================
 
   /** خلاصهٔ outbox + ردیف‌ها — PENDING/FAILED مانیتورینگ، DISPATCHED اختیاری */
