@@ -154,6 +154,7 @@ export class NotificationDispatcherService implements OnModuleInit, OnModuleDest
   private renderMessage(n: { templateKey: string; payload: unknown }): string {
     const p = (n.payload ?? {}) as Record<string, unknown>;
     const invoiceNumber = typeof p.invoiceNumber === "string" ? p.invoiceNumber : "";
+    const orderCode = typeof p.orderCode === "string" ? p.orderCode : "";
     const amount = typeof p.amount === "string" ? p.amount : typeof p.amount === "number" ? String(p.amount) : "";
     const store = process.env.STORE_NAME ?? "قاصدک";
     if (n.templateKey.startsWith("pos-sale-sms:")) {
@@ -161,6 +162,11 @@ export class NotificationDispatcherService implements OnModuleInit, OnModuleDest
     }
     if (n.templateKey.startsWith("order-paid-sms:")) {
       return `${store} — پرداخت سفارش ${invoiceNumber} به مبلغ ${amount} تومان تایید شد. سپاس از خرید شما.`;
+    }
+    if (n.templateKey.startsWith("review-invite:")) {
+      // دعوت ثبت نظر بعد از تحویل — لینک از payload واقعی رویداد می‌آید
+      const link = typeof p.link === "string" ? p.link : "";
+      return `${store} — سفارش ${orderCode} تحویل شد. اگر راضی بودید، نظرتان دربارهٔ خرید همین‌جا ثبت می‌شود و به انتخاب بقیه کمک می‌کند: ${link}`;
     }
     return `${store} — ${n.templateKey}`;
   }

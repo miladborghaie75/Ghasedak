@@ -22,6 +22,8 @@ export type ShapedProduct = {
   image: string | null; images: Array<{ url: string; alt: string | null }>;
   isNew: boolean; inStock: boolean; minPrice: number | null; maxPrice: number | null;
   description?: string | null; tags?: string[];
+  /** خلاصهٔ نظرات تأییدشده — فقط APPROVED؛ بدون نظر → count=0/avg=null (بند ۴۱/۸۸) */
+  rating?: { avg: number | null; count: number };
   variants: ShapedVariant[];
 };
 
@@ -148,6 +150,26 @@ export class PublicCatalogController {
     return map;
   }
 
+  /** خلاصهٔ امتیاز نظرات تأییدشدهٔ چند محصول — batch groupBy (بدون N+1) */
+  private async ratingMap(productIds: string[]): Promise<Map<string, { avg: number | null; count: number }>> {
+    const map = new Map<string, { avg: number | null; count: number }>();
+    const ids = [...new Set(productIds)];
+    if (ids.length === 0) return map;
+    const rows = await this.prisma.review.groupBy({
+      by: ["productId"],
+      where: { productId: { in: ids }, status: "APPROVED" },
+      _count: { _all: true },
+      _avg: { rating: true },
+    });
+    for (const r of rows) {
+      map.set(r.productId, {
+        avg: r._avg.rating != null ? Math.round(r._avg.rating * 10) / 10 : null,
+        count: r._count._all,
+      });
+    }
+    return map;
+  }
+
   /** mediaId → storageKey برای تصاویر چند محصول — batch */
   private async mediaKeyMap(mediaIds: string[]): Promise<Map<string, string>> {
     const map = new Map<string, string>();
@@ -256,10 +278,15 @@ export class PublicCatalogController {
     ]);
     const priceMap = await this.channelPriceMap(rows.flatMap((r) => r.variants.map((v) => v.sku)), channelSlug);
     const mediaMap = await this.mediaKeyMap(rows.flatMap((r) => r.images.map((i) => i.mediaId)));
-    const items = rows.map((p) => shapeCommon(
+    const ratings = await this.ratingMap(rows.map((r) => r.id));
+    const items = rows.map((p) => {
+    const shaped = shapeCommon(
       { ...p, images: resolveImages(p.images, mediaMap), variants: p.variants.map(flattenVariantTerms) },
       priceMap,
-    ));
+    ) as unknown as ShapedProduct;
+      shaped.rating = ratings.get(p.id) ?? { avg: null, count: 0 };
+      return shaped;
+    });
     return { items, page: pageNum, perPage: take, total, hasMore: skip + rows.length < total };
   }
 
@@ -292,6 +319,9 @@ export class PublicCatalogController {
     shaped.attributeIds = productTerms.map((t) => t.attributeTermId);
     shaped.description = p.description;
     shaped.tags = p.tags;
+    // خلاصهٔ نظرات تأییدشدهٔ همین محصول — کارت/لیست و PDP هم‌منبع‌اند (بند ۴۱)
+    const ratings = await this.ratingMap([p.id]);
+    shaped.rating = ratings.get(p.id) ?? { avg: null, count: 0 };
     return shaped;
   }
 }

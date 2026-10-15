@@ -21,6 +21,8 @@ export interface ProductV2 {
   createdAt: string;
   /** عکس اصلی محصول — `/media/<key>` (هم‌مبدأ)؛ null اگر رسانه‌ای آپلود نشده */
   image?: string | null;
+  /** خلاصهٔ نظرات تأییدشده از API (فاز نظرات) — undefined یعنی بدون نظر */
+  rating?: { avg: number | null; count: number };
 }
 
 export interface VariantV2 {

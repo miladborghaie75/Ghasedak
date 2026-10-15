@@ -10,6 +10,9 @@ import "reflect-metadata";
 import { BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../src/prisma/prisma.service";
 import { SmsProvidersService } from "../src/events/sms-providers.service";
+import { EventBusService } from "../src/events/event-bus.service";
+import { ShippingService } from "../src/shipping/shipping.service";
+import { PublicCatalogController } from "../src/catalog/public-catalog.controller";
 import { ReviewsService, normalizeMobile } from "../src/reviews/reviews.service";
 
 jest.setTimeout(120_000);
@@ -68,7 +71,12 @@ describe("Phase 11 — reviews module (OTP → submit → moderate → public)",
     await prisma.user.delete({ where: { id: actorId } });
     await prisma.review.deleteMany({ where: { mobile: { in: [mobileA, mobileB] } } });
     await prisma.otpCode.deleteMany({ where: { mobile: { in: [mobileA, mobileB] } } });
-    await prisma.order.deleteMany({ where: { code: orderCode } }); // آیتم‌ها cascade می‌شوند
+    // دعوت‌های پیامکی همین اجرا (مرسوله‌ها با سفارش cascade می‌شوند؛ notification نه)
+    const order = await prisma.order.findFirst({ where: { code: orderCode }, select: { id: true } });
+    if (order) {
+      await prisma.notification.deleteMany({ where: { templateKey: `review-invite:${order.id}` } });
+    }
+    await prisma.order.deleteMany({ where: { code: orderCode } }); // آیتم‌ها/مرسوله‌ها cascade می‌شوند
     const cat = await prisma.category.findUnique({ where: { slug: `test-review-cat-${MARK}` } });
     if (cat) {
       await prisma.product.deleteMany({ where: { slug } }); // review/variant cascade
@@ -209,5 +217,48 @@ describe("Phase 11 — reviews module (OTP → submit → moderate → public)",
     await expect(
       svc.submit({ slug: `no-such-${MARK}`, rating: 5, body: "متن معتبر برای محصول ناموجود.", mobile: mobileA, otpToken: token }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it("کاتالوگ عمومی: خلاصهٔ امتیاز در لیست و PDP — فقط APPROVED شمرده می‌شود", async () => {
+    const ctrl = new PublicCatalogController(prisma);
+    const list = await ctrl.products();
+    const row = list.items.find((i) => i.slug === slug);
+    expect(row).toBeTruthy();
+    // یک نظر APPROVED (۴ ستاره) + یک REJECTED (۵ ستاره) → فقط ۴ شمرده می‌شود
+    expect(row?.rating).toEqual({ avg: 4, count: 1 });
+    const detail = await ctrl.product(slug);
+    expect(detail.rating).toEqual({ avg: 4, count: 1 });
+  });
+
+  it("OrderDelivered: تحویل مرسوله → دعوت پیامکی ثبت نظر در صف (idempotent، بدون credential → QUEUED صادقانه)", async () => {
+    const events = new EventBusService(prisma);
+    const shipping = new ShippingService(prisma, events);
+    const order = await prisma.order.findUniqueOrThrow({ where: { code: orderCode } });
+    expect(order.paymentStatus).toBe("PAID");
+
+    const shipment = await shipping.create({ orderId: order.id, provider: "post" });
+    await shipping.label(shipment.id, { provider: "post", trackingCode: `TRK-${MARK}` });
+    await shipping.mark(shipment.id, "IN_TRANSIT");
+    const delivered = await shipping.mark(shipment.id, "DELIVERED");
+    expect(delivered.status).toBe("DELIVERED");
+
+    const key = `review-invite:${order.id}`;
+    // drain هر بار حداکثر ۲۰ رویداد قدیمی‌تر را برمی‌دارد؛ برای cutoff مستقل از backlog،
+    // حلقهٔ bounded تا صف خودمان پردازش شود (رویداد تازه آخرینِ صف است).
+    for (let i = 0; i < 12; i++) {
+      await events.drain();
+      if (await prisma.notification.count({ where: { templateKey: key } })) break;
+    }
+    const rows = await prisma.notification.findMany({ where: { templateKey: key }, orderBy: { createdAt: "asc" } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].channel).toBe("SMS");
+    expect(rows[0].to).toBe(mobileB); // مهمانِ سفارشِ تحویل‌شده
+    const link = (rows[0].payload as { link?: string })?.link ?? "";
+    expect(link).toContain(`/p/${slug}`); // لینک صفحهٔ محصول برای ثبت نظر
+    expect(rows[0].status).toBe("QUEUED"); // بدون credential ارسال جعلی نیست (بند ۱۱۱)
+
+    // idempotent (بند ۱۱۶): drain دوباره ردیف تکراری نمی‌سازد
+    await events.drain();
+    expect(await prisma.notification.count({ where: { templateKey: key } })).toBe(1);
   });
 });

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { EventBusService } from "../events/event-bus.service";
 import {
   SHIPMENT_STATE_FA,
   SHIPMENT_STATE_HINT,
@@ -45,7 +46,10 @@ const PROGRESS_RANK: Record<ShipmentState, number> = {
 /** ارسال — بند ۳۷: سفارش و مرسوله جدا هستند؛ چند مرسوله مجاز. */
 @Injectable()
 export class ShippingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventBusService,
+  ) {}
 
   async create(input: { orderId: string; provider?: string; trackingCode?: string }) {
     const order = await this.prisma.order.findUnique({ where: { id: input.orderId } });
@@ -122,6 +126,23 @@ export class ShippingService {
       },
     });
     await this.syncOrder(s.orderId, to, s.trackingCode);
+    // تحویل → رویداد دامنه؛ مصرف‌کننده (EventBus) دعوت پیامکی ثبت نظر را صف می‌کند.
+    // شکست صف نافی وضعیت مرسوله نیست (همان الگوی syncOrder)؛ outbox الگوی retry خودش را دارد.
+    if (to === "DELIVERED") {
+      const order = await this.prisma.order.findUnique({
+        where: { id: s.orderId },
+        select: { code: true, guestMobile: true },
+      });
+      if (order?.guestMobile) {
+        await this.events
+          .publish("OrderDelivered", {
+            orderId: s.orderId,
+            orderCode: order.code,
+            customerMobile: order.guestMobile,
+          })
+          .catch(() => undefined);
+      }
+    }
     void actorId;
     return shipment;
   }

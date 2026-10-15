@@ -55,6 +55,8 @@ function toV2(raw: Record<string, unknown>): ProductV2 {
     attributeIds: (raw.attributeIds as string[]) ?? [],
     createdAt: String(raw.createdAt ?? new Date().toISOString()),
     image,
+    // خلاصهٔ نظرات تأییدشده — API همیشه می‌فرستد؛ فقط وقتی نظر هست ستاره می‌خشد
+    rating: (raw.rating as ProductV2["rating"]) ?? undefined,
     variants: variants.map((v) => {
       const out: VariantV2 = {
         id: String(v.id),

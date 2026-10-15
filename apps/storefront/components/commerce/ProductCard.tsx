@@ -154,6 +154,20 @@ export function ProductCard({ product }: CardProps) {
           </Link>
         </h3>
 
+        {/* امتیاز نظرات تأییدشده — فقط با نظر واقعی (بند ۴۱/۸۸؛ بدون نظر چیزی نشان داده نمی‌شود) */}
+        {product.rating && product.rating.count > 0 && (
+          <div
+            className="mt-1 flex items-center justify-center gap-1"
+            aria-label={`میانگین امتیاز ${faNum(product.rating.avg ?? 0)} از ۵ بر اساس ${faNum(product.rating.count)} نظر`}
+          >
+            <span className="text-amber-500" aria-hidden>
+              {"★".repeat(Math.round(product.rating.avg ?? 0))}
+              <span className="text-line">{"★".repeat(5 - Math.round(product.rating.avg ?? 0))}</span>
+            </span>
+            <span className="text-[10px] text-muted tnum">({faNum(product.rating.count)})</span>
+          </div>
+        )}
+
         {/* سواچ رنگ — وابسته (بند ۱۲) */}
         {colors.length > 1 && (
           <div className="mt-1.5 flex items-center justify-center gap-1.5" role="group" aria-label="رنگ‌های موجود">

@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import type { ReviewStatus } from "@prisma/client";
 import { randomInt, randomUUID } from "crypto";
-import type { PrismaService } from "../prisma/prisma.service";
-import type { SmsProvidersService } from "../events/sms-providers.service";
+import { PrismaService } from "../prisma/prisma.service";
+import { SmsProvidersService } from "../events/sms-providers.service";
 
 /**
  * ماژول نظرات (گام ۱۱ — بند ۴۱): چرخهٔ ثبت→PENDING→تأیید ادمین→نمایش.
