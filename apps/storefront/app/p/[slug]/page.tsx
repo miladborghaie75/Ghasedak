@@ -23,6 +23,8 @@ import {
   salePriceOf,
 } from "@/lib/catalog-repo";
 import { CATEGORIES } from "@/lib/categories";
+import { ReviewsSection } from "@/components/commerce/ReviewsSection";
+import { loadReviews } from "@/lib/reviews";
 import { SITE_URL, site } from "@/lib/site";
 
 interface PageProps {
@@ -57,6 +59,8 @@ export default async function ProductPage({ params }: PageProps) {
   const colors = [...new Set(product.variants.map((v) => v.colorId))];
   const materials = product.attributeIds;
   const inStock = hasAnyStock(product);
+  // نظرات (گام ۱۱) — fetch سمت سرور؛ خطا → null → بخش پیام صادقانه می‌دهد نه اسکلتون ابدی
+  const reviews = await loadReviews(product.slug);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -76,6 +80,18 @@ export default async function ProductPage({ params }: PageProps) {
         ? "https://schema.org/InStock"
         : "https://schema.org/OutOfStock",
     },
+    // نظرات تأییدشده — فقط وقتی واقعاً وجود دارد (بند ۸۸: ادعای ساختگی ممنوع)
+    ...(reviews?.summary && reviews.summary.count > 0 && reviews.summary.avg != null
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: reviews.summary.avg,
+            reviewCount: reviews.summary.count,
+            bestRating: 5,
+            worstRating: 1,
+          },
+        }
+      : {}),
   };
 
   return (
@@ -196,6 +212,9 @@ export default async function ProductPage({ params }: PageProps) {
           </div>
         </section>
       </div>
+
+      {/* ۱۸) نظرات مشتریان (گام ۱۱) — قبل از مرتبط‌ها */}
+      <ReviewsSection slug={product.slug} data={reviews} />
 
       {/* ۱۹) مرتبط‌ها */}
       <RelatedShelf product={product} />

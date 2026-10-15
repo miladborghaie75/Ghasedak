@@ -63,6 +63,7 @@ export const MENU: MenuGroup[] = [
     title: "فروش",
     items: [
       { title: "سفارش‌های سایت", href: "/orders", permission: "orders.view" },
+      { title: "نظرات مشتریان", href: "/reviews", permission: "reviews.moderate" },
       { title: "پرداخت‌ها", href: "/payments", permission: "payments.view" },
       { title: "مشتریان و سبد رهاشده", href: "/customers", permission: "customers.view" },
       { title: "ترمینال فروش (POS)", href: "/pos", permission: "pos.view" },

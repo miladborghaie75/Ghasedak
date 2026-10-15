@@ -921,6 +921,24 @@ model Review {
   @@index([productId])
 }
 
+// تأیید موبایل مهمان (گام ۱۱): کد یک‌بارمصرف با انقضای کوتاه.
+// کد عمداً plaintext نگه داشته می‌شود چون عمرش ۵ دقیقه است و پس از مصرف
+// consumedAt ست می‌شود؛ token پس از تأیید صادر و فقط یک‌بار در ثبت نظر خرج می‌شود.
+model OtpCode {
+  id         String    @id @default(cuid())
+  mobile     String
+  code       String
+  purpose    String    @default("review")
+  token      String? // پس از verify صادر می‌شود؛ submit آن را یک‌بار مصرف می‌کند
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([mobile, createdAt])
+  @@index([token])
+}
+
 model WishlistItem {
   id        String   @id @default(cuid())
   productId String

@@ -111,6 +111,7 @@ const PERMISSIONS = [
   "orders.view", "orders.update",
   "pricing.view", "pricing.manage",
   "customers.view", "customers.manage",
+  "reviews.moderate", // گام ۱۱: صف تأیید/رد/پاسخ ادمین
   "payments.view", "payments.verify", "payments.manage",
   "payments.reconcile", // بند ۱۸ Audit فاز ۹: عدم‌تقارن قبل — در ROLE_SETS بود ولی در PERMISSIONS نبود
   "checks.view", "checks.manage", "checks.clear", "checks.cancel", "checks.reconcile", // فاز ۹

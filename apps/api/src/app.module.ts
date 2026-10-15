@@ -21,6 +21,7 @@ import { TreasuryModule } from "./treasury/treasury.module";
 import { ChecksModule } from "./checks/checks.module";
 import { ReportsModule } from "./reports/reports.module";
 import { CmsModule } from "./cms/cms.module";
+import { ReviewsModule } from "./reviews/reviews.module";
 import { PayrollModule } from "./payroll/payroll.module";
 import { CartModule } from "./cart/cart.module";
 import { GeoModule } from "./geo/geo.module";
@@ -34,13 +35,13 @@ import { RateLimitMiddleware } from "./common/rate-limit.middleware";
  * PermissionsGuard سراسری: مجوز در همه مسیرهای @RequirePermission به‌صورت server-side چک می‌شود (بند ۷).
  */
 @Module({
-  imports: [PrismaModule, HealthModule, AuthModule, ProductsModule, AccountingModule, InventoryModule, OrdersModule, PaymentsModule, PosModule, ReturnsModule, ShippingModule, EventsModule, CatalogModule, AdminPanelModule, CustomersModule, PricingModule, TreasuryModule, ChecksModule, ReportsModule, CmsModule, PayrollModule, CartModule, GeoModule, CogsModule],
+  imports: [PrismaModule, HealthModule, AuthModule, ProductsModule, AccountingModule, InventoryModule, OrdersModule, PaymentsModule, PosModule, ReturnsModule, ShippingModule, EventsModule, CatalogModule, AdminPanelModule, CustomersModule, PricingModule, TreasuryModule, ChecksModule, ReportsModule, CmsModule, ReviewsModule, PayrollModule, CartModule, GeoModule, CogsModule],
   providers: [{ provide: APP_GUARD, useClass: PermissionsGuard }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply(RequestIdMiddleware).forRoutes("*");
     consumer.apply(BigIntJsonMiddleware).forRoutes("*");
-    consumer.apply(RateLimitMiddleware).forRoutes("auth", "orders", "payments");
+    consumer.apply(RateLimitMiddleware).forRoutes("auth", "orders", "payments", "reviews");
   }
 }

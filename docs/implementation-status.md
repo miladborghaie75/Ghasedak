@@ -1,6 +1,6 @@
 # وضعیت پیاده‌سازی — Ghasedak (بند ۲/۱۱۸ سند Master)
 
-> آخرین به‌روزرسانی: ۲۰۲۶-۱۰-۱۵ — ایستگاه ۳/`F1-13` + گام ۱۰/`F1-14`: سند تثبیت توکن‌ها + اسکلتون بارگذاری + حالت خطای صادقانه + OG/سوشال-کارت + آیکون اپ + شات‌لیست + سبک چاپ/فاکتور A4 + ممیزی کپی‌رایتینگ (۰ تخلف)؛ **بازبینی نهایی موشن بسته شد** (رفع باگ reveal بعد از ناوبری + شاهد DOM بدون اسکرین‌شات)؛ **گام ۱۰ بسته شد** — صفحات سیستمی هر دو اپ (error/global-error/loading/not-found) + **حالت تعمیر e2e کامل** (روشن → بستن همهٔ صفحات + رد checkout با `MAINTENANCE` → خاموش → بازگشت طی TTL). سوئیت محلی ۴۰/۴۰ · ۲۲۳/۲۲۳ (شامل تست وضعیت/اعتبارسنجی اندپوینت‌های دستیار AI).
+> آخرین به‌روزرسانی: ۲۰۲۶-۱۰-۱۵ — ایستگاه ۳/`F1-13` + گام ۱۰/`F1-14` + **گام ۱۱ (بند ۴۱ — نظرات و امتیاز) بسته شد**: چرخهٔ کامل OTP → توکن یک‌بارمصرف → ثبت PENDING → بج «خرید واقعی» از سفارش PAID → صف ادمین (تأیید/رد/پاسخ + AuditLog) → انتشار عمومی بدون PII؛ UI ادمین `/reviews` + بخش نظرات PDP فروشگاه (خلاصهٔ امتیاز + لیست + فرم OTP) + `aggregateRating` در JSON-LD. سوئیت محلی روی DB تازه‌کار (migrate+seed طبق رویهٔ CI): **۴۱/۴۱ سوئیت · ۲۳۵/۲۳۵ تست**؛ typecheck+build سه اپ سبز؛ ممیزی لحن دو اپ ۰ تخلف.
 > تعریف «پیاده‌سازی‌شده»: مسیر runtime کامل کار کند (بند ۱۱۴/۱۱۸). Schema و سند به‌تنهایی «پیاده‌شده» نیست.
 
 ## استقرار پیش از لانچ — ایستگاه ۱ (۲۰۲۶-۱۰-۱۴) — runtime-tested
@@ -46,6 +46,20 @@
 | حالت تعمیر فروشگاه: endpoint عمومی `GET /api/v1/admin/public/maintenance` + TTL ۱۵s + fail-open در قطع API | ✅ IMPLEMENTED | [maintenance.ts](../apps/storefront/lib/maintenance.ts)؛ layout ریشه کل فروشگاه را می‌بندد و [MaintenanceNotice](../apps/storefront/components/MaintenanceNotice.tsx) می‌گذارد |
 | حالت تعمیر — سوئیچ ادمین + رد سفارش | ✅ IMPLEMENTED | تنظیمات ادمین → کلید «حالت تعمیر» (POST /admin/settings)؛ checkout با کد `MAINTENANCE` رد می‌شود؛ تست `phase16-maintenance` |
 | e2e کامل حالت تعمیر روی سرورهای زنده | ✅ IMPLEMENTED | روشن از DB: `/`، `/c/…`، `/cart`، `/about` همه صفحهٔ اطلاع + `data-motion-enabled="off"`؛ POST checkout → `MAINTENANCE`؛ خاموش → فروشگاه طی TTL ۱۵s به حالت عادی برگشت |
+
+## ایستگاه ۳/گام ۱۱ (بند ۴۱ — نظرات و امتیاز) — ۲۰۲۶-۱۰-۱۵ — runtime-tested
+| قابلیت | وضعیت | مدرک |
+|---|---|---|
+| مدل داده: `Review` (productId×mobile یکتا، rating ۱–۵، status PENDING/APPROVED/REJECTED، isVerifiedPurchase، adminReply) + `OtpCode` با purpose=`review` | ✅ IMPLEMENTED | migration `20261015100000_step11_reviews_otp` اعمال شد؛ شِما generate پاس |
+| چرخهٔ OTP: کد واقعی DB (بدون وابستگی به اپراتور SMS — بند ۱۱۱)، کد غلط رد، کد درست توکن یک‌بارمصرف می‌دهد | ✅ IMPLEMENTED | تست `reviews.spec` — «چرخهٔ OTP» + «توکن یک‌بارمصرف» |
+| ثبت نظر: فقط با توکن سالم؛ PENDING پیش از تأیید؛ ضدتکرار موبایل×محصول با خطای صریح | ✅ IMPLEMENTED | تست «ثبت نظر → PENDING» + «ضدتکرار» |
+| بج «خرید واقعی»: سفارش PAID با همان موبایل و همان محصول → تأیید خودکار؛ بدون خرید بج نمی‌گیرد (ادعای جعلی ممنوع) | ✅ IMPLEMENTED | تست «بج خریدار واقعی» (هر دو حالت) |
+| اداری ادمین: صف با شمارنده‌های وضعیت + موبایل برای تماس، تأیید/رد/پاسخ + AuditLog کامل (actorId واقعی، old/new values) | ✅ IMPLEMENTED | تست «تأیید ادمین → AuditLog» + «پاسخ/رد» + «صف ادمین»؛ FK `AuditLog.actorId → User` با کاربر واقعی رعایت شد |
+| نمایش عمومی: فقط APPROVED، بدون هیچ PII (موبایل در پاسخ نیست)، خلاصهٔ count/avg/tags | ✅ IMPLEMENTED | تست JSON عمومی شامل هیچ موبایلی نیست؛ `found=false` برای محصول ناموجود |
+| پنل ادمین `/reviews`: فیلتر وضعیت، تأیید/رد/پاسخ درجا، لحن «تو» مطابق R1 | ✅ IMPLEMENTED | copy.test ادمین سبز؛ لحن R1 اول «پاسخ شما» گرفت و به «پاسخ تو» اصلاح شد |
+| UI فروشگاه در PDP: خلاصهٔ امتیاز + لیست + فرم ثبت (موبایل→OTP→متن)، پراکسی سرور `/api/reviews` | ✅ IMPLEMENTED | build فروشگاه سبز؛ پراکسی همان الگوی `/api/checkout` |
+| SEO: `aggregateRating` در JSON-LD محصول (فقط با نظر منتشرشده — بدون داده جعلی) | ✅ IMPLEMENTED | [p/[slug]/page.tsx](../apps/storefront/app/p/[slug]/page.tsx) |
+| تست چرخهٔ کامل (۱۲ تست) روی DB ایزوله `ghasedak_reviews_test` (migrate+seed طبق CI) | ✅ IMPLEMENTED | سوئیت کامل ۴۱/۴۱ · ۲۳۵/۲۳۵ سبز؛ نکتهٔ فنی: تست از کاربر واقعی برای AuditLog.actorId استفاده می‌کند (FK به User) |
 
 ## فاز ۱۳ (۲۰۲۶-۰۹-۳۰) — runtime-tested
 | قابلیت | وضعیت | مدرک |
