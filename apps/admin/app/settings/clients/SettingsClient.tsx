@@ -34,6 +34,7 @@ export default function SettingsClient() {
   const { call, loading } = useAdminApi();
   const [theme, setTheme] = useState<ThemeSettings>(DEFAULT_THEME);
   const [maintenance, setMaintenance] = useState(false);
+  const [maintenanceMsg, setMaintenanceMsg] = useState("");
   const [motion, setMotion] = useState({ enabled: true, intensity: "subtle" });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -43,7 +44,11 @@ export default function SettingsClient() {
       const r = await call<Record<string, unknown>>("/admin/settings");
       if (r.ok && r.data) {
         if (r.data["theme"]) setTheme({ ...DEFAULT_THEME, ...(r.data["theme"] as ThemeSettings) });
-        if (r.data["maintenance"]) setMaintenance(Boolean((r.data["maintenance"] as { enabled?: boolean }).enabled));
+        if (r.data["maintenance"]) {
+          const m = r.data["maintenance"] as { enabled?: boolean; message?: string; until?: string };
+          setMaintenance(Boolean(m.enabled));
+          setMaintenanceMsg(m.message ?? "");
+        }
         if (r.data["motion"]) setMotion({ enabled: (r.data["motion"] as { enabled?: boolean }).enabled !== false, intensity: (r.data["motion"] as { intensity?: string }).intensity ?? "subtle" });
       }
     })();
@@ -56,10 +61,13 @@ export default function SettingsClient() {
     if (r.ok) setMsg("تم ذخیره شد ✅ — در فروشگاه اعمال می‌شود."); else setError(r.error?.message ?? "خطا");
   };
 
-  const saveMaintenance = async (enabled: boolean) => {
+  const saveMaintenance = async (enabled: boolean, quiet = false) => {
     setMaintenance(enabled);
-    const r = await call("/admin/settings", { method: "POST", body: JSON.stringify({ key: "maintenance", value: { enabled } }) });
-    if (r.ok) setMsg(enabled ? "حالت تعمیر فعال شد." : "حالت تعمیر خاموش شد."); else setError(r.error?.message ?? "خطا");
+    const r = await call("/admin/settings", { method: "POST", body: JSON.stringify({ key: "maintenance", value: { enabled, message: maintenanceMsg.trim() || undefined } }) });
+    if (r.ok) {
+      if (!quiet) setMsg(enabled ? "حالت تعمیر فعال شد." : "حالت تعمیر خاموش شد.");
+      else setMsg("پیام صفحهٔ اطلاع ذخیره شد ✅");
+    } else setError(r.error?.message ?? "خطا");
   };
 
   const saveMotion = async () => {
@@ -163,8 +171,22 @@ export default function SettingsClient() {
         <h2 className="text-sm font-black text-ink">⚙️ سیستم</h2>
         <label className="mt-3 flex items-center gap-2 text-sm font-bold text-ink/80">
           <input type="checkbox" checked={maintenance} onChange={(e) => saveMaintenance(e.target.checked)} />
-          حالت تعمیر فروشگاه (checkout و مرور محصول بسته می‌شود)
+          حالت تعمیر فروشگاه (کل فروشگاه با صفحهٔ اطلاع بسته می‌شود)
         </label>
+        <label className="mt-3 block text-xs font-bold text-ink/70">
+          پیام صفحهٔ اطلاع (اختیاری)
+          <textarea
+            value={maintenanceMsg}
+            onChange={(e) => setMaintenanceMsg(e.target.value)}
+            rows={2}
+            placeholder="مثلاً: تا امشب دوباره باز می‌شویم؛ فعلاً تلفنی سفارش بده."
+            className="mt-1 w-full resize-none rounded-xl border border-line bg-surface px-3 py-2 text-sm font-normal"
+            onBlur={() => saveMaintenance(maintenance, true)}
+          />
+        </label>
+        <p className="mt-2 text-[11px] text-ink/50">
+          تا ۱۵ ثانیه بعد از خاموش‌کردن، فروشگاه دوباره باز می‌شود. تماس فروشگاه همیشه روی صفحه می‌ماند.
+        </p>
       </div>
     </div>
   );

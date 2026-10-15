@@ -10,6 +10,8 @@ import { ThemeInit } from "@/components/providers/theme-init";
 import { MotionReveal } from "@/components/MotionReveal";
 import { site, SITE_URL } from "@/lib/site";
 import { hydrateCatalog, loadCatalog } from "@/lib/catalog-repo";
+import { getMaintenance } from "@/lib/maintenance";
+import { MaintenanceNotice } from "@/components/MaintenanceNotice";
 
 /** لایهٔ ریشه با دادهٔ زندهٔ کاتالوگ/تم — استاتیک build نمی‌شود */
 export const dynamic = "force-dynamic";
@@ -68,6 +70,21 @@ export default async function RootLayout({
     }
   } catch {
     // API در دسترس نیست — تم پیش‌فرض
+  }
+
+  // حالت تعمیر (گام ۱۰): ادمین از پنل فعالش می‌کند؛ فروشگاه یک‌جا، در ریشه،
+  // بسته می‌شود و به‌جای همهٔ صفحه‌ها فقط اطلاعِ تماس‌خدار نشان می‌دهد.
+  const maintenance = await getMaintenance();
+  if (maintenance.enabled) {
+    return (
+      <html lang="fa" dir="rtl" data-motion-enabled="off" data-motion-intensity="subtle" suppressHydrationWarning>
+        <body className="min-h-dvh antialiased">
+          {themeCss ? <style dangerouslySetInnerHTML={{ __html: themeCss }} /> : null}
+          <ThemeInit />
+          <MaintenanceNotice message={maintenance.message} until={maintenance.until} />
+        </body>
+      </html>
+    );
   }
   return (
     <html lang="fa" dir="rtl" data-motion-enabled="on" data-motion-intensity="subtle" suppressHydrationWarning>

@@ -3,6 +3,7 @@
  * اعتبارسنجی و محاسبه کامل در NestJS API (بند ۵۱/۵۹).
  */
 import { COPY } from "@/lib/copy";
+import { getMaintenance } from "@/lib/maintenance";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,19 @@ function csrfOk(req: Request): boolean {
 }
 
 export async function POST(req: Request) {
+  // حالت تعمیر (گام ۱۰): حتی اگر رابط بسته نشده باشد، ثبت سفارش در تعمیر ممنوع است
+  if ((await getMaintenance()).enabled) {
+    return Response.json(
+      {
+        ok: false,
+        error: {
+          code: "MAINTENANCE",
+          message: "فروشگاه دموتازه است و سفارش‌گیری موقتاً بسته است؛ کمی بعد دوباره تلاش کن.",
+        },
+      },
+      { status: 503 },
+    );
+  }
   if (!csrfOk(req)) {
     return Response.json(
       {
