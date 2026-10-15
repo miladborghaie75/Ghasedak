@@ -31,6 +31,7 @@ import {
   SHARED_STRINGS,
   words,
 } from "./copy-rules.mjs";
+import { applyReplacement, ReplacementError } from "@ghasedak/copy-rules/apply";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SKIP_DIRS = new Set(["node_modules", ".next", "dist", ".turbo", "scripts"]);
@@ -117,6 +118,58 @@ test("R6: متن‌های مشترک فقط یک منبع دارند", () => {
       `«${needle}» در ${holders.length} فایل آمده (${holders.join(", ")}) — باید از lib/copy.ts بیاید.`,
     );
   }
+});
+
+test("جایگزینی امن: متن یگانه در خطِ ممیزی عوض می‌شود", () => {
+  const src = [
+    "const a = 1;",
+    "const msg = \"سبد خرید شما خالی است\";",
+    "const b = 2;",
+    "const other = \"سبد خرید شما خالی است\";",
+  ].join("\n");
+  const out = applyReplacement(src, {
+    text: "سبد خرید شما خالی است",
+    replacement: "سبد خریدت خالی است",
+    line: 2,
+  });
+  assert.ok(out.includes('"سبد خریدت خالی است"'));
+  // فقط همان خط عوض شده باشد؛ رخداد تکراری در خط ۴ دست‌نخورده بماند
+  assert.ok(out.split("سبد خرید شما خالی است").length - 1 === 1);
+});
+
+test("جایگزینی امن: بدون خط، فقط وقتی در کل فایل یکتاست", () => {
+  const src = 'const msg = "لطفاً دوباره تلاش کنید";';
+  const out = applyReplacement(src, {
+    text: "لطفاً دوباره تلاش کنید",
+    replacement: "دوباره تلاش کن",
+  });
+  assert.equal(out, 'const msg = "دوباره تلاش کن";');
+
+  // چند رخداد + بدون خط ⇒ رد، چون نمی‌دانیم کدام منظور است
+  const dup = 'a("در حال بارگذاری"); b("در حال بارگذاری");';
+  assert.throws(
+    () => applyReplacement(dup, { text: "در حال بارگذاری", replacement: "در حال دریافت" }),
+    (e) => e instanceof ReplacementError && e.code === "LINE_NOT_UNIQUE",
+  );
+});
+
+test("جایگزینی امن: متن ناموجود و متن ناامن رد می‌شوند", () => {
+  assert.throws(
+    () => applyReplacement('const a = "سلام";', { text: "نبود", replacement: "بود" }),
+    (e) => e instanceof ReplacementError && e.code === "NOT_FOUND",
+  );
+  // quote و بک‌اسلش و خط تازه = خطرِ شکستن سورس؛ هرگز نباید بگذرد
+  for (const bad of ['"بستن quote"', "'بستن quote'", "`بستن quote`", "بک\\اسلش", "خط\nتازه"]) {
+    assert.throws(
+      () => applyReplacement('const a = "سلام";', { text: "سلام", replacement: bad }),
+      (e) => e instanceof ReplacementError && e.code === "UNSAFE_REPLACEMENT",
+    );
+  }
+  // جایگزینِ یکسان با متن اصلی یعنی کاری برای انتشار نیست
+  assert.throws(
+    () => applyReplacement('const a = "سلام";', { text: "سلام", replacement: "سلام" }),
+    (e) => e instanceof ReplacementError && e.code === "NOT_FOUND",
+  );
 });
 
 test("CTAها: کنش‌های هم‌معنا یک فعل دارند", () => {

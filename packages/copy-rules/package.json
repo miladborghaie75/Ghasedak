@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./core.mjs"
+    ".": {
+      "types": "./core.d.ts",
+      "default": "./core.mjs"
+    },
+    "./audit": { "types": "./audit.d.mts", "default": "./audit.mjs" },
+    "./apply": { "types": "./apply.d.mts", "default": "./apply.mjs" }
   }
 }

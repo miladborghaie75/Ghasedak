@@ -148,6 +148,7 @@ export const MENU: MenuGroup[] = [
       { title: "وب‌سرویس", href: "/web-service", permission: "settings.view" },
       { title: "اعلان‌ها و صف ارسال", href: "/settings/notifications", permission: "settings.view" },
       { title: "پشتیبان‌گیری", href: "/settings/backup", permission: "settings.view" },
+      { title: "ممیزی لحن", href: "/settings/tone-audit", permission: "settings.view" },
       { title: "مرکز عیب‌یابی", href: "/settings/diagnostics", permission: "settings.view" },
     ],
   },
