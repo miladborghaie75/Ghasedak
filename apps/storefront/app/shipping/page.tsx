@@ -1,16 +1,17 @@
 import { LegalShell, Section, meta } from "@/components/layout/LegalShell";
 import { site } from "@/lib/site";
+import { COPY } from "@/lib/copy";
 
 export const metadata = meta(
-  "روش‌های ارسال — لباس زیر قاصدک",
+  `${COPY.legal.shipping} — ${site.fullName}`,
   "ارسال سریع پستی، تحویل حضوری از سه شعبه قاصدک و نحوه پیگیری سفارش.",
 );
 
 export default function ShippingPage() {
   return (
     <LegalShell
-      title="روش‌های ارسال و تحویل"
-      intro="می‌توانید سفارش را بگیرید یا از نزدیک‌ترین شعبه حضوری تحویل بگیرید."
+      title={COPY.legal.shipping}
+      intro="می‌توانید سفارش را پستی بگیرید یا از نزدیک‌ترین شعبه حضوری تحویل بگیرید."
     >
       <Section title="۱) ارسال پستی">
         <ul>
@@ -61,7 +62,7 @@ export default function ShippingPage() {
         </p>
       </Section>
 
-      <Section title="تاخیر احتمالی">
+      <Section title="تأخیر احتمالی">
         <p>
           در روزهای شلوغ یا شرایط جوی نامساعد ممکن است زمان تحویل کمی بیشتر شود. پیگیری مرسوله
           از طریق کد رهگیری پستی که برایتان پیامک می‌شود امکان‌پذیر است.

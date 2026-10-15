@@ -459,7 +459,7 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
               className="w-full rounded-xl border border-app-line bg-app-bg px-3 py-2 text-[12px] text-app-ink outline-none focus:border-app-primary-soft"
             />
             <p className="mt-2 text-[10px] leading-5 text-app-muted">
-              بلوک را بکش و روی بوم رها کن — یا رویش کلیک کن تا به انتها اضافه شود.
+              بلوک را بکش و روی بوم رها کن — یا رویش بزن تا به انتها اضافه شود.
             </p>
           </div>
 
@@ -550,7 +550,7 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
             >
               <p className="text-[13px] font-bold text-app-ink">این صفحه هنوز بلوکی ندارد</p>
               <p className="mx-auto mt-1 max-w-sm text-[12px] leading-6 text-app-muted">
-                از ستون راست یک بلوک را بکش و اینجا رها کن، یا روی آن کلیک کن.
+                از ستون راست یک بلوک را بکش و اینجا رها کن، یا روی آن بزن.
               </p>
             </div>
           ) : (
@@ -618,7 +618,7 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
             <div className="p-4">
               <p className="text-[13px] font-black text-app-ink">تنظیمات صفحه</p>
               <p className="mt-1 text-[11px] leading-6 text-app-muted">
-                روی هر بلوک در بوم کلیک کن تا تنظیمات همان بلوک اینجا باز شود.
+                روی هر بلوک در بوم بزن تا تنظیمات همان بلوک اینجا باز شود.
               </p>
 
               <div className="mt-4 space-y-4 border-t border-app-line pt-4">

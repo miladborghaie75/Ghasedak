@@ -33,9 +33,9 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
       </div>
 
       <div className="mt-6 rounded-card bg-primary-tint p-5 text-center">
-        <p className="text-[13px] font-bold text-ink">آماده انتخاب سایز هستید؟</p>
+        <p className="text-[13px] font-bold text-ink">آمادهٔ انتخاب سایز هستی؟</p>
         <Link href="/c/bra" className="mt-3 inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent shadow-clay-1 hover:bg-primary-press">
-          دیدن سوتین‌ها
+          مشاهده سوتین‌ها
         </Link>
       </div>
     </article>

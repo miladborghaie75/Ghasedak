@@ -35,7 +35,7 @@ export function SizeFinderButton({
   productId,
   brandId,
   onApply,
-  triggerLabel = "سایزت رو نمی‌دونی؟",
+  triggerLabel = "سایزت را نمی‌دانی؟",
 }: Props) {
   const [open, setOpen] = useState(false);
   return (
@@ -105,7 +105,7 @@ export function SizeFinderFlow({
       {step === 0 && (
         <MeasureStep
           title="دور زیر سینه را اندازه بگیر"
-          hint="متر را صاف و بدون کشیدگی، درست زیر سینه دور تن بگیرید. نفس عادی بکشید."
+          hint="متر را صاف و بدون کشیدگی، درست زیر سینه دور تن بگیر. نفس عادی بکش."
           value={under}
           onChange={setUnder}
           art={<TapeArt label="زیر سینه" kind="under" />}
@@ -115,7 +115,7 @@ export function SizeFinderFlow({
       {step === 1 && !bra && (
         <div className="flex flex-col gap-3">
           <p className="text-[13px] leading-7 text-muted">
-            این دسته با «دور زیر سینه» سایز تقریبی پیشنهاد می‌شود. عدد را می‌توانید بعداً ویرایش کنید.
+            این دسته با «دور زیر سینه» سایز تقریبی پیشنهاد می‌شود. عدد را می‌توانی بعداً ویرایش کنی.
           </p>
           <button type="button" onClick={() => setStep(2)} className="h-11 rounded-full bg-primary text-sm font-bold text-on-accent">
             ادامه
@@ -126,7 +126,7 @@ export function SizeFinderFlow({
       {step === 1 && bra && (
         <MeasureStep
           title="دور پرترین قسمت سینه"
-          hint="متر را دور پرترین قسمت سینه، موازی زمین بگیرید؛ نه آن‌قدر سفت که فرورود، نه آن‌قدر شل که بغلتد."
+          hint="متر را دور پرترین قسمت سینه، موازی زمین بگیر؛ نه آن‌قدر سفت که فرورود، نه آن‌قدر شل که بغلتد."
           value={bust}
           onChange={setBust}
           art={<TapeArt label="دور سینه" kind="bust" />}

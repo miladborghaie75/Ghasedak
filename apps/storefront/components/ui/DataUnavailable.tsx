@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "./Button";
+import { COPY } from "@/lib/copy";
 
 /**
  * حالت «داده در دسترس نیست» — وقتی کاتالوگ لود نشده ولی کاربر دادهٔ محلی
@@ -42,7 +43,7 @@ export function DataUnavailable({
       <p className="text-sm font-bold text-ink">{title}</p>
       {hint && <p className="max-w-sm text-[13px] leading-7 text-muted">{hint}</p>}
       <Button variant="secondary" onClick={() => window.location.reload()}>
-        تلاش دوباره
+        {COPY.retry}
       </Button>
     </div>
   );

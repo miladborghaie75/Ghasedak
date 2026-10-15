@@ -186,7 +186,7 @@ export default function MediaLibrary() {
 
       <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed border-line bg-surface p-8 text-center transition-colors hover:border-primary">
         <span className="text-2xl">🖼️</span>
-        <span className="text-sm font-bold text-ink">{uploading ? "در حال آپلود…" : "فایل را انتخاب کنید یا بکشید"}</span>
+        <span className="text-sm font-bold text-ink">{uploading ? "در حال آپلود…" : "فایل را انتخاب کن یا بکش"}</span>
         <span className="text-[11px] text-muted">JPG / PNG / WebP / PDF — حداکثر ۱۰MB (ابعاد تصویر خودکار ثبت می‌شود)</span>
         <input
           type="file"

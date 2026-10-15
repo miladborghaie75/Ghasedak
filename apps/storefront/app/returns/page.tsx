@@ -1,22 +1,23 @@
 import { LegalShell, Section, meta } from "@/components/layout/LegalShell";
 import { BRANCHES, RETURN_POLICY, site } from "@/lib/site";
+import { COPY } from "@/lib/copy";
 
 export const metadata = meta(
-  "شرایط بازگشت کالا — لباس زیر قاصدک",
+  `${COPY.legal.returns} — ${site.fullName}`,
   "شرایط بازگشت کالای لباس زیر قاصدک: مهلت ۷ روز، کالای سالم و بدون لکه با مارک کنده‌نشده.",
 );
 
 export default function ReturnsPage() {
   return (
     <LegalShell
-      title="شرایط بازگشت کالا"
+      title={COPY.legal.returns}
       intro="لباس زیر کالای بهداشتی است و برای حفظ سلامت شما و دیگران، شرایط بازگشت آن دقیق و شفاف اعلام می‌شود."
     >
       <Section title="چرا شرط بازگشت سخت‌گیرانه است؟">
         <p>{RETURN_POLICY.reason}</p>
         <p>
           اگر کالایی پوشیده شده باشد، امکان بازگرداندن آن به قفسه فروش وجود ندارد؛ بنابراین
-          چنین کالایی پذیرفته نمی‌شود و مبلغ آن بازگردانده نمی‌شود.
+          چنین کالایی پذیرفته نمی‌شود و مبلغش بازگردانده نمی‌شود.
         </p>
       </Section>
 
@@ -39,7 +40,7 @@ export default function ReturnsPage() {
         <ul>
           <li>کالایی که نشانه‌ای از استفاده دارد یا پوشیده شده است.</li>
           <li>کالایی که شست‌وشو شده یا کشیدگی آن از حد مجاز بیشتر است.</li>
-          <li>کالایی که مارک آن کنده شده یا همراه خود پروکت و لوازم جانبی‌اش ناقص است.</li>
+          <li>کالایی که مارک آن کنده شده یا لوازم جانبی‌اش ناقص است.</li>
           <li>محصولات بهداشتی تک‌مصرف که بسته‌بندی آن‌ها باز شده است.</li>
         </ul>
       </Section>

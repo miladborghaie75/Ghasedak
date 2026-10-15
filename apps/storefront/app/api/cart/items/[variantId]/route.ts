@@ -2,6 +2,8 @@
  * حذف یک قلم از سبد — پراکسی به API.
  * پارامتر مسیر = SKU (همان شناسه‌ای که کلاینت «variantId» می‌نامد).
  */
+import { COPY } from "@/lib/copy";
+
 export const dynamic = "force-dynamic";
 
 const API = process.env.API_ORIGIN ?? "http://localhost:4000";
@@ -26,7 +28,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ varia
     return null;
   });
   if (!upstream) {
-    return Response.json({ error: { code: "API_UNAVAILABLE", message: "سرویس سبد در دسترس نیست." } }, { status: 502 });
+    return Response.json({ error: { code: "API_UNAVAILABLE", message: COPY.cartUnavailable } }, { status: 502 });
   }
   return Response.json(await upstream.json().catch(() => null), { status: upstream.status });
 }

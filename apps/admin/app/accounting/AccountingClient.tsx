@@ -198,7 +198,7 @@ export default function AccountingClient() {
       }),
     });
     if (r.ok) {
-      setMsg(manual.state === "FINAL" ? "سند نهایی ثبت شد ✅" : "پیش‌نویس ذخیره شد — از تب «اسناد» نهایی‌سازی کنید.");
+      setMsg(manual.state === "FINAL" ? "سند نهایی ثبت شد ✅" : "پیش‌نویس ذخیره شد — از تب «اسناد» نهایی‌سازی کن.");
       setManual((m) => ({ ...m, description: "", lines: [{ accountCode: "", debit: "", credit: "" }, { accountCode: "", debit: "", credit: "" }] }));
     } else setError(r.error?.message ?? "خطا");
   };
@@ -417,7 +417,7 @@ export default function AccountingClient() {
           </div>
           <p className="rounded-xl bg-app-bg px-4 py-3 text-[11px] leading-6 text-ink/70">
             هر سندی که ترازنامهٔ دفتر را به‌هم بزند، با قید سخت دیتابیس رد می‌شود. اگر این‌جا
-            نامتوازنی دیدید، معمولاً یک سند پیش از مهاجرت قید ثبت شده که باید بررسی و اصلاح شود.
+            نامتوازنی می‌بینی، معمولاً یک سند پیش از مهاجرت قید ثبت شده که باید بررسی و اصلاح شود.
           </p>
         </div>
       ) : null}
@@ -431,7 +431,7 @@ export default function AccountingClient() {
             <tbody>
               {purchases.length === 0 ? (
                 <tr><td colSpan={4} className="px-4 py-8 text-center text-ink/50">
-                  فاکتور خریدی ثبت نشده. از بخش «خرید از تامین‌کننده» می‌توانید فاکتور بسازید.
+                  فاکتور خریدی ثبت نشده — از بخش «خرید از تأمین‌کننده» اولین فاکتور را ثبت کن.
                 </td></tr>
               ) : purchases.map((p) => (
                 <tr key={p.number} className="border-b border-line/60 last:border-0">

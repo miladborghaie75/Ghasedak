@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { COPY } from "@/lib/copy";
 
 function fa(n: string | number): string {
   return Number(n).toLocaleString("fa-IR");
@@ -35,13 +36,13 @@ export function PayForm({ code, total }: { code: string; total: number }) {
         | { ok?: boolean; redirectUrl?: string; error?: { message?: string } }
         | null;
       if (!res.ok || !body?.ok || !body.redirectUrl) {
-        setError(body?.error?.message ?? "شروع پرداخت ناموفق بود.");
+        setError(body?.error?.message ?? "شروع پرداخت ناموفق بود؛ دوباره تلاش کن.");
         setBusy(false);
         return;
       }
       window.location.href = body.redirectUrl;
     } catch {
-      setError("خطای شبکه؛ دوباره تلاش کنید.");
+      setError(COPY.networkError);
       setBusy(false);
     }
   };
@@ -58,7 +59,7 @@ export function PayForm({ code, total }: { code: string; total: number }) {
       </button>
       {error ? <p className="mt-2 text-xs text-app-err">{error}</p> : null}
       <p className="mt-3 text-[11px] leading-5 text-ink/50">
-        با انتخاب روش پرداخت آنلاین به درگاه امن بانکی هدایت می‌شوید؛ مبلغ فقط پس از تایید سمت سرور نهایی می‌شود.
+        با انتخاب روش پرداخت آنلاین به درگاه امن بانکی هدایت می‌شوی؛ مبلغ فقط پس از تأیید سمت سرور نهایی می‌شود.
       </p>
     </div>
   );

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { TrackingResult } from "@ghasedak/contracts";
 import { faNum } from "@/lib/format";
+import { COPY } from "@/lib/copy";
 
 /** رهگیری مرسوله — بند ۳۷
  *
@@ -15,7 +16,7 @@ import { faNum } from "@/lib/format";
 
 export const metadata: Metadata = {
   title: "پیگیری مرسوله",
-  description: "کد رهگیری پستی یا کد سفارش را وارد کنید تا وضعیت لحظه‌ای مرسوله را ببینید.",
+  description: "کد رهگیری پستی یا کد سفارش را وارد کن تا وضعیت لحظه‌ای مرسوله را ببینی.",
   alternates: { canonical: "/track" },
 };
 
@@ -74,7 +75,7 @@ export default async function TrackPage({
         </span>
         <h1 className="mt-4 font-display text-2xl text-plum sm:text-3xl">پیگیری مرسوله</h1>
         <p className="mx-auto mt-2 max-w-md text-[13px] leading-7 text-muted">
-          کد رهگیری پستی یا کد سفارش را وارد کنید تا ببینید مرسوله در چه مرحله‌ای است.
+          کد رهگیری پستی یا کد سفارش را وارد کن تا ببینی مرسوله در چه مرحله‌ای است.
         </p>
       </header>
 
@@ -108,8 +109,8 @@ export default async function TrackPage({
         >
           <p className="text-sm font-bold text-err">مرسوله‌ای با این کد پیدا نشد.</p>
           <p className="mt-1 text-[12px] leading-6 text-muted">
-            کد را دوباره بررسی کنید. اگر کد را از پیامک گرفته‌اید، همان را وارد کنید؛
-            اگر هنوز کد رهگیری دریافت نکرده‌اید، می‌توانید با کد سفارش هم پیگیری کنید.
+            کد را دوباره بررسی کن. اگر کد را از پیامک گرفته‌ای، همان را وارد کن؛
+            اگر هنوز کد رهگیری دریافت نکرده‌ای، می‌توانی با کد سفارش هم پیگیری کنی.
           </p>
         </div>
       )}
@@ -124,7 +125,7 @@ export default async function TrackPage({
                 <p className="mt-0.5 font-display text-xl text-plum">{result.stateLabel}</p>
               </div>
               <span className="rounded-full bg-primary-tint px-3 py-1.5 text-[11px] font-bold text-primary-strong">
-                {result.provider ?? "ارسال پستی"}
+                {result.provider ?? COPY.postalShipping}
               </span>
             </div>
 
@@ -211,9 +212,9 @@ export default async function TrackPage({
           </div>
 
           <p className="text-center text-[12px] text-muted">
-            مشکلی در مرسوله دارید؟{" "}
+            مشکلی در مرسوله داری؟{" "}
             <Link href="/contact" className="font-bold text-primary-strong hover:underline">
-              با ما تماس بگیرید
+              با ما تماس بگیر
             </Link>
           </p>
         </section>
@@ -221,7 +222,7 @@ export default async function TrackPage({
 
       {!searched && (
         <p className="mt-6 text-center text-[12px] leading-6 text-muted">
-          کد رهگیری روی بسته‌بندی درج شده و پس از تحویل به پست برای شما پیامک می‌شود.
+          کد رهگیری روی بسته‌بندی درج شده و پس از تحویل به پست برایت پیامک می‌شود.
         </p>
       )}
     </div>

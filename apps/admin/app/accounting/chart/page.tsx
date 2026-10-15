@@ -16,7 +16,7 @@ export default function ChartOfAccountsPage() {
       <p className="mb-4 text-[12px] leading-6 text-muted">
         ساختار حساب‌های فروشگاه. هر حساب اصلی کد ۴ رقمی دارد و زیرحساب‌هایش با
         الگوی <span dir="ltr">۱۱۰۰-۰۱</span> شماره‌گذاری می‌شوند. برای دیدن اسناد و
-        گزارش‌های مالی به «اسناد حسابداری» و «سال مالی» بروید.
+        گزارش‌های مالی به «اسناد حسابداری» و «سال مالی» برو.
       </p>
       <ChartOfAccountsClient />
     </PageShell>

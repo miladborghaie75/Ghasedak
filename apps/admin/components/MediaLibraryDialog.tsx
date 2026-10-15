@@ -87,7 +87,7 @@ export default function MediaLibraryDialog({
 
   const upload = async () => {
     if (!file) {
-      setErr("اول یک فایل انتخاب کنید.");
+      setErr("اول یک فایل انتخاب کن.");
       return;
     }
     setBusy(true);

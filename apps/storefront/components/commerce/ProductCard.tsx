@@ -13,6 +13,7 @@ import Image from "next/image";
 import { useCart } from "@/components/providers/CartProvider";
 import { ProductArt, type ArtKind } from "./ProductArt";
 import { cn } from "@/lib/cn";
+import { COPY } from "@/lib/copy";
 import { faNum } from "@/lib/format";
 import { getTerm } from "@/lib/attributes";
 import {
@@ -133,7 +134,7 @@ export function ProductCard({ product }: CardProps) {
           )}
           {!inStock ? (
             <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] font-semibold text-muted">
-              ناموجود
+              {COPY.outOfStock}
             </span>
           ) : (
             isNew && (
@@ -219,15 +220,15 @@ export function ProductCard({ product }: CardProps) {
           aria-live="polite"
         >
           {added ? (
-            "به سبدت اضافه شد 💜"
+            COPY.addedToCart
           ) : inStock ? (
             canDirectAdd ? (
-              "افزودن به سبد"
+              COPY.addToCart
             ) : (
-              "انتخاب سایز و رنگ"
+              COPY.chooseVariantFirst
             )
           ) : (
-            "ناموجود"
+            COPY.outOfStock
           )}
         </button>
       </div>

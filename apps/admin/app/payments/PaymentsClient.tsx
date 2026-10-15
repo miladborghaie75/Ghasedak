@@ -11,9 +11,16 @@ interface PaymentRow {
 }
 
 const STATE_FA: Record<string, string> = {
-  PAID: "موفق", FAILED: "ناموفق", REDIRECTED: "در انتظار", CREATED: "ایجادشده",
-  CALLBACK_RECEIVED: "دریافت callback", VERIFYING: "در حال تایید", EXPIRED: "منقضی",
-  CANCELLED: "لغوشده", REQUIRES_REVIEW: "نیازمند بررسی", REFUNDED: "برگشت‌شده",
+  PAID: "موفق",
+  FAILED: "ناموفق",
+  REDIRECTED: "در انتظار",
+  CREATED: "ایجادشده",
+  CALLBACK_RECEIVED: "دریافت callback",
+  VERIFYING: "در حال تایید",
+  EXPIRED: "منقضی",
+  CANCELLED: "لغوشده",
+  REQUIRES_REVIEW: "نیازمند بررسی",
+  REFUNDED: "برگشت‌شده",
 };
 
 export default function PaymentsClient() {

@@ -99,7 +99,7 @@ export default function InventoryClient() {
   };
 
   const bulkPrice = async () => {
-    if (selected.size === 0 || !bulkAmount) { setError("کالا انتخاب و مقدار وارد کنید."); return; }
+    if (selected.size === 0 || !bulkAmount) { setError("کالا را انتخاب و مقدار را وارد کن."); return; }
     const r = await call<{ changed: number }>("/admin/inventory/bulk-price", {
       method: "POST",
       body: JSON.stringify({ skus: [...selected], mode: bulkMode, amount: Number(bulkAmount) }),
@@ -161,7 +161,7 @@ export default function InventoryClient() {
     const lines = transferLines.filter((l) => l.sku && Number(l.qty) > 0).map((l) => ({ variantSku: l.sku.trim(), qty: Number(l.qty) }));
     if (!trFrom || !trTo || lines.length === 0) { setError("انبار مبدأ/مقصد و حداقل یک ردیف معتبر لازم است."); return; }
     const r = await call<{ number: string }>("/admin/inventory-ops/transfers", { method: "POST", body: JSON.stringify({ fromWarehouseId: trFrom, toWarehouseId: trTo, lines }) });
-    flash(r.ok, r.ok ? `انتقال ${r.data?.number} ایجاد شد — برای خروج از انبار، ارسال بزنید` : r.error?.message ?? "خطا");
+    flash(r.ok, r.ok ? `انتقال ${r.data?.number} ایجاد شد — برای خروج از انبار، ارسال بزن` : r.error?.message ?? "خطا");
     if (r.ok) { setTransferLines([{ sku: "", qty: "" }]); await loadOps(); }
   };
   const transferAction = async (id: string, action: "confirm" | "receive" | "cancel") => {
@@ -189,7 +189,7 @@ export default function InventoryClient() {
     const wh = warehouses[0];
     if (!wh || !dSku || Number(dQty) <= 0) { setError("انبار، SKU و تعداد لازم است."); return; }
     const r = await call("/admin/inventory-ops/damage", { method: "POST", body: JSON.stringify({ warehouseId: wh.id, variantSku: dSku.trim(), qty: Number(dQty), kind: dKind, reason: dReason || undefined, holdForApproval: dHold }) });
-    flash(r.ok, r.ok ? (dHold ? "سند معلق ثبت شد — پس از تایید، post کنید" : "ثبت شد و از انبار کم شد") : r.error?.message ?? "خطا");
+    flash(r.ok, r.ok ? (dHold ? "سند معلق ثبت شد — پس از تایید، سند را نهایی کن" : "ثبت شد و از انبار کم شد") : r.error?.message ?? "خطا");
     if (r.ok) { setDSku(""); setDQty(""); setDReason(""); await loadOps(); void load(); }
   };
   const damageAction = async (id: string, action: "post" | "cancel") => {

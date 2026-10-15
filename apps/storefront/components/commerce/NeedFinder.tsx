@@ -113,18 +113,18 @@ function StepView({
 }) {
   const STEPS: { title: string; desc: string; options: WizardOption[] }[] = [
     {
-      title: "برای چه موقعیتی می‌خوای؟",
-      desc: "یک گزینه انتخاب کن تا پیشنهادها دقیق‌تر بشن.",
+      title: "برای چه موقعیتی می‌خواهی؟",
+      desc: "یک گزینه انتخاب کن تا پیشنهادها دقیق‌تر شوند.",
       options: SITUATIONS.map((s) => ({ id: s.need.slug, label: s.need.label, icon: s.icon })),
     },
     {
-      title: "چه چیزی برات مهم‌تره؟",
-      desc: "اولویتت رو بگو — روی پیشنهادها اثر می‌ذاره.",
+      title: "چه چیزی برایت مهم‌تر است؟",
+      desc: "اولویتت را بگو — روی پیشنهادها اثر می‌گذارد.",
       options: PRIORITIES.map((p) => ({ id: p.id, label: p.label, icon: p.icon })),
     },
     {
-      title: "حدود بودجه‌ات چقدره؟",
-      desc: "برای فیلتر دقیق‌تر — می‌تونی رد کنی.",
+      title: "حدود بودجه‌ات چقدر است؟",
+      desc: "برای فیلتر دقیق‌تر — می‌توانی رد کنی.",
       options: BUDGETS.map((b) => ({ id: b.id, label: b.label })),
     },
   ];
@@ -297,7 +297,7 @@ function ResultView({
           <div className="mt-5 rounded-2xl border border-dashed border-line p-6 text-center">
             <p className="text-sm font-semibold text-ink">با این ترکیب، محصول دقیقی نداریم</p>
             <p className="mt-1 text-[13px] text-muted">
-              نزدیک‌ترین‌ها رو ببین یا پاسخ‌هات رو تغییر بده.
+              نزدیک‌ترین‌ها را ببین یا پاسخ‌هایت را تغییر بده.
             </p>
           </div>
         )}

@@ -28,7 +28,7 @@ export default async function ForgotPasswordPage({
       <form action={forgotAction} className="w-full max-w-sm rounded-3xl border border-line bg-surface p-8">
         <div className="mb-6 text-center">
           <div className="text-xl font-bold text-deep">بازیابی رمز پنل</div>
-          <div className="mt-1 text-xs text-muted">ایمیل حساب را وارد کنید؛ لینک/کد یک‌بارمصرف برایتان ارسال می‌شود.</div>
+          <div className="mt-1 text-xs text-muted">ایمیل حساب را وارد کن؛ لینک/کد یک‌بارمصرف برایت ارسال می‌شود.</div>
         </div>
         {sent ? (
           <div role="status" className="mb-4 rounded-xl bg-ok/10 px-3 py-2 text-sm text-ok">
@@ -42,7 +42,7 @@ export default async function ForgotPasswordPage({
         ) : null}
         {error ? (
           <div role="alert" className="mb-4 rounded-xl bg-err/10 px-3 py-2 text-sm text-err">
-            خطا در ارسال — ورودی را بررسی کنید یا کمی بعد تلاش کنید.
+            خطا در ارسال — ورودی را بررسی کن یا کمی بعد تلاش کن.
           </div>
         ) : null}
         <label className="mb-1 block text-sm text-ink" htmlFor="email">ایمیل</label>

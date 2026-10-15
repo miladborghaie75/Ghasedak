@@ -165,7 +165,7 @@ export default function DataHealthCard() {
 
       {clean ? (
         <p className="mt-4 rounded-card border border-app-ok/30 bg-app-ok/10 px-3 py-2 text-xs text-ink">
-          هیچ متن خرابی در محصولات، دسته‌ها و برندها پیدا نشد.
+          متن خرابی در محصولات، دسته‌ها و برندها نیست — همه‌چیز سالم است.
         </p>
       ) : (
         <div className="mt-4 rounded-card border border-line bg-bg p-3">

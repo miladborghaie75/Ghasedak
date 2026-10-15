@@ -104,7 +104,7 @@ export default function ShipmentPanel({
     setBusy(false);
     if (r.ok) {
       await load();
-      flash("مرسوله ساخته شد — حالا کد پستی را وارد کنید.");
+      flash("مرسوله ساخته شد — حالا کد پستی را وارد کن.");
     } else {
       flash(r.error?.message ?? "ساخت مرسوله ناموفق", false);
     }
@@ -114,7 +114,7 @@ export default function ShipmentPanel({
   const submitLabel = async (shipmentId: string) => {
     const code = trackingCode.trim();
     if (!code) {
-      flash("کد رهگیری پستی را وارد کنید.", false);
+      flash("کد رهگیری پستی را وارد کن.", false);
       return;
     }
     setBusy(true);
@@ -179,7 +179,7 @@ export default function ShipmentPanel({
 
           {!paid && (
             <p className="rounded-xl border border-app-warning/40 bg-app-bg p-3 text-[12px] leading-6 text-app-warning">
-              این سفارش پرداخت‌نشده است؛ مرسوله‌ای ساخته نمی‌شود. اول پرداخت را تأیید کنید.
+              این سفارش پرداخت‌نشده است؛ مرسوله‌ای ساخته نمی‌شود. اول پرداخت را تأیید کن.
             </p>
           )}
 
@@ -223,7 +223,7 @@ export default function ShipmentPanel({
                   <div className="mt-3 rounded-xl border border-dashed border-line bg-app-bg p-3">
                     <p className="text-[11px] font-bold text-muted">۲) تحویل به پست</p>
                     <p className="mt-1 text-[11px] leading-5 text-muted">
-                      کد پستی را که پست هنگام تحویل داد وارد کنید. با ثبت آن، سفارش «بسته‌بندی شده» و
+                      کد پستی را که پست هنگام تحویل داد وارد کن. با ثبت آن، سفارش «بسته‌بندی شده» و
                       کد در صفحهٔ سفارش مشتری نمایش داده می‌شود.
                     </p>
                     {canLabel && (

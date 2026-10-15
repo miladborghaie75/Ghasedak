@@ -12,6 +12,7 @@ import { buildAxes } from "@/lib/variant-axes";
 import { Price } from "@/components/ui/Price";
 import { faNum } from "@/lib/format";
 import { getTerm } from "@/lib/attributes";
+import { COPY } from "@/lib/copy";
 import {
   getBrandV2,
   getProductV2BySlug,
@@ -81,7 +82,7 @@ export default async function ProductPage({ params }: PageProps) {
     // در چاپ پدینگِ نوار چسبندهٔ موبایل لازم نیست — همان ۷rem باعث می‌شد
     // کارت‌ها با break-inside:avoid به صفحهٔ بعد بروند (تست واقعی PDF: ۳ → ۱)
     <div className="mx-auto max-w-7xl px-3 pb-28 sm:px-4 lg:pb-0 print:pb-0">
-      <nav aria-label="مسیر صفحه" className="py-3 text-[12px] text-muted">
+      <nav aria-label={COPY.breadcrumb} className="py-3 text-[12px] text-muted">
         <ol className="flex flex-wrap items-center gap-1.5">
           <li><Link href="/" className="hover:text-primary-strong">خانه</Link></li>
           <li aria-hidden>/</li>
@@ -154,7 +155,7 @@ export default async function ProductPage({ params }: PageProps) {
           <div className="mt-5 rounded-card border border-line bg-surface p-4 shadow-clay-1">
             <ProductOptions product={product} brandId={product.brandId} />
             <p className="mt-3 text-[12px] leading-6 text-muted">
-              <strong className="font-extrabold text-ink">راهنمای سایز:</strong> برای انتخاب دقیق، دور سینه و زیر سینه را با متر اندازه بگیرید —{" "}
+              <strong className="font-extrabold text-ink">{COPY.sizeGuide}:</strong> برای انتخاب دقیق، دور سینه و زیر سینه را با متر اندازه بگیر —{" "}
               <SizeGuideButton />
             </p>
           </div>
@@ -178,7 +179,7 @@ export default async function ProductPage({ params }: PageProps) {
             <div className="rounded-card border border-line bg-primary-tint/60 p-4">
               <p className="text-[13px] font-extrabold text-ink">بازگشت کالا</p>
               <p className="mt-1 text-[12px] leading-6 text-muted">
-                به دلایل بهداشتی، لباس زیر فقط با پلمب بازنشده قابل بازگشت است.
+                به دلایل بهداشتی، کالای پوشیده‌نشده با مارک کنده‌نشده تا ۷ روز قابل بازگشت است.
               </p>
             </div>
           </div>

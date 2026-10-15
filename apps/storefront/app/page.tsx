@@ -80,7 +80,7 @@ export default async function HomePage() {
               چی لازم داری؟
             </h2>
             <p className="mx-auto mt-2 max-w-md text-center text-[13px] leading-7 text-muted">
-              نمی‌دونی دقیقاً چی می‌خوای؟ سه سؤال کوتاه جوابت رو می‌دیم.
+              نمی‌دانی دقیقاً چه می‌خواهی؟ سه سؤال کوتاه، جوابت را می‌دهیم.
             </p>
             <div className="mt-5 text-center">
               <Link

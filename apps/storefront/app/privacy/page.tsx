@@ -1,15 +1,16 @@
 import { LegalShell, Section, meta } from "@/components/layout/LegalShell";
 import { site } from "@/lib/site";
+import { COPY } from "@/lib/copy";
 
 export const metadata = meta(
-  "حریم خصوصی — لباس زیر قاصدک",
+  `${COPY.legal.privacy} — ${site.fullName}`,
   "نحوه جمع‌آوری، استفاده و نگهداری اطلاعات شخصی مشتریان لباس زیر قاصدک.",
 );
 
 export default function PrivacyPage() {
   return (
     <LegalShell
-      title="حریم خصوصی"
+      title={COPY.legal.privacy}
       intro="ما تنها اطلاعاتی را جمع‌آوری می‌کنیم که برای ارسال سفارش و پاسخ به شما لازم است."
       updated="مهر ۱۴۰۵"
     >
@@ -24,7 +25,7 @@ export default function PrivacyPage() {
       <Section title="پرداخت">
         <p>
           اطلاعات کارت بانکی شما هرگز در سرورهای ما ذخیره نمی‌شود. پرداخت مستقیماً در درگاه
-          بانکی انجام می‌شود و ما فقط نتیجه پرداخت و شماره پیگیری آن را دریافت می‌کنیم.
+          بانکی انجام می‌شود و ما فقط نتیجه پرداخت و شماره پیگیری آن را می‌گیریم.
         </p>
       </Section>
 

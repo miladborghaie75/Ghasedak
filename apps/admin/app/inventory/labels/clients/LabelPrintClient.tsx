@@ -61,7 +61,7 @@ export default function LabelPrintClient() {
   const addVariant = (p: PickerProduct, v: PickerVariant) => {
     setError(null);
     if (!v.barcode || !/^\d{13}$/.test(v.barcode)) {
-      setError(`واریانت «${v.sku}» بارکد EAN-13 معتبر ندارد (${v.barcode ?? "خالی"}) — بارکد را در محصولات اصلاح کنید.`);
+      setError(`واریانت «${v.sku}» بارکد EAN-13 معتبر ندارد (${v.barcode ?? "خالی"}) — بارکد را در محصولات اصلاح کن.`);
       return;
     }
     setRows((prev) => {
@@ -160,7 +160,7 @@ export default function LabelPrintClient() {
       <div className="print:hidden rounded-card border border-line bg-surface p-4">
         <h3 className="text-sm font-black text-ink">برچسب‌های انتخابی ({fa(rows.length)} واریانت / {fa(totalLabels)} برچسب)</h3>
         {rows.length === 0 ? (
-          <p className="mt-2 text-xs text-muted">از نتایج بالا واریانت اضافه کنید. بارکد هر واریانت باید EAN-13 معتبر باشد.</p>
+          <p className="mt-2 text-xs text-muted">از نتایج بالا واریانت را اضافه کن. بارکد هر واریانت باید EAN-13 معتبر باشد.</p>
         ) : (
           <div className="admin-table-wrap"><table className="mt-3 w-full text-sm">
             <thead>

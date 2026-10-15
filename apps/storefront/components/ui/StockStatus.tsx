@@ -1,5 +1,6 @@
 import { cn } from "@/lib/cn";
 import { faNum } from "@/lib/format";
+import { COPY } from "@/lib/copy";
 
 /**
  * وضعیت موجودی صادقانه — هیچ عدد جعلی تولید نمی‌شود؛ از stock واقعی می‌آید.
@@ -17,7 +18,7 @@ export function StockStatus({
     return (
       <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium text-muted", className)}>
         <span aria-hidden className="size-2 rounded-full bg-line" />
-        ناموجود
+        {COPY.outOfStock}
       </span>
     );
   }

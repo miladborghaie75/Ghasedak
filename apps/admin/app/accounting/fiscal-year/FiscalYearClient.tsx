@@ -94,7 +94,7 @@ export default function FiscalYearClient() {
 
   const create = async () => {
     if (!title.trim()) {
-      flash("عنوان سال را وارد کنید.", false);
+      flash("عنوان سال را وارد کن.", false);
       return;
     }
     setBusy(true);
@@ -133,7 +133,7 @@ export default function FiscalYearClient() {
         `سال «${y.title}» بسته شود؟\n\n` +
           `• ${fa(n)} سند در این سال ثبت شده و بسته می‌شوند\n` +
           `• سند اختتامیه برای بستن حساب‌های درآمد و هزینه صادر می‌شود\n` +
-          `• بعد از بستن، سال جدیدی ساخته نشده است — باید دستی بسازید`,
+          `• بعد از بستن، سال جدیدی ساخته نشده است — باید دستی بسازی`,
       )
     ) {
       return;
@@ -184,7 +184,7 @@ export default function FiscalYearClient() {
           <p className="text-sm font-black text-app-err">هیچ سال مالی بازی وجود ندارد</p>
           <p className="mt-1 text-xs leading-6 text-app-muted">
             تا وقتی سال باز نباشد، هیچ سندی ثبت نمی‌شود و عملیات مالی (فروش، خرید، خزانه) رد
-            می‌شود. یک سال مالی بسازید تا سیستم کار کند.
+            می‌شود. یک سال مالی بساز تا سیستم کار کند.
           </p>
         </div>
       )}
@@ -255,7 +255,7 @@ export default function FiscalYearClient() {
               {withOpening && (
                 <div className="mt-3 space-y-2">
                   <p className="text-[11px] leading-5 text-app-muted">
-                    موجودی اولیهٔ فروشگاه را همین‌جا وارد کنید: موجودی صندوق و بانک در بدهکار،
+                    موجودی اولیهٔ فروشگاه را همین‌جا وارد کن: موجودی صندوق و بانک در بدهکار،
                     سرمایهٔ اولیه در بستانکار.
                   </p>
                   <div className="overflow-x-auto">

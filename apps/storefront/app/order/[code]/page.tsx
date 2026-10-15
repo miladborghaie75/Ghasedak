@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { TrackingResult } from "@ghasedak/contracts";
 import { faNum } from "@/lib/format";
+import { COPY } from "@/lib/copy";
 import { SITE_URL, site } from "@/lib/site";
 
 /** رسید/وضعیت سفارش — بند ۳۷
@@ -142,9 +143,9 @@ export default async function OrderPage({ params }: { params: Promise<{ code: st
             <path d="m5 13 4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </span>
-        <h1 className="font-display text-2xl text-plum sm:text-3xl">سفارش شما ثبت شد</h1>
+        <h1 className="font-display text-2xl text-plum sm:text-3xl">سفارش تو ثبت شد</h1>
         <p className="mt-2 text-[13px] leading-7 text-muted">
-          کد پیگیری سفارش شما:{" "}
+          کد پیگیری سفارش تو:{" "}
           <strong className="font-extrabold text-ink" dir="ltr">
             {code}
           </strong>
@@ -156,7 +157,7 @@ export default async function OrderPage({ params }: { params: Promise<{ code: st
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px] font-bold text-muted">وضعیت ارسال</span>
               <span className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-primary-strong">
-                {tracking.provider ?? "ارسال پستی"}
+                {tracking.provider ?? COPY.postalShipping}
               </span>
             </div>
 
@@ -170,7 +171,7 @@ export default async function OrderPage({ params }: { params: Promise<{ code: st
                   {tracking.trackingCode}
                 </p>
                 <p className="mt-2 text-[11px] leading-5 text-muted">
-                  این کد را نگه دارید؛ با آن می‌توانید مرسوله را از صفحهٔ پیگیری دنبال کنید.
+                  این کد را نگه دار؛ با آن می‌توانی مرسوله را از صفحهٔ پیگیری دنبال کنی.
                 </p>
               </div>
             ) : (
@@ -207,7 +208,7 @@ export default async function OrderPage({ params }: { params: Promise<{ code: st
             href="/"
             className="inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent shadow-clay-1 hover:bg-primary-press"
           >
-            بازگشت به فروشگاه
+            {COPY.backToStore}
           </Link>
           <Link
             href="/search"
@@ -289,7 +290,7 @@ export default async function OrderPage({ params }: { params: Promise<{ code: st
             <div className="flex items-center justify-between py-1">
               <dt className="text-muted">هزینه ارسال</dt>
               <dd className="tnum">
-                {order.shippingCost === 0 ? "رایگان" : `${faNum(order.shippingCost)} تومان`}
+                {order.shippingCost === 0 ? COPY.free : `${faNum(order.shippingCost)} تومان`}
               </dd>
             </div>
             {order.discountTotal > 0 && (
@@ -312,7 +313,7 @@ export default async function OrderPage({ params }: { params: Promise<{ code: st
 
           <p className="mt-4 text-[10px] leading-5 text-muted print:mt-3">
             این فاکتور وضعیت سفارش را نشان می‌دهد و سند مالی رسمی نیست؛ برای هر پرسشی با شمارهٔ
-            بالا تماس بگیرید.
+            بالا تماس بگیر.
           </p>
         </section>
       )}

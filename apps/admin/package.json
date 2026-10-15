@@ -6,12 +6,15 @@
     "dev": "next dev --port 3200",
     "build": "next build",
     "start": "next start --port 3200",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test lib/copy.test.mjs",
+    "copy:audit": "node scripts/copy-audit.mjs"
   },
   "dependencies": {
     "@ghasedak/blocks": "workspace:*",
     "@ghasedak/contracts": "workspace:*",
     "@fontsource-variable/vazirmatn": "^5.2.5",
+    "@ghasedak/copy-rules": "workspace:*",
     "next": "^15.5.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

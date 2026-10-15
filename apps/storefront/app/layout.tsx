@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   keywords: ["لباس زیر زنانه", "سوتین", "شورت", "گن", "لباس خواب", "قاصدک"],
   openGraph: {
     title: `${site.fullName} | فروشگاه آنلاین لباس زیر زنانه`,
-    description: "سوتین، شورت، ست، گن، ورزشی و لباس خواب — ساده و مطمئن خرید کنید.",
+    description: "سوتین، شورت، ست، گن، ورزشی و لباس خواب — ساده و مطمئن خرید کن.",
     locale: "fa_IR",
     type: "website",
   },

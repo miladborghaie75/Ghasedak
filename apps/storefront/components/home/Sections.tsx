@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Chip } from "@/components/ui/Chip";
 import { faNum } from "@/lib/format";
+import { COPY } from "@/lib/copy";
 import { NEEDS } from "@/lib/needs";
 import type { ArtKind } from "@/components/commerce/ProductArt";
 
@@ -115,7 +116,7 @@ export function TrustBar() {
   const items = [
     { title: "ارسال سریع", sub: "بسته‌بندی محرمانه", icon: "truck" as const },
     { title: "پرداخت امن", sub: "درگاه معتبر بانکی", icon: "shield" as const },
-    { title: "راهنمای سایز", sub: "قبل از خرید اندازه بگیرید", icon: "ruler" as const },
+    { title: COPY.sizeGuide, sub: "قبل از خرید اندازه بگیر", icon: "ruler" as const },
     { title: "پشتیبانی واقعی", sub: "پاسخ انسانی، نه ربات", icon: "chat" as const },
   ];
   return (
@@ -141,7 +142,7 @@ export function TrustBar() {
 /** تیزر راهنماها */
 export function GuideTeasers() {
   return (
-    <section aria-label="راهنمای خرید" className="mx-auto mt-12 max-w-7xl px-3 sm:px-4">
+    <section aria-label={COPY.shoppingGuide} className="mx-auto mt-12 max-w-7xl px-3 sm:px-4">
       <SectionHeader title="راهنمای انتخاب" href="/guides/size" linkLabel="همه راهنماها" />
       <div className="grid gap-3 sm:grid-cols-3">
         {[

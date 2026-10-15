@@ -10,6 +10,7 @@ import { useCart } from "@/components/providers/CartProvider";
 import { StockStatus } from "@/components/ui/StockStatus";
 import { Price } from "@/components/ui/Price";
 import { cn } from "@/lib/cn";
+import { COPY } from "@/lib/copy";
 import { getTerm, type AttributeKey } from "@/lib/attributes";
 import {
   availableOptionIds,
@@ -146,7 +147,7 @@ export function VariantMatrix({ product, axes, showHeader = false, preselect }: 
             </>
           ) : (
             <p className="text-[13px] text-muted">
-              ترکیب رنگ و سایز را انتخاب کنید.
+              ترکیب رنگ و سایز را انتخاب کن.
             </p>
           )}
         </div>
@@ -165,7 +166,7 @@ export function VariantMatrix({ product, axes, showHeader = false, preselect }: 
           )}
           aria-live="polite"
         >
-          {added ? "به سبدت اضافه شد 💜" : "افزودن به سبد"}
+          {added ? COPY.addedToCart : COPY.addToCart}
         </button>
       </div>
     </div>

@@ -59,7 +59,7 @@ export default function InvoiceDetailClient() {
   const pay = async () => {
     setError(null); setMsg(null);
     const amount = Number(payAmount);
-    if (!amount || amount <= 0) { setError("مبلغ پرداخت را وارد کنید."); return; }
+    if (!amount || amount <= 0) { setError("مبلغ پرداخت را وارد کن."); return; }
     const r = await call(`/admin/purchasing/purchase-invoices/${id}/pay`, { method: "POST", body: JSON.stringify({ amount, method: payMethod }) });
     if (r.ok) { setMsg("پرداخت ثبت شد ✅"); setPayAmount(""); await load(); }
     else setError(r.error?.message ?? "خطا در پرداخت");

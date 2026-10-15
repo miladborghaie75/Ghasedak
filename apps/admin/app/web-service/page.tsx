@@ -233,7 +233,7 @@ export default async function WebServicePage() {
   );
   const keyMasked = cred.data?.items?.GHASEDAK_API_KEY?.masked ?? null;
   const authNote =
-    "اندپوینت‌های عمومی (کاتالوگ/سفارش/پرداخت) احراز نمی‌خواهند. اندپوینت‌های مدیریتی با کوکی نشست پنل احراز می‌شوند؛ برای یکپارچه‌سازی سمت سرور هدر X-API-KEY را با کلید GHASEDAK_API_KEY (فایل apps/api/.env.local، خارج از git) بفرستید — هویت معادل SUPERADMIN می‌گیرد و کلید غلط نادیده گرفته می‌شود.";
+    "اندپوینت‌های عمومی (کاتالوگ/سفارش/پرداخت) احراز نمی‌خواهند. اندپوینت‌های مدیریتی با کوکی نشست پنل احراز می‌شوند؛ برای یکپارچه‌سازی سمت سرور هدر X-API-KEY را با کلید GHASEDAK_API_KEY (فایل apps/api/.env.local، خارج از git) بفرست — هویت معادل SUPERADMIN می‌گیرد و کلید غلط نادیده گرفته می‌شود.";
   return (
     <PageShell
       permission="settings.view"

@@ -18,7 +18,7 @@ export default async function JournalPrintPage({ params }: { params: Promise<{ i
   if (!me || !can(me.permissions, "accounting.view")) {
     return (
       <PageShell permission="accounting.view" title="چاپ سند">
-        <p className="text-sm text-app-err">برای دیدن سند با دسترسی حسابداری وارد شوید.</p>
+        <p className="text-sm text-app-err">برای دیدن سند با دسترسی حسابداری وارد شو.</p>
       </PageShell>
     );
   }

@@ -29,11 +29,11 @@ export default async function ResetPasswordPage({
       <form action={resetAction} className="w-full max-w-sm rounded-3xl border border-line bg-surface p-8">
         <div className="mb-6 text-center">
           <div className="text-xl font-bold text-deep">رمز جدید</div>
-          <div className="mt-1 text-xs text-muted">کد/توکن یک‌بارمصرف پیام‌شده را وارد کنید.</div>
+          <div className="mt-1 text-xs text-muted">کد یک‌بارمصرف پیام‌شده را وارد کن.</div>
         </div>
         {error ? (
           <div role="alert" className="mb-4 rounded-xl bg-err/10 px-3 py-2 text-sm text-err">
-            توکن نامعتبر/منقضی یا رمزها یکسان-حداقل-۸ کاراکتر نیستند.
+            کد نامعتبر یا منقضی شده، یا رمزها یکسان‌اند یا کوتاه‌تر از ۸ کاراکترند — دوباره تلاش کن.
           </div>
         ) : null}
         <label className="mb-1 block text-sm text-ink" htmlFor="token">کد بازیابی</label>

@@ -2,6 +2,8 @@
  * شروع پرداخت آنلاین — proxy به NestJS API؛
  * resolver سفارش (code → id) و ایجاد PaymentAttempt سمت API است (بند ۶/۱۰).
  */
+import { COPY } from "@/lib/copy";
+
 export const dynamic = "force-dynamic";
 
 /** بررسی double-submit CSRF: هدر `x-csrf-token` باید با کوکی `csrf_token` یکی باشد */
@@ -16,7 +18,13 @@ function csrfOk(req: Request): boolean {
 export async function POST(req: Request) {
   if (!csrfOk(req)) {
     return Response.json(
-      { ok: false, error: { code: "CSRF_INVALID", message: "توکن امنیتی نامعتبر است؛ صفحه را دوباره باز کنید." } },
+      {
+        ok: false,
+        error: {
+          code: "CSRF_INVALID",
+          message: "نشست این صفحه منقضی شده؛ صفحه را دوباره باز کن و از همان‌جا پرداخت را شروع کن.",
+        },
+      },
       { status: 403 },
     );
   }
@@ -25,13 +33,13 @@ export async function POST(req: Request) {
     payload = (await req.json()) as { orderCode?: string; idempotencyKey?: string } | null;
   } catch {
     return Response.json(
-      { ok: false, error: { code: "VALIDATION_ERROR", message: "درخواست نامعتبر است." } },
+      { ok: false, error: { code: "VALIDATION_ERROR", message: COPY.incompleteRequest } },
       { status: 400 },
     );
   }
   if (!payload?.orderCode || !payload.idempotencyKey) {
     return Response.json(
-      { ok: false, error: { code: "VALIDATION_ERROR", message: "پارامترهای ناقص." } },
+      { ok: false, error: { code: "VALIDATION_ERROR", message: "اطلاعات پرداخت ناقص است؛ به صفحهٔ پرداخت برگرد." } },
       { status: 400 },
     );
   }
@@ -49,13 +57,13 @@ export async function POST(req: Request) {
 
   if (!orderRes || !orderRes.ok || !order?.id) {
     return Response.json(
-      { ok: false, error: { code: "NOT_FOUND", message: "سفارش یافت نشد." } },
+      { ok: false, error: { code: "NOT_FOUND", message: "سفارشی با این کد پیدا نشد؛ کد سفارش را بررسی کن." } },
       { status: 404 },
     );
   }
   if (order.paymentStatus === "PAID") {
     return Response.json(
-      { ok: false, error: { code: "ORDER_PAID", message: "این سفارش قبلاً پرداخت شده است." } },
+      { ok: false, error: { code: "ORDER_PAID", message: "این سفارش قبلاً پرداخت شده؛ نیازی به پرداخت دوباره نداری." } },
       { status: 409 },
     );
   }
@@ -92,7 +100,7 @@ export async function POST(req: Request) {
         ok: false,
         error: {
           code: "PAYMENT_START_FAILED",
-          message: start?.message ?? "درگاه پرداخت در دسترس نیست؛ بعداً تلاش کنید.",
+          message: start?.message ?? "درگاه پرداخت در دسترس نیست؛ چند دقیقه بعد دوباره تلاش کن.",
         },
       },
       { status: 502 },

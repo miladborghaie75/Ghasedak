@@ -10,6 +10,7 @@ import { Sheet } from "@/components/ui/Sheet";
 import { cn } from "@/lib/cn";
 import { faNum } from "@/lib/format";
 import { site } from "@/lib/site";
+import { COPY } from "@/lib/copy";
 import { CATEGORIES as categories } from "@/lib/categories";
 
 /**
@@ -138,7 +139,7 @@ export function Header() {
               href="/guides/size"
               className="rounded-full px-3 py-2 text-[13px] font-medium text-muted transition-colors hover:bg-primary-tint hover:text-primary-strong"
             >
-              راهنمای سایز
+              {COPY.sizeGuide}
             </Link>
           </nav>
         </div>
@@ -176,7 +177,7 @@ function MobileMenu({
         <ThemeToggle />
       </div>
       <Link href="/guides/size" onClick={onNavigate} className="flex h-12 items-center rounded-xl px-3 text-sm font-medium text-ink hover:bg-primary-tint">
-        راهنمای سایز
+        {COPY.sizeGuide}
       </Link>
       <Link href="/wishlist" onClick={onNavigate} className="flex h-12 items-center rounded-xl px-3 text-sm font-medium text-ink hover:bg-primary-tint">
         علاقه‌مندی‌ها

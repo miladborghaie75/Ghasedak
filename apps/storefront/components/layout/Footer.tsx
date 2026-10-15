@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BRANCHES, site } from "@/lib/site";
+import { COPY } from "@/lib/copy";
 import { CATEGORIES as categories } from "@/lib/categories";
 
 export function Footer() {
@@ -50,12 +51,12 @@ export function Footer() {
             </ul>
           </nav>
 
-          <nav aria-label="راهنمای خرید">
-            <p className="mb-3 text-sm font-extrabold text-plum">راهنمای خرید</p>
+          <nav aria-label={COPY.shoppingGuide}>
+            <p className="mb-3 text-sm font-extrabold text-plum">{COPY.shoppingGuide}</p>
             <ul className="space-y-0.5">
-              <li><FooterLink href="/guides/size">راهنمای سایز</FooterLink></li>
-<li><FooterLink href="/returns">شرایط بازگشت کالا</FooterLink></li>
-            <li><FooterLink href="/shipping">روش‌های ارسال</FooterLink></li>
+              <li><FooterLink href="/guides/size">{COPY.sizeGuide}</FooterLink></li>
+<li><FooterLink href="/returns">{COPY.legal.returns}</FooterLink></li>
+            <li><FooterLink href="/shipping">{COPY.legal.shipping}</FooterLink></li>
             <li><FooterLink href="/track">پیگیری مرسوله</FooterLink></li>
               <li><FooterLink href="/search">جستجوی محصولات</FooterLink></li>
               <li><FooterLink href="/cart">سبد خرید</FooterLink></li>
@@ -65,10 +66,10 @@ export function Footer() {
           <nav aria-label="تماس و فروشگاه">
             <p className="mb-3 text-sm font-extrabold text-plum">تماس و فروشگاه</p>
             <ul className="space-y-1 text-[13px] text-muted">
-              <li><FooterLink href="/contact">تماس با ما</FooterLink></li>
-              <li><FooterLink href="/about">درباره ما</FooterLink></li>
-              <li><FooterLink href="/terms">قوانین و مقررات</FooterLink></li>
-              <li><FooterLink href="/privacy">حریم خصوصی</FooterLink></li>
+              <li><FooterLink href="/contact">{COPY.legal.contact}</FooterLink></li>
+              <li><FooterLink href="/about">{COPY.legal.about}</FooterLink></li>
+              <li><FooterLink href="/terms">{COPY.legal.terms}</FooterLink></li>
+              <li><FooterLink href="/privacy">{COPY.legal.privacy}</FooterLink></li>
             </ul>
             <p className="mt-3 text-[13px] font-bold text-plum">شعب فروشگاه</p>
             <ul className="mt-1 space-y-1 text-[13px] text-muted">

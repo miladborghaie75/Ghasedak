@@ -27,7 +27,7 @@ export default async function CustomerForgotPage({
     <div className="mx-auto w-full max-w-md px-4 py-12">
       <form action={forgotAction} className="rounded-card border border-line bg-surface p-6">
         <h1 className="font-display text-lg font-bold text-ink">بازیابی رمز</h1>
-        <p className="mt-1 text-[13px] leading-6 text-muted">شماره موبایل حساب‌تان را وارد کنید؛ کد یک‌بارمصرف پیامک می‌شود.</p>
+        <p className="mt-1 text-[13px] leading-6 text-muted">شماره موبایل حسابت را وارد کن؛ کد یک‌بارمصرف پیامک می‌شود.</p>
         {sent ? (
           <div role="status" className="mt-4 rounded-xl bg-primary-tint px-3 py-2 text-[13px] leading-6 text-ink">
             اگر این شماره در سیستم و دارای رمز باشد، کد ارسال شد. (اعتبار: ۳۰ دقیقه)
@@ -38,7 +38,7 @@ export default async function CustomerForgotPage({
         ) : null}
         {error ? (
           <div role="alert" className="mt-4 rounded-xl bg-app-error/10 px-3 py-2 text-[13px] text-app-error">
-            شماره معتبر نیست — با ۰۹ و ۱۱ رقم.
+            شماره معتبر نیست — باید با ۰۹ شروع شود و ۱۱ رقم باشد.
           </div>
         ) : null}
         <label className="mt-5 mb-1 block text-[13px] text-ink" htmlFor="mobile">موبایل</label>

@@ -1,17 +1,18 @@
 import Link from "next/link";
 import { LegalShell, Section, meta } from "@/components/layout/LegalShell";
 import { BRANCHES, RETURN_POLICY, site } from "@/lib/site";
+import { COPY } from "@/lib/copy";
 
 export const metadata = meta(
-  "تماس با ما — لباس زیر قاصدک",
+  `${COPY.legal.contact} — ${site.fullName}`,
   "راه‌های ارتباط با لباس زیر قاصدک: شماره تماس، سه شعبه در خیابان عبدالمطلب و صفحه اینستاگرام.",
 );
 
 export default function ContactPage() {
   return (
     <LegalShell
-      title="تماس با ما"
-      intro="پاسخ‌گویی ما در ساعات کاری، همان روز انجام می‌شود. برای پیگیری سفارش، کد سفارش را همراه داشته باشید."
+      title={COPY.legal.contact}
+      intro="پاسخ‌گویی ما در ساعات کاری، همان روز انجام می‌شود. برای پیگیری سفارش، کد سفارش را همراه داشته باش."
     >
       <Section title="شماره تماس">
         <p>
@@ -33,7 +34,7 @@ export default function ContactPage() {
       </Section>
 
       <Section title="شعب فروشگاه">
-        <p>برای دیدن و پرو کردن لباس‌ها می‌توانید به هر سه شعبه سر بزنید:</p>
+        <p>برای دیدن و پرو کردن لباس‌ها می‌توانی به هر سه شعبه سر بزنی:</p>
         <ul>
           {BRANCHES.map((b) => (
             <li key={b.id}>
@@ -45,7 +46,7 @@ export default function ContactPage() {
 
       <Section title="اینستاگرام">
         <p>
-          جدیدترین محصولات و موجودی شعب را در صفحه اینستاگرام ما ببینید:{" "}
+          جدیدترین محصولات و موجودی شعب را در صفحه اینستاگرام ما ببین:{" "}
           <a
             href={site.instagram}
             target="_blank"
@@ -65,14 +66,14 @@ export default function ContactPage() {
             <Link href="/order" className="text-primary-strong hover:underline">
               پیگیری سفارش
             </Link>{" "}
-            بردارید.
+            بردار.
           </li>
           <li>
             شرایط بازگشت کالا در صفحه{" "}
             <Link href="/returns" className="text-primary-strong hover:underline">
               بازگشت کالا
             </Link>{" "}
-            آمده است؛ پیش از تماس درباره مرجوعی، آن بخش را بخوانید.
+            آمده است؛ پیش از تماس درباره مرجوعی، آن بخش را بخوان.
           </li>
         </ul>
       </Section>

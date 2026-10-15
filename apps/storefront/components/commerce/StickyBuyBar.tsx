@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { useCart } from "@/components/providers/CartProvider";
 import { cn } from "@/lib/cn";
+import { COPY } from "@/lib/copy";
 import { faNum } from "@/lib/format";
 import { minPrice, salePriceOf } from "@/lib/catalog-repo";
 import type { ProductV2 } from "@/lib/catalog";
@@ -73,11 +74,11 @@ export function StickyBuyBar({ product }: { product: ProductV2 }) {
           )}
         >
           {!anyStock
-            ? "ناموجود"
+            ? COPY.outOfStock
             : added
-              ? "به سبدت اضافه شد 💜"
+              ? COPY.addedToCart
               : inStock.length === 1
-                ? "افزودن به سبد"
+                ? COPY.addToCart
                 : "انتخاب و افزودن"}
         </button>
       </div>

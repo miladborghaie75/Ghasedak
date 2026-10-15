@@ -142,7 +142,7 @@ export default function SettingsClient() {
       {/* موشن لندینگ */}
       <div className="rounded-card border border-line bg-surface p-5">
         <h2 className="text-sm font-black text-ink">🎞️ موشن صفحه اصلی</h2>
-        <p className="mt-1 text-xs text-ink/60">میزان حرکت بلوک‌ها هنگام اسکرول را تنظیم کنید — کم و ملایم توصیه می‌شود.</p>
+        <p className="mt-1 text-xs text-ink/60">میزان حرکت بلوک‌ها هنگام اسکرول را تنظیم کن — کم و ملایم توصیه می‌شود.</p>
         <div className="mt-3 flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 text-sm font-bold text-ink/80">
             <input type="checkbox" checked={motion.enabled} onChange={(e) => setMotion({ ...motion, enabled: e.target.checked })} />

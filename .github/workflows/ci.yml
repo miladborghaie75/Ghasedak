@@ -38,6 +38,14 @@ jobs:
         run: pnpm db:generate
       - name: typecheck همهٔ پکیج‌ها
         run: pnpm typecheck
+      - name: تست فروشگاه (لحن کپی و سیستم سایز)
+        run: pnpm --filter @ghasedak/storefront test
+      - name: تست لحن کپی پنل ادمین
+        run: pnpm --filter @ghasedak/admin test
+      - name: ممیزی لحن کپی فارسی (copy:audit)
+        run: pnpm --filter @ghasedak/storefront copy:audit
+      - name: ممیزی لحن کپی پنل ادمین (copy:audit)
+        run: pnpm --filter @ghasedak/admin copy:audit
       - name: build (API + فروشگاه + پنل)
         run: pnpm build
 

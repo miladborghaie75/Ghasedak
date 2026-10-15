@@ -5,8 +5,9 @@ import { faNum } from "@/lib/format";
 import { loadCatalog, searchV2 } from "@/lib/catalog-repo";
 import { CATEGORIES } from "@/lib/categories";
 import { NEEDS, matchesNeed } from "@/lib/needs";
+import { COPY } from "@/lib/copy";
 
-export const metadata: Metadata = { title: "جستجو" };
+export const metadata: Metadata = { title: COPY.search };
 
 /** داده از API واقعی — رندر داینامیک */
 export const dynamic = "force-dynamic";
@@ -29,14 +30,14 @@ export default async function SearchPage({
   return (
     <div className="mx-auto max-w-7xl px-3 py-6 sm:px-4">
       <h1 className="font-display text-3xl text-plum">
-        {q ? `جستجو: «${q}»` : need ? need.label : "جستجو"}
+        {q ? `جستجو: «${q}»` : need ? need.label : COPY.search}
       </h1>
 
       {results.length === 0 ? (
         <div className="mt-6 flex flex-col items-center gap-4 rounded-card border border-dashed border-line bg-surface px-6 py-16 text-center">
           <p className="text-sm font-bold text-ink">نتیجه‌ای پیدا نشد</p>
           <p className="max-w-sm text-[13px] leading-7 text-muted">
-            املای عبارت را بررسی کنید یا از دسته‌ها شروع کنید:
+            املای عبارت را بررسی کن یا از دسته‌ها شروع کن:
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             {CATEGORIES.map((c) => (

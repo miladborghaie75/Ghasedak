@@ -39,7 +39,7 @@ ${d.customer ? `<p class="c">مشتری: ${esc(d.customer)}</p>` : ""}
 ${d.discount > 0 ? `<p>تخفیف: ${esc(d.discount)}</p>` : ""}
 <p class="t">قابل پرداخت: ${esc(d.total)} تومان</p>
 ${d.payments.map((p) => `<p class="c">${esc(p.method)}: ${esc(p.amount)}</p>`).join("")}
-<p class="c">با تشکر از خرید شما 💜</p>
+<p class="c">با تشکر از خریدت 💜</p>
 <script>window.onload = () => { window.print(); };</script>
 </body></html>`;
 }

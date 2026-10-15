@@ -108,9 +108,9 @@ export default function SettlementClient() {
 
   const createBatch = async () => {
     setError(null);
-    if (!form.providerId) return flash("درگاه را انتخاب کنید.", false);
+    if (!form.providerId) return flash("درگاه را انتخاب کن.", false);
     if (!form.reference.trim()) return flash("شمارهٔ گزارش درگاه الزامی است.", false);
-    if (!form.grossAmount || Number(form.grossAmount) <= 0) return flash("مبلغ کل را وارد کنید.", false);
+    if (!form.grossAmount || Number(form.grossAmount) <= 0) return flash("مبلغ کل را وارد کن.", false);
 
     setBusy(true);
     const r = await call("/admin/settlements", {
@@ -145,7 +145,7 @@ export default function SettlementClient() {
   };
 
   const saveGateway = async () => {
-    if (!gwForm.id) return flash("درگاه را انتخاب کنید.", false);
+    if (!gwForm.id) return flash("درگاه را انتخاب کن.", false);
     setBusy(true);
     const r = await call(`/admin/capabilities/payment-gateway/${gwForm.id}`, {
       method: "PATCH",
@@ -263,7 +263,7 @@ export default function SettlementClient() {
                   onChange={(e) => setForm({ ...form, providerId: e.target.value })}
                   className="mt-1 w-full rounded-xl border border-app-line bg-surface px-2 py-2 text-[11px]"
                 >
-                  <option value="">انتخاب کنید</option>
+                  <option value="">انتخاب کن</option>
                   {gateways.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.name}
@@ -310,8 +310,8 @@ export default function SettlementClient() {
               </label>
             </div>
             <p className="mt-2 text-[10px] text-app-muted">
-              اگر کارمزد را خالی بگذارید، از درصد تنظیم‌شدهٔ همان درگاه حساب می‌شود. مبلغ را از
-              گزارش تسویهٔ درگاه وارد کنید — نه از حدس.
+              اگر کارمزد را خالی بگذاری، از درصد تنظیم‌شدهٔ همان درگاه حساب می‌شود. مبلغ را از
+              گزارش تسویهٔ درگاه وارد کن — نه از حدس.
             </p>
             <button
               onClick={() => void createBatch()}
@@ -400,7 +400,7 @@ export default function SettlementClient() {
                   }}
                   className="mt-1 w-full rounded-xl border border-app-line bg-surface px-2 py-2 text-[11px]"
                 >
-                  <option value="">انتخاب کنید</option>
+                  <option value="">انتخاب کن</option>
                   {gateways.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.name}

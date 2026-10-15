@@ -6,11 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test lib/copy.test.mjs && node --experimental-strip-types --test lib/size-system.test.ts",
+    "copy:audit": "node scripts/copy-audit.mjs"
   },
   "dependencies": {
     "@fontsource-variable/vazirmatn": "^5.2.5",
     "@fontsource/lalezar": "^5.2.5",
+    "@ghasedak/copy-rules": "workspace:*",
     "@ghasedak/blocks": "workspace:*",
     "@ghasedak/contracts": "workspace:*",
     "@ghasedak/utils": "workspace:*",

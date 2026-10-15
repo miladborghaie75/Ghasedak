@@ -53,7 +53,7 @@ export default async function OperationsDashboardPage() {
   if (!can(me.permissions, "dashboard.view")) {
     return (
       <Shell me={me}>
-        <EmptyState message="به داشبورد دسترسی ندارید." />
+        <EmptyState message="به داشبورد دسترسی نداری." />
       </Shell>
     );
   }

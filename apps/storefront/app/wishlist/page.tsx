@@ -39,7 +39,7 @@ export default function WishlistPage() {
           // علاقه‌مندی ذخیره شده ولی کاتالوگ نیامده → صادقانه، نه «خالی است»
           <DataUnavailable
             title="لیست علاقه‌مندی‌ها الان قابل نمایش نیست"
-            hint="ارتباط با فروشگاه برقرار نشد. موارد ذخیره‌شده پاک نشده‌اند؛ اتصال را بررسی کنید و دوباره تلاش کنید."
+            hint="ارتباط با فروشگاه برقرار نشد. موارد ذخیره‌شده پاک نشده‌اند؛ اتصال را بررسی کن و دوباره تلاش کن."
           />
         ) : (
           <div className="flex flex-col items-center gap-4 rounded-card border border-dashed border-line bg-surface px-6 py-16 text-center">
@@ -48,12 +48,12 @@ export default function WishlistPage() {
                 <path d="M12 20.5s-7.5-4.6-9.3-9.2C1.2 7.5 3.4 4.5 6.6 4.5c2 0 3.7 1.1 4.4 2.7h2c.7-1.6 2.4-2.7 4.4-2.7 3.2 0 5.4 3 3.9 6.8-1.8 4.6-9.3 9.2-9.3 9.2z" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </span>
-            <p className="text-sm font-bold text-ink">هنوز چیزی به علاقه‌مندی‌ها اضافه نکرده‌اید</p>
+            <p className="text-sm font-bold text-ink">هنوز چیزی به علاقه‌مندی‌ها اضافه نکرده‌ای</p>
             <p className="max-w-xs text-[13px] leading-7 text-muted">
-              روی آیکون قلب هر محصول بزنید تا برای بعد ذخیره شود.
+              روی آیکون قلب هر محصول بزن تا برای بعد ذخیره شود.
             </p>
             <Link href="/" className="inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent shadow-clay-1 hover:bg-primary-hover">
-              دیدن محصولات
+              مشاهده محصولات
             </Link>
           </div>
         )

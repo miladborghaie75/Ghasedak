@@ -91,7 +91,7 @@ export default function ProductsClient() {
 
   const suggestSeo = async () => {
     if (!form.name || !form.categoryId) {
-      setError("برای پیشنهاد SEO، نام و دسته را وارد کنید.");
+      setError("برای پیشنهاد SEO، نام و دسته را وارد کن.");
       return;
     }
     // پیشنهاد قبل از ایجاد: سرویس قاعده‌محور روی نام/دسته/برند

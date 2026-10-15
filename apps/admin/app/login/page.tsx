@@ -53,7 +53,7 @@ export default async function LoginPage({
         ) : null}
         {reset ? (
           <div role="status" className="mb-4 rounded-xl bg-ok/10 px-3 py-2 text-sm text-ok">
-            رمز با موفقیت تغییر کرد — با رمز جدید وارد شوید.
+            رمز با موفقیت تغییر کرد — با رمز جدید وارد شو.
           </div>
         ) : null}
         <label className="mb-1 block text-sm text-ink" htmlFor="email">
@@ -85,7 +85,7 @@ export default async function LoginPage({
           ورود
         </button>
         <a href="/forgot-password" className="mt-3 block text-center text-xs text-muted hover:underline">
-          رمز عبور را فراموش کرده‌اید؟
+          رمز عبورت را فراموش کرده‌ای؟
         </a>
         {/* گام F0-7: راهنمای حساب DEMO فقط برای توسعه است — در تولید این بلوک در HTML هم رندر نمی‌شود */}
         {process.env.NODE_ENV !== "production" ? (

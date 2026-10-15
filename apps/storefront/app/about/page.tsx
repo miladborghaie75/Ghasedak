@@ -1,15 +1,16 @@
 import { LegalShell, Section, meta } from "@/components/layout/LegalShell";
 import { BRANCHES, site } from "@/lib/site";
+import { COPY } from "@/lib/copy";
 
 export const metadata = meta(
-  "درباره ما — لباس زیر قاصدک",
+  `${COPY.legal.about} — ${site.fullName}`,
   "لباس زیر قاصدک چیست و چرا سه شعبه در خیابان عبدالمطلب دارد؟",
 );
 
 export default function AboutPage() {
   return (
     <LegalShell
-      title="درباره ما"
+      title={COPY.legal.about}
       intro="لباس زیر قاصدک یک فروشگاه تخصصی لباس زیر است؛ برای جایی که انتخاب سایز درست نباید کابوس باشد."
     >
       <Section title="فلسفه ما">
@@ -26,7 +27,7 @@ export default function AboutPage() {
 
       <Section title="سه شعبه، یک قیمت">
         <p>
-          شما می‌توانید آنلاین سفارش دهید و کالا را از نزدیک‌ترین شعبه تحویل بگیرید. قیمت‌ها
+          می‌توانی آنلاین سفارش بدهی و کالا را از نزدیک‌ترین شعبه تحویل بگیری. قیمت‌ها
           در فروشگاه اینترنتی و در شعب یکسان است.
         </p>
         <ul>
@@ -38,21 +39,21 @@ export default function AboutPage() {
         </ul>
       </Section>
 
-      <Section title="راهنمای سایز">
+      <Section title={COPY.sizeGuide}>
         <p>
-          اگر بین دو سایز مردد هستید، از ابزار <span className="font-medium text-ink">راهنمای سایز</span>{" "}
-          در سایت استفاده کنید؛ اندازه‌های شما را می‌پرسد و سایز نزدیک را پیشنهاد می‌دهد.
-          اگر باز هم مطمئن نشدید، پیش از خرید از ما بپرسید.
+          اگر بین دو سایز مردد هستی، از ابزار <span className="font-medium text-ink">{COPY.sizeGuide}</span>{" "}
+          در سایت استفاده کن؛ اندازه‌هایت را می‌پرسد و سایز نزدیک را پیشنهاد می‌دهد.
+          اگر باز هم مطمئن نشدی، پیش از خرید از ما بپرس.
         </p>
       </Section>
 
       <Section title="ارتباط با ما">
         <p>
-          اگر سؤالی دارید، با شماره{" "}
+          اگر سؤالی داری، با شماره{" "}
           <a href={site.phoneHref} dir="ltr" className="font-medium text-primary-strong hover:underline">
             {site.phoneDisplay}
           </a>{" "}
-          تماس بگیرید یا در اینستاگرام ما را دنبال کنید:{" "}
+          تماس بگیر یا در اینستاگرام ما را دنبال کن:{" "}
           <a
             href={site.instagram}
             target="_blank"

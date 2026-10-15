@@ -1,15 +1,16 @@
 import { LegalShell, Section, meta } from "@/components/layout/LegalShell";
 import { RETURN_POLICY, site } from "@/lib/site";
+import { COPY } from "@/lib/copy";
 
 export const metadata = meta(
-  "قوانین و مقررات — لباس زیر قاصدک",
+  `${COPY.legal.terms} — ${site.fullName}`,
   "شرایط استفاده از فروشگاه اینترنتی لباس زیر قاصدک: ثبت سفارش، پرداخت، قیمت‌ها و بازگشت کالا.",
 );
 
 export default function TermsPage() {
   return (
     <LegalShell
-      title="قوانین و مقررات"
+      title={COPY.legal.terms}
       intro="استفاده از فروشگاه اینترنتی لباس زیر قاصدک به‌معنای پذیرش شرایط زیر است."
       updated="مهر ۱۴۰۵"
     >
@@ -34,7 +35,7 @@ export default function TermsPage() {
       <Section title="ثبت سفارش و پرداخت">
         <ul>
           <li>سفارش شما پس از ثبت نهایی و پرداخت موفق قطعی می‌شود.</li>
-          <li>اطلاعات ارسال باید دقیق و کامل باشد؛ نشانی اشتباه باعث مسئولیت تأخیر می‌شود.</li>
+          <li>اطلاعات ارسال باید دقیق و کامل باشد؛ نشانی اشتباه، مسئولیت تأخیر را بر عهدهٔ خریدار می‌گذارد.</li>
           <li>پرداخت از طریق درگاه بانکی معتبر انجام می‌شود. اطلاعات کارت شما در فروشگاه ذخیره نمی‌شود.</li>
         </ul>
       </Section>

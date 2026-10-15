@@ -13,6 +13,7 @@ import { Sheet } from "@/components/ui/Sheet";
 import { VariantMatrix } from "./VariantMatrix";
 import { buildAxes } from "@/lib/variant-axes";
 import { ensureCatalogClient, type ProductV2 } from "@/lib/catalog-repo";
+import { COPY } from "@/lib/copy";
 
 export function QuickAddHost() {
   const { quickAddKey, closeQuickAdd, addLine } = useCart();
@@ -29,7 +30,7 @@ export function QuickAddHost() {
   if (!product) return null;
 
   return (
-    <Sheet open onClose={closeQuickAdd} title="انتخاب سایز و رنگ">
+    <Sheet open onClose={closeQuickAdd} title={COPY.chooseVariantFirst}>
       <QuickAddBody
         product={product}
         onAdd={(variantId) => {

@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { DataUnavailable } from "@/components/ui/DataUnavailable";
 import { Price } from "@/components/ui/Price";
 import { faNum } from "@/lib/format";
+import { COPY } from "@/lib/copy";
 import { getTerm } from "@/lib/attributes";
 import { ensureCatalogClient, type ProductV2 } from "@/lib/catalog-repo";
 import type { VariantV2 } from "@/lib/catalog";
@@ -82,7 +83,7 @@ export function CartClient() {
     return (
       <DataUnavailable
         title="سبد خرید الان قابل نمایش نیست"
-        hint="ارتباط با فروشگاه برقرار نشد. سبد شما محفوظ است؛ اتصال اینترنت را بررسی کنید و دوباره تلاش کنید."
+        hint="ارتباط با فروشگاه برقرار نشد. سبدت محفوظ است؛ اتصال اینترنت را بررسی کن و دوباره تلاش کن."
       />
     );
   }
@@ -96,15 +97,15 @@ export function CartClient() {
             <path d="M9 10V7a3 3 0 0 1 6 0v3" strokeLinecap="round" />
           </svg>
         </span>
-        <p className="text-sm font-bold text-ink">سبد خرید شما خالی است</p>
+        <p className="text-sm font-bold text-ink">سبد خریدت خالی است</p>
         <p className="max-w-xs text-[13px] leading-7 text-muted">
-          از کشوی صفحه اصلی شروع کنید یا دسته‌ها را ببینید.
+          از کشوی صفحه اصلی شروع کن یا دسته‌ها را ببین.
         </p>
         <Link
           href="/"
           className="inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent shadow-clay-1 hover:bg-primary-press"
         >
-          رفتن به فروشگاه
+          مشاهده محصولات
         </Link>
       </div>
     );
@@ -193,14 +194,14 @@ export function CartClient() {
         </div>
         {savings > 0 && (
           <div className="mt-2 flex items-center justify-between text-[13px]">
-            <span className="text-muted">سود شما از خرید</span>
+            <span className="text-muted">سود تو از خرید</span>
             <span className="font-bold text-success tnum">{faNum(savings)} تومان</span>
           </div>
         )}
         <div className="mt-2 flex items-center justify-between text-[13px]">
           <span className="text-muted">هزینه ارسال</span>
           <span className="text-[13px] text-muted">
-            {remaining > 0 ? "در مرحله بعد محاسبه می‌شود" : "رایگان"}
+            {remaining > 0 ? "در مرحله بعد محاسبه می‌شود" : COPY.free}
           </span>
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
@@ -214,7 +215,7 @@ export function CartClient() {
           ادامه خرید و پرداخت
         </Link>
         <p className="mt-2.5 text-center text-[11px] leading-5 text-muted print:hidden">
-          نیازی به ثبت‌نام نیست — به‌عنوان مهمان ادامه دهید.
+          نیازی به ثبت‌نام نیست — به‌عنوان مهمان ادامه بده.
         </p>
       </div>
     </div>

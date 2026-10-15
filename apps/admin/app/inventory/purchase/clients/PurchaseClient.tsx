@@ -122,7 +122,7 @@ export default function PurchaseClient() {
 
   const pay = async (invoiceId: string) => {
     const amount = Number(payAmount[invoiceId]);
-    if (!amount || amount <= 0) { setError("مبلغ پرداخت را وارد کنید."); return; }
+    if (!amount || amount <= 0) { setError("مبلغ پرداخت را وارد کن."); return; }
     const r = await call(`/admin/purchasing/purchase-invoices/${invoiceId}/pay`, { method: "POST", body: JSON.stringify({ amount }) });
     flash(r.ok, r.ok ? `پرداخت ${fa(amount)} تومان ثبت شد` : r.error?.message ?? "خطا");
     if (r.ok) { setPayAmount({ ...payAmount, [invoiceId]: "" }); await load(); }
