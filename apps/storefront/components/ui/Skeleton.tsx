@@ -14,16 +14,23 @@ export function Skeleton({ className }: { className?: string }) {
   );
 }
 
-/** اسکلتون کارت محصول — هم‌قدِ ProductCard در گریدهای ۲/۴ ستونه */
+/**
+ * اسکلتون کارت محصول — هم‌قد و هم‌ساختِ ProductCard (ردیف‌های ثابت:
+ * تصویر ۱:۱، نام ۲خط، نوار امتیاز ۱۸px، سواچ ۱۶px، سایز ۱۶px، قیمت، دکمه)
+ */
 export function ProductCardSkeleton() {
   return (
-    <div className="rounded-card border border-line bg-surface p-3 shadow-clay-1">
-      <Skeleton className="aspect-square w-full rounded-blob" />
-      <Skeleton className="mt-3 h-3.5 w-3/4" />
-      <Skeleton className="mt-2 h-3.5 w-1/2" />
-      <div className="mt-3 flex items-center justify-between">
-        <Skeleton className="h-9 w-9 rounded-full" />
-        <Skeleton className="h-5 w-20" />
+    <div className="flex h-full flex-col rounded-2xl border border-line bg-surface p-1.5">
+      <Skeleton className="aspect-square w-full rounded-xl" />
+      <div className="flex flex-1 flex-col items-center px-1.5 pb-2 pt-2 text-center">
+        <Skeleton className="h-[44px] w-4/5" />
+        <Skeleton className="mt-1 h-[18px] w-1/2" />
+        <Skeleton className="mt-1.5 h-4 w-3/5" />
+        <Skeleton className="mt-1 h-4 w-2/5" />
+        <div className="mt-auto w-full pt-2">
+          <Skeleton className="mx-auto h-5 w-1/3" />
+          <Skeleton className="mt-2 h-10 w-full rounded-xl" />
+        </div>
       </div>
     </div>
   );

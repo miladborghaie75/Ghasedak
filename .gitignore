@@ -51,3 +51,6 @@ apps/api/dev.err
 
 # خروجی ممیزی لحن (تولیدشده: copy:audit)
 .copy-inventory.tsv
+
+# اسکرین‌شات‌های تست بصری کارت‌ها (تولیدشده: test:visual با SHOTS=1)
+.visual/

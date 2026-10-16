@@ -92,8 +92,36 @@ curl -X POST :4000/api/v1/payments/verify/<authority>   # → PAID
 ## تست
 
 ```bash
-npx pnpm --filter @ghasedak/api test   # Journal (Dr=Cr, DB واقعی) + RBAC Guard
+npx pnpm --filter @ghasedak/api test          # Journal (Dr=Cr, DB واقعی) + RBAC Guard
+npx pnpm --filter @ghasedak/storefront test   # لحن/کپی + سایز + مرتب‌سازی امتیاز
 ```
+
+### تست بصری کارت گرید (نیازمند سرور بالا)
+
+هندسهٔ کارت محصول — هم‌اندازه‌بودن کارت‌های امتیازدار و بی‌امتیاز و هم‌ترازی ردیف
+امتیاز و دکمهٔ خرید — در سه عرض (۳۹۰/۷۶۸/۱۲۸۰) و هر دو تم سنجیده می‌شود. اسکریپت
+بدون وابستگی بیرونی است (CDP خود Chrome/Edge + WebSocket توکار Node) و کد خروج
+غیرصفر یعنی شکست:
+
+```bash
+# سرور فروشگاه باید بالا باشد (نکست start/dev)
+node apps/storefront/scripts/visual-card-parity.mjs http://127.0.0.1:3111 "/search?q=تست&sort=rating"
+BREAK_GEOMETRY=1 node apps/storefront/scripts/visual-card-parity.mjs   # اثبات این‌که شکست را می‌گیرد (باید exit=1)
+SELFTEST=1 node apps/storefront/scripts/visual-card-parity.mjs         # همان تزریق با معنای معکوس: گرفتن باگ = موفقیت
+SHOTS=1 node apps/storefront/scripts/visual-card-parity.mjs            # ذخیرهٔ اسکرین‌شات هر حالت در .visual/
+```
+
+برای اینکه لیست هم کارت امتیازدار داشته باشد و هم بی‌امتیاز (بدون آن، تست معنایش را
+از دست می‌دهد و صریحاً FAIL می‌دهد):
+
+```bash
+npx pnpm --filter @ghasedak/database db:visual-fixture   # دو محصول در دستهٔ bra؛ یکی با نظر تأییدشده
+```
+
+در CI این تست در job مستقل `visual-parity` اجرا می‌شود: پستگرس تازه +
+migration + seed دمو + فیکسچر → build و بالا آوردن API و فروشگاه روی همان DB →
+اجرای اسکریپت روی `/c/bra?sort=rating`؛ خرابی یعنی کار قرمز، و
+اسکرین‌شات‌های هر حالت به‌عنوان artifact ذخیره می‌شوند.
 
 ## وضعیت پیاده‌سازی
 

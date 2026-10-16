@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ProductGrid } from "@/components/commerce/ProductGrid";
+import { SortSelect } from "@/components/commerce/SortSelect";
 import { faNum } from "@/lib/format";
-import { loadCatalog, searchV2 } from "@/lib/catalog-repo";
+import { loadCatalog, searchV2, sortV2 } from "@/lib/catalog-repo";
+import { parseSortParam } from "@/lib/sort";
 import { CATEGORIES } from "@/lib/categories";
 import { NEEDS, matchesNeed } from "@/lib/needs";
 import { COPY } from "@/lib/copy";
@@ -23,9 +25,13 @@ export default async function SearchPage({
   const all = await loadCatalog();
 
   const need = NEEDS.find((n) => n.slug === needSlug);
-  const results = need
+  const sort = parseSortParam(sp);
+  // مرتب‌سازی مثل صفحهٔ دسته — همان قاعدهٔ lib/sort.ts (تک‌منبع):
+  // «بیشترین امتیاز» فقط از نظر تأییدشده می‌آید و بی‌نظرها پایین می‌مانند.
+  const matched = need
     ? all.filter((p) => matchesNeed(p, need))
     : searchV2(q, all);
+  const results = sortV2(matched, sort);
 
   return (
     <div className="mx-auto max-w-7xl px-3 py-6 sm:px-4">
@@ -49,10 +55,13 @@ export default async function SearchPage({
         </div>
       ) : (
         <>
-          <p className="mt-2 mb-4 text-[13px] text-muted tnum">
-            {faNum(results.length)} محصول پیدا شد
-            {need ? ` — ${need.why}` : ""}
-          </p>
+          <div className="mt-2 mb-4 flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface/95 px-3 py-2.5 shadow-clay-1">
+            <p className="text-[13px] text-muted tnum">
+              {faNum(results.length)} محصول پیدا شد
+            </p>
+            {need && <p className="text-[12px] text-muted">{need.why}</p>}
+            <SortSelect sort={sort} className="ms-auto" />
+          </div>
           <ProductGrid products={results} />
         </>
       )}

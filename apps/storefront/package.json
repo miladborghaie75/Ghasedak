@@ -7,8 +7,9 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --test lib/copy.test.mjs && node --experimental-strip-types --test lib/size-system.test.ts",
-    "copy:audit": "node scripts/copy-audit.mjs"
+    "test": "node --test lib/copy.test.mjs && node --experimental-strip-types --test lib/size-system.test.ts && node --experimental-strip-types --test lib/sort-rating.test.ts",
+    "copy:audit": "node scripts/copy-audit.mjs",
+    "test:visual": "node scripts/visual-card-parity.mjs"
   },
   "dependencies": {
     "@fontsource-variable/vazirmatn": "^5.2.5",
