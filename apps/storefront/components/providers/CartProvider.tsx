@@ -4,7 +4,8 @@
  * سبد خرید — منبع حقیقت: سرور (فاز ۱ — گام ۶).
  * تعامل‌ها با API سبد سروری همگام می‌شوند (پراکسی /api/cart)؛ وضعیت محلی فقط برای
  * پاسخ‌دهی فوری UI است و بلافاصله با پاسخ سرور (authoritative) جور می‌شود.
- * علاقه‌مندی‌ها همچنان محلی (localStorage) است — سمت سرورِ علاقه‌مندی در فاز بعد.
+ * علاقه‌مندی‌ها هم سروری است (گام ۱۱ — بند ۴۲): هویت ناشناس همان توکن سبد؛
+ * localStorage فقط fallback آفلاین است — دفعه بعد که سرور جواب بدهد جایگزین می‌شود.
  * fallback: اگر سرور در دسترس نباشد، آخرین وضعیت localStorage استفاده می‌شود تا خرید نشکند.
  */
 import {
@@ -131,22 +132,43 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  /**
+   * خواندن علاقه‌مندی از سرور (بند ۴۲) — هویت ناشناس همان توکن سبد است.
+   * آفلاین/خطا: وضعیت محلی دست‌نخورده می‌ماند (fallback)؛ سرور جواب بدهد جایگزین می‌شود.
+   */
+  const refreshWishlist = useCallback(async () => {
+    try {
+      const res = await fetch("/api/wishlist", { cache: "no-store" });
+      if (!res.ok) return;
+      const body = (await res.json().catch(() => null)) as { productIds?: unknown } | null;
+      if (!body || !Array.isArray(body.productIds)) return;
+      const next = body.productIds.filter((x): x is string => typeof x === "string" && x.length > 0);
+      setWishlist((prev) => (sameIds(prev, next) ? prev : next));
+    } catch {
+      // خطای شبکه — علاقه‌مندی محلی حفظ می‌شود (fallback)
+    }
+  }, []);
+
   // hydrate اولیه: محلی را سریع نشان بده، بعد سرور را بخوان
-  // (refresh هویت پایدار دارد؛ این افکت فقط یک‌بار اجرا می‌شود)
+  // (refresh/refreshWishlist هویت پایدار دارند؛ این افکت فقط یک‌بار اجرا می‌شود)
   useEffect(() => {
     const local = readLocal();
-    // fallback آفلاین (همان تعهد سرصفحهٔ این فایل): آخرین سبد محلی را نشان بده تا
-    // با سرورِ در دسترس‌نبودن، خرید نشکند. سبد سرور authoritative است و اگر جواب
-    // بدهد، refresh دقیقاً همان را جایگزین می‌کند (با گارد مقایسهٔ محتوایی → بی‌حلقه).
+    // fallback آفلاین (همان تعهد سرصفحهٔ این فایل): آخرین وضعیت محلی را نشان بده تا
+    // با سرورِ در دسترس‌نبودن، خرید نشکند. سبد/علاقه‌مندی سرور authoritative است و اگر جواب بدهد،
+    // refresh دقیقاً همان را جایگزین می‌کند (با گارد مقایسهٔ محتوایی → بی‌حلقه).
     setLines((prev) => (linesEqual(prev, local.lines) ? prev : local.lines));
     setWishlist((prev) => (sameIds(prev, local.wishlist) ? prev : local.wishlist));
     void refresh().finally(() => setHydrated(true));
-  }, [refresh]);
+    void refreshWishlist();
+  }, [refresh, refreshWishlist]);
 
-  // هم‌خوانی بین تب‌ها: بازگشت به صفحه (focus/visibility) سبد را دوباره می‌خواند
+  // هم‌خوانی بین تب‌ها: بازگشت به صفحه (focus/visibility) سبد و علاقه‌مندی را دوباره می‌خواند
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === "visible") void refresh();
+      if (document.visibilityState === "visible") {
+        void refresh();
+        void refreshWishlist();
+      }
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
@@ -215,15 +237,36 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     void mutate("DELETE", "/api/cart", undefined, []);
   }, [mutate]);
 
+  /**
+   * تغییر علاقه‌مندی (بند ۴۲) — خوش‌بینانهٔ محلی برای پاسخ فوری UI، سپس sync سرور؛
+   * پاسخ سرور (فهرست کامل) جایگزین می‌شود. آفلاین: تغییر محلی می‌ماند و بعداً sync می‌شود.
+   */
   const toggleWishlist = useCallback((productId: string) => {
-    setWishlist((prev) =>
-      prev.includes(productId)
-        ? prev.filter((id) => id !== productId)
-        : [...prev, productId],
-    );
+    const prev = wishlistRef.current;
+    const active = prev.includes(productId);
+    const next = active ? prev.filter((id) => id !== productId) : [...prev, productId];
+    setWishlist(next);
+    void (async () => {
+      try {
+        const res = active
+          ? await fetch(`/api/wishlist/items/${encodeURIComponent(productId)}`, { method: "DELETE" })
+          : await fetch("/api/wishlist/items", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ productId }),
+            });
+        if (!res.ok) return;
+        const body = (await res.json().catch(() => null)) as { productIds?: unknown } | null;
+        if (!body || !Array.isArray(body.productIds)) return;
+        const srv = body.productIds.filter((x): x is string => typeof x === "string" && x.length > 0);
+        setWishlist((cur) => (sameIds(cur, srv) ? cur : srv));
+      } catch {
+        // آفلاین — تغییر خوش‌بینانهٔ محلی می‌ماند (fallback)
+      }
+    })();
   }, []);
 
-  // نگهداری wishlist در localStorage (سمت سرور در فاز بعد) — خط‌ها از ref می‌آید
+  // نگهداری wishlist در localStorage (fallback آفلاین) — خط‌ها از ref می‌آیند
   // تا نسخهٔ تازهٔ state روی دیسک بنشیند، نه مقدار قدیمی محبوس در closure
   useEffect(() => {
     if (!hydrated) return;

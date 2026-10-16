@@ -32,6 +32,9 @@ const RULES: Array<{ match: RegExp; max: number; windowMs: number }> = [
   { match: /\/reviews\/otp\/verify$/, max: 10, windowMs: 60_000 }, // 10/min per IP
   { match: /\/reviews\/submit$/, max: 5, windowMs: 300_000 }, // 5/5min per IP
   { match: /\/reviews\/product\/.+$/, max: 60, windowMs: 60_000 }, // 60/min per IP (نمایش عمومی)
+
+  // Wishlist routes (گام ۱۱ — بند ۴۲) — تغییر علاقه‌مندی مهمان
+  { match: /\/wishlist\/items(\/.+)?$/, max: 60, windowMs: 60_000 }, // 60/min per IP (toggle سبک)
 ];
 
 @Injectable()
