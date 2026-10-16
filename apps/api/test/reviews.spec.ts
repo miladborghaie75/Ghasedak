@@ -190,9 +190,41 @@ describe("Phase 11 — reviews module (OTP → submit → moderate → public)",
   it("صف ادمین: شمارنده‌های وضعیت درست‌اند و ردیف شامل موبایل برای پنل است", async () => {
     const q = await svc.queue({ status: "REJECTED", page: 1 });
     expect(q.counts.REJECTED).toBeGreaterThanOrEqual(1);
-    expect(q.counts.PENDING).toBe(0);
+    // شمارنده‌ها global هستند (مجموع DB، نه مقید به q). پس سهم خودمان را صفر
+    // می‌سنجیم و برای بقیهٔ وضعیت‌ها هم‌ارزی با خود DB را — نه صفرِ مطلق؛
+    // وگرنه روی هر DB کارکرده‌ای (مثل rehearsal با فیکسچر دمو) بی‌دلیل قرمز می‌شود.
+    expect(await prisma.review.count({ where: { productId, status: "PENDING" } })).toBe(0);
+    expect(q.counts.PENDING).toBe(await prisma.review.count({ where: { status: "PENDING" } }));
+    expect(q.counts.APPROVED).toBe(await prisma.review.count({ where: { status: "APPROVED" } }));
     const row = q.items.find((i) => i.mobile === mobileB);
     expect(row).toBeTruthy();
+  });
+
+  it("جستجوی صف ادمین (q): موبایل/نام/متن/نام و اسلاگ محصول — همیشه مقید به وضعیت", async () => {
+    // موبایل (فقط در پنل مجاز است؛ عمومی هرگز)
+    const byMobile = await svc.queue({ status: "REJECTED", page: 1, q: mobileB });
+    expect(byMobile.items.map((i) => i.mobile)).toEqual([mobileB]);
+    // متن نظر
+    const byBody = await svc.queue({ status: "APPROVED", page: 1, q: "دوخت" });
+    expect(byBody.items.some((i) => i.mobile === mobileA)).toBe(true);
+    // نام ثبت‌کننده
+    const byName = await svc.queue({ status: "APPROVED", page: 1, q: "میترا" });
+    expect(byName.items.some((i) => i.mobile === mobileA)).toBe(true);
+    // نام و اسلاگ محصول (slug یکتای همین اجرا)
+    const bySlug = await svc.queue({ status: "APPROVED", page: 1, q: slug });
+    expect(bySlug.items.some((i) => i.mobile === mobileA)).toBe(true);
+    const byProductName = await svc.queue({ status: "APPROVED", page: 1, q: `محصول تست نظر ${MARK}` });
+    expect(byProductName.items.some((i) => i.mobile === mobileA)).toBe(true);
+    // q هرگز فیلتر وضعیت را دور نمی‌زند: همان موبایل زیر APPROVED پیدا نمی‌شود
+    const crossStatus = await svc.queue({ status: "APPROVED", page: 1, q: mobileB });
+    expect(crossStatus.items).toHaveLength(0);
+    // q فقط فاصله → مثل بدون q رفتار می‌کند و شمارنده‌ها هم مستقل از q می‌مانند
+    const blank = await svc.queue({ status: "APPROVED", page: 1, q: "   " });
+    expect(blank.items.some((i) => i.mobile === mobileA)).toBe(true);
+    expect(blank.counts).toEqual(byMobile.counts);
+    // بی‌نتیجه → لیست خالی (بدون خطا)
+    const none = await svc.queue({ status: "APPROVED", page: 1, q: `no-such-${MARK}` });
+    expect(none.items).toHaveLength(0);
   });
 
   it("اعتبارسنجی: امتیاز/متن نامعتبر → fieldErrors؛ توکن بدون OTP رد می‌شود", async () => {

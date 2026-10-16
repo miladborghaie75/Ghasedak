@@ -12,10 +12,10 @@ import { ReviewsService } from "./reviews.service";
 export class AdminReviewsController {
   constructor(private readonly reviews: ReviewsService) {}
 
-  /** صف بر اساس وضعیت + شمارنده‌ها برای تب‌ها */
+  /** صف بر اساس وضعیت + جستجو + شمارنده‌ها برای تب‌ها */
   @Get("queue")
-  queue(@Query() q: { status?: string; page?: string }) {
-    return this.reviews.queue({ status: q.status, page: q.page ? Number(q.page) : 1 });
+  queue(@Query() q: { status?: string; page?: string; q?: string }) {
+    return this.reviews.queue({ status: q.status, page: q.page ? Number(q.page) : 1, q: q.q });
   }
 
   @Post(":id/approve")

@@ -266,15 +266,29 @@ export class ReviewsService {
 
   // ------------------------------------------------------------- صف ادمین
 
-  async queue(opts: { status?: string; page?: number }) {
+  async queue(opts: { status?: string; page?: number; q?: string }) {
     const status = (["PENDING", "APPROVED", "REJECTED", "HIDDEN"] as const).includes(opts.status as never)
       ? (opts.status as "PENDING" | "APPROVED" | "REJECTED" | "HIDDEN")
       : "PENDING";
     const page = Math.max(1, Number(opts.page ?? 1));
     const take = 20;
+    // جستجوی ادمین — روی موبایل/نام/متن نظر/نام محصول (بدون PII اضافه؛ موبایل همین‌جا مجاز است)
+    const q = (opts.q ?? "").trim();
+    const where = q
+      ? {
+          status,
+          OR: [
+            { mobile: { contains: q } },
+            { name: { contains: q } },
+            { body: { contains: q } },
+            { product: { name: { contains: q } } },
+            { product: { slug: { contains: q } } },
+          ],
+        }
+      : { status };
     const [items, counts] = await Promise.all([
       this.prisma.review.findMany({
-        where: { status },
+        where,
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * take,
         take,

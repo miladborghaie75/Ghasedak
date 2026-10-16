@@ -5,10 +5,17 @@ import { useAdminApi } from "@/components/useAdminApi";
 
 /**
  * صف مدیریت نظرات (گام ۱۱ — بند ۴۱):
- *  - تب‌ها بر اساس وضعیت با شمارندهٔ هر وضعیت
+ *  - تب‌ها بر اساس وضعیت با شمارندهٔ هر وضعیت + جستجو (موبایل/نام/متن/محصول)
  *  - اقدام‌ها: تأیید / رد / پنهان / پاسخ ادمین — هر اقدام در API سمت سرور AuditLog می‌گیرد
  *  - شمارهٔ موبایل فقط همین‌جا (پنل مجاز) دیده می‌شود؛ در نمایش عمومی هرگز برنمی‌گردد
  */
+
+// آدرس فروشگاه برای لینک «دیدن نظر روی سایت». نام کانونیکال NEXT_PUBLIC_SITE_URL است
+// (همان که BuilderClient هم می‌خواند)؛ نام قدیمی‌تر NEXT_PUBLIC_STOREFRONT_URL هم
+// پذیرفته می‌شود. پیش‌فرض = پورت کانونیکال فروشگاه ۳۱۱۱ (docs/deploy-guide.md) —
+// مقدار ۳۰۰۰ قبلی لینک پنل را در dev به سرویس اشتباه می‌فرستاد.
+const STOREFRONT_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? process.env.NEXT_PUBLIC_STOREFRONT_URL ?? "http://localhost:3111";
 
 type ReviewStatus = "PENDING" | "APPROVED" | "REJECTED" | "HIDDEN";
 
@@ -45,6 +52,8 @@ export default function ReviewsClient() {
   const { call, loading } = useAdminApi();
   const [status, setStatus] = useState<ReviewStatus>("PENDING");
   const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState("");
+  const [query, setQuery] = useState("");
   const [data, setData] = useState<QueueResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -54,15 +63,26 @@ export default function ReviewsClient() {
 
   const load = useCallback(async () => {
     setError(null);
-    const r = await call<QueueResponse>(`/reviews/admin/queue?status=${status}&page=${page}`);
+    const qs = new URLSearchParams({ status, page: String(page) });
+    if (query) qs.set("q", query);
+    const r = await call<QueueResponse>(`/reviews/admin/queue?${qs.toString()}`);
     if (r.ok && r.data) setData(r.data);
     else setError(r.error?.message ?? "خطا در دریافت صف نظرات");
-  }, [call, status, page]);
+  }, [call, status, page, query]);
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, page]);
+  }, [status, page, query]);
+
+  // جستجو با تأخیر — با هر کلید فوراً به سرور نزنیم
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setQuery(searchInput.trim());
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   async function act(id: string, action: "approve" | "reject" | "hide", label: string) {
     setBusyId(id);
@@ -98,9 +118,7 @@ export default function ReviewsClient() {
   return (
     <div className="flex flex-col gap-4">
       {error ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-err">{error}</p> : null}
-      {notice ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">{notice}</p> : null}
-
-      {/* تب‌ها + شمارنده */}
+      {notice ? <p className="rounded-xl bg-app-primary-soft px-4 py-2 text-xs font-bold text-app-ok">{notice}</p> : null}      {/* تب‌ها + شمارنده + جستجو */}
       <div className="flex flex-wrap gap-2">
         {TABS.map((s) => (
           <button
@@ -108,7 +126,8 @@ export default function ReviewsClient() {
             onClick={() => { setStatus(s); setPage(1); }}
             className={`rounded-full px-4 py-1.5 text-xs font-bold transition ${
               status === s ? "bg-ink text-surface" : "border border-line text-muted hover:text-ink"
-            }`}
+            }`
+            }
           >
             {STATUS_FA[s]}
             {data?.counts?.[s] ? ` (${data.counts[s]})` : ""}
@@ -116,12 +135,30 @@ export default function ReviewsClient() {
         ))}
       </div>
 
+      {/* جستجو — موبایل/نام/متن نظر/نام محصول */}
+      <div className="flex items-center gap-2">
+        <input
+          type="search"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="جستجو در نظرات (موبایل، نام، متن، محصول)…"
+          className="h-10 w-full max-w-md rounded-xl border border-line bg-surface px-3 text-xs outline-none focus:border-ink"
+        />
+        {query ? (
+          <button onClick={() => { setSearchInput(""); }} className="text-xs text-muted hover:text-ink">
+            حذف جستجو
+          </button>
+        ) : null}
+      </div>
+
       {/* لیست */}
       <div className="flex flex-col gap-3">
         {loading && !data ? <p className="text-xs text-muted">در حال دریافت…</p> : null}
         {data && data.items.length === 0 ? (
           <p className="rounded-card border border-line bg-surface px-4 py-8 text-center text-sm text-ink/50">
-            نظری با وضعیت «{STATUS_FA[status]}» وجود ندارد.
+            {query
+              ? `نظری مطابق «${query}» در وضعیت «${STATUS_FA[status]}» پیدا نشد؛ عبارت را کوتاه‌تر کن یا تب وضعیت دیگری را ببین.`
+              : `نظری با وضعیت «${STATUS_FA[status]}» وجود ندارد؛ تب دیگری را ببین.`}
           </p>
         ) : null}
         {data?.items.map((rv) => (
@@ -142,7 +179,15 @@ export default function ReviewsClient() {
             </div>
             {rv.product ? (
               <p className="mt-1.5 text-[11px] text-muted">
-                محصول: <span className="font-bold text-ink">{rv.product.name}</span>
+                محصول:{" "}
+                <a
+                  href={`${STOREFRONT_URL}/p/${rv.product.slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold text-ink underline decoration-line hover:text-app-primary"
+                >
+                  {rv.product.name}
+                </a>
               </p>
             ) : null}
             <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-ink">{rv.body}</p>
