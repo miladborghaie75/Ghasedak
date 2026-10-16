@@ -21,7 +21,14 @@ export class PermissionsGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const required = this.reflector.get<string[]>(PERMISSION_KEY, context.getHandler());
+    // متادیتا هم روی هندلر و هم روی کلاس پذیرفته می‌شود:
+    // هندلر اولویت دارد (مجوز دقیق‌تر)، وگرنه مجوز اعلام‌شده روی کل (پیش‌فرض کنترلر).
+    // بدون این، @RequirePermission روی کلاس بی‌صدا بی‌اثر می‌شد و مسیر باز می‌ماند
+    // (همان اشتباهی که یک‌بار صف نظرات ادمین را بدون احراز هویت عمومی کرد).
+    const required = this.reflector.getAllAndOverride<string[]>(PERMISSION_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     if (!required || required.length === 0) return true;
 
     const req = context.switchToHttp().getRequest<Record<string, unknown>>();

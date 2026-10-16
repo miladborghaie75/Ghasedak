@@ -698,10 +698,14 @@ describe("Phase 9 Wave 3 — scheduler / CAS / cross-domain hardening", () => {
     const handler = () => undefined;
     Reflect.defineMetadata(PERMISSION_KEY, ["checks.clear"], handler);
     const guard = new PermissionsGuard(new Reflector());
+    // context باید قرارداد کامل ExecutionContext را داشته باشد: گارد علاوه بر هندلر،
+    // متادیتای کلاس را هم می‌خواند (getAllAndOverride روی [handler, class]) — کلاس بدون
+    // متادیتا یعنی همان مجوز هندلر معیار است، پس رفتار این تست تغییری نمی‌کند.
     const ctxOf = (identity: unknown) =>
       ({
         switchToHttp: () => ({ getRequest: () => ({ adminIdentity: identity }) }),
         getHandler: () => handler,
+        getClass: () => class ControllerUnderTest {},
       }) as never;
 
     expect(() => guard.canActivate(ctxOf(undefined))).toThrow(UnauthorizedException); // 401
