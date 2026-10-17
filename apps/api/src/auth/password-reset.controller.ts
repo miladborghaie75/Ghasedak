@@ -26,17 +26,34 @@ function rateLimit(key: string, limit: number): void {
 export class PasswordResetController {
   constructor(private readonly resets: PasswordResetService) {}
 
-  /** POST /auth/password/forgot — درخواست توکن (admin: email، customer: mobile) */
+  /**
+   * POST /auth/password/forgot — درخواست توکن.
+   *
+   * `channel` (گام ۱۴): مشتری خودش بین پیامک و ایمیل انتخاب می‌کند؛ نبودش =
+   * رفتار قبلی (ادمین ایمیل، مشتری پیامک) تا کلاینت‌های قدیمی نشکنند.
+   */
   @Post("forgot")
   @HttpCode(200)
-  async forgot(@Body() body: { purpose?: "admin" | "customer"; identifier?: string; ip?: string }) {
+  async forgot(@Body() body: { purpose?: "admin" | "customer"; identifier?: string; channel?: string; ip?: string }) {
     const purpose = body.purpose === "customer" ? "customer" : "admin";
+    // موبایل با `.toLowerCase()` بی‌اثر است ولی ایمیل را نرمال می‌کند (کاربر EMAIL@… هم بنویسد)
     const identifier = String(body.identifier ?? "").trim().toLowerCase();
     if (!identifier) {
       throw new BadRequestException({ code: "VALIDATION_ERROR", fieldErrors: { identifier: ["ایمیل یا موبایل الزامی است."] } });
     }
+    const rawChannel = String(body.channel ?? "").trim().toLowerCase();
+    if (rawChannel && rawChannel !== "email" && rawChannel !== "sms") {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        fieldErrors: { channel: ["کانال باید «پیامک» یا «ایمیل» باشد."] },
+      });
+    }
     rateLimit(`forgot:${identifier}`, 3);
-    return this.resets.request({ purpose, identifier });
+    return this.resets.request({
+      purpose,
+      identifier,
+      ...(rawChannel ? { channel: rawChannel as "email" | "sms" } : {}),
+    });
   }
 
   /** POST /auth/password/reset — مصرف توکن + رمز جدید */

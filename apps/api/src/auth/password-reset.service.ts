@@ -12,9 +12,11 @@ import { PrismaService } from "../prisma/prisma.service";
 export const RESET_TTL_MS = 30 * 60 * 1000;
 const MAX_ACTIVE_PER_USER = 5;
 
+export type ResetChannel = "email" | "sms";
+
 export interface ResetRequestResult {
   requested: true;
-  channel: "email" | "sms";
+  channel: ResetChannel;
   sentTo: string;
   /** در dev/test فقط: توکن خام برای اثبات چرخه بدون SMTP واقعی (هرگز در prod ست نمی‌شود) */
   devToken?: string;
@@ -38,11 +40,28 @@ export class PasswordResetService {
   /** درخواست بازیابی — پاسخ همیشه یکسان؛ پیام به صف Notification می‌رود */
   async request(input: {
     purpose: "admin" | "customer";
-    identifier: string; // email (admin) یا mobile (customer)
+    identifier: string;
+    /**
+     * کانال انتخابی کاربر (گام ۱۴). خالی = پیش‌فرض نقش: ادمین ایمیل، مشتری پیامک.
+     *
+     * چرا هیچ‌وقت بی‌اطلاع کاربر به کانال دیگر نمی‌افتیم: اگر کاربر «ایمیل» را
+     * زده و کد پیامکی بیاید، فکر می‌کند ایمیل آمده و اشکال را جای دیگری
+     * می‌جوید. پس یا همان کانال انتخاب‌شده کار می‌کند یا هیچ کدی ساخته نمی‌شود
+     * (با همان پاسخ عمومی ضد enumeration).
+     */
+    channel?: ResetChannel;
   }): Promise<ResetRequestResult> {
     const { purpose, identifier } = input;
     const id = identifier.trim();
-    const isEmail = purpose === "admin";
+    const channel: ResetChannel = input.channel ?? (purpose === "admin" ? "email" : "sms");
+    if (input.channel === "sms" && purpose === "admin") {
+      throw new BadRequestException({
+        code: "CHANNEL_NOT_ALLOWED",
+        message: "بازیابی رمز پنل فقط با ایمیل انجام می‌شود.",
+        fieldErrors: { channel: ["برای پنل مدیریت، ایمیل را انتخاب کنید."] },
+      });
+    }
+    const isEmail = channel === "email";
     if (isEmail ? !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(id) : !/^09\d{9}$/.test(id)) {
       throw new BadRequestException({
         code: "VALIDATION_ERROR",
@@ -50,16 +69,17 @@ export class PasswordResetService {
       });
     }
 
-    const user = isEmail
-      ? await this.prisma.user.findUnique({ where: { email: id } })
-      : await this.prisma.user.findFirst({
-          where: { role: "CUSTOMER", mobile: id, status: "ACTIVE" },
-        });
+    // مشتری با ایمیل: حساب با همان ایمیل؛ مشتری با پیامک: همان قاعدهٔ قبلی
+    const user = purpose === "customer"
+      ? isEmail
+        ? await this.prisma.user.findFirst({ where: { email: id, role: "CUSTOMER", status: "ACTIVE" } })
+        : await this.prisma.user.findFirst({ where: { role: "CUSTOMER", mobile: id, status: "ACTIVE" } })
+      : await this.prisma.user.findUnique({ where: { email: id } });
 
     // پاسخ یکسان برای حساب موجود/ناموجود — ضد enumeration (بند ۶۵)
-    const generic: ResetRequestResult = { requested: true, channel: isEmail ? "email" : "sms", sentTo: id };
-    if (!user || user.status !== "ACTIVE" || (!isEmail && !user.passwordHash)) {
-      // برای مشتریِ بدون گذرواژه هم هیچ ردیفی ساخته نمی‌شود — همان پاسخ
+    const generic: ResetRequestResult = { requested: true, channel, sentTo: id };
+    if (!user || user.status !== "ACTIVE" || !user.passwordHash) {
+      // مشتریِ بدون گذرواژه (یا بدون ایمیل ثبت‌شده) هیچ ردیفی نمی‌گیرد — همان پاسخ
       return generic;
     }
 
@@ -77,7 +97,7 @@ export class PasswordResetService {
         userId: user.id,
         tokenHash: PasswordResetService.hashToken(token),
         purpose,
-        channel: isEmail ? "email" : "sms",
+        channel,
         sentTo: id,
         expiresAt: new Date(Date.now() + RESET_TTL_MS),
       },
@@ -93,7 +113,7 @@ export class PasswordResetService {
         channel: isEmail ? "EMAIL" : "SMS",
         templateKey: `password-reset:${purpose}`,
         to: id,
-        payload: { message, purpose },
+        payload: { message, purpose, channel },
       },
     });
 

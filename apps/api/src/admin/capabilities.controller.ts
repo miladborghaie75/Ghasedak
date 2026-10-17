@@ -505,7 +505,8 @@ export class CapabilitiesController {
       throw new BadRequestException({ code: "NOT_RETRYABLE", message: "فقط ردیف FAILED قابل retry است." });
     }
     await this.prisma.notification.update({ where: { id }, data: { status: "QUEUED", lastError: null } });
-    const r = await this.dispatcher.dispatchOnce(50);
+    // فقط همین ردیف — نه drain کل صف (retry هدف‌دار، بدون اثر جانبی روی بقیه)
+    const r = await this.dispatcher.dispatchOne(id);
     const after = await this.prisma.notification.findUniqueOrThrow({ where: { id } });
     return { ok: after.status === "SENT", status: after.status, lastError: after.lastError, dispatch: r };
   }
