@@ -25,6 +25,7 @@ import { ReviewsModule } from "./reviews/reviews.module";
 import { PayrollModule } from "./payroll/payroll.module";
 import { CartModule } from "./cart/cart.module";
 import { WishlistModule } from "./wishlist/wishlist.module";
+import { ImportModule } from "./import/import.module";
 import { GeoModule } from "./geo/geo.module";
 import { PermissionsGuard } from "./auth/permissions.guard";
 import { RequestIdMiddleware } from "./common/request-id.middleware";
@@ -36,7 +37,7 @@ import { RateLimitMiddleware } from "./common/rate-limit.middleware";
  * PermissionsGuard سراسری: مجوز در همه مسیرهای @RequirePermission به‌صورت server-side چک می‌شود (بند ۷).
  */
 @Module({
-  imports: [PrismaModule, HealthModule, AuthModule, ProductsModule, AccountingModule, InventoryModule, OrdersModule, PaymentsModule, PosModule, ReturnsModule, ShippingModule, EventsModule, CatalogModule, AdminPanelModule, CustomersModule, PricingModule, TreasuryModule, ChecksModule, ReportsModule, CmsModule, ReviewsModule, PayrollModule, CartModule, WishlistModule, GeoModule, CogsModule],
+  imports: [PrismaModule, HealthModule, AuthModule, ProductsModule, AccountingModule, InventoryModule, OrdersModule, PaymentsModule, PosModule, ReturnsModule, ShippingModule, EventsModule, CatalogModule, AdminPanelModule, CustomersModule, PricingModule, TreasuryModule, ChecksModule, ReportsModule, CmsModule, ReviewsModule, PayrollModule, CartModule, WishlistModule, GeoModule, CogsModule, ImportModule],
   providers: [{ provide: APP_GUARD, useClass: PermissionsGuard }],
 })
 export class AppModule implements NestModule {

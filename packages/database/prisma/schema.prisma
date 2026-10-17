@@ -54,6 +54,7 @@ model User {
   reviews       Review[]
   auditLogs     AuditLog[]
   revisions     ContentRevision[]
+  importBatches ImportBatch[]
 
   // Commerce Suite (POS/انبار/حسابداری)
   posInvoices        PosInvoice[]
@@ -1354,6 +1355,72 @@ model AuditLog {
   actor User? @relation(fields: [actorId], references: [id])
 
   @@index([entity, entityId])
+}
+
+// ------------------------------------------------ ورود گروهی (گام ۱۳ · F1-3)
+
+enum ImportBatchStatus {
+  PREVIEWED
+  APPLIED
+  REVERTED
+  FAILED
+}
+
+enum ImportRowAction {
+  CREATE
+  UPDATE
+  SKIP
+  ERROR
+}
+
+/// یک دستهٔ ورود فایل — نگه‌دارندهٔ پیش‌نمایش تا Rollback.
+///
+/// چرا ردیف‌ها در DB می‌مانند: Rollback بر پایهٔ `before/after` همان ردیف‌ها
+/// انجام می‌شود و بدون آن، بازگردانی یعنی «حدس زدن مقدار قبلی» — که در
+/// پروژهٔ مالی پذیرفتنی نیست.
+model ImportBatch {
+  id           String            @id @default(cuid())
+  kind         String            @default("PRODUCTS")
+  filename     String
+  actorId      String?
+  status       ImportBatchStatus @default(PREVIEWED)
+  rowCount     Int               @default(0)
+  createCount  Int               @default(0)
+  updateCount  Int               @default(0)
+  skipCount    Int               @default(0)
+  errorCount   Int               @default(0)
+  /// هش محتوای نرمال‌شدهٔ پیش‌نمایش — جلوگیری از اعمال دستهٔ دست‌کاری‌شده
+  previewHash  String
+  appliedAt    DateTime?
+  revertedAt   DateTime?
+  createdAt    DateTime          @default(now())
+
+  actor User?            @relation(fields: [actorId], references: [id])
+  rows  ImportBatchRow[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// یک ردیف پیش‌نمایش/اعمال — `before` فقط برای UPDATE و `after` برای
+/// CREATE/UPDATE معنا دارد؛ SKIP/ERROR هر دو را ندارند.
+model ImportBatchRow {
+  id         String          @id @default(cuid())
+  batchId    String
+  rowNo      Int
+  action     ImportRowAction
+  entityType String          @default("Product")
+  entityId   String?
+  sku        String
+  before     Json?
+  after      Json?
+  message    String?
+  appliedAt  DateTime?
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId, rowNo])
+  @@index([sku])
 }
 
 // ============================================================

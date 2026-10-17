@@ -1,7 +1,7 @@
 # گام ۱۳ — `[F1-3]` ورود گروهی CSV/Excel (پیش‌نمایش + Rollback)
 
-> **وضعیت: 🟨 در جریان — ممیزی و طرح آماده، پیاده‌سازی شروع نشده** · اندازه: L · ایستگاه ۴ (قابلیت‌های ناقص) · منبع: [completion-launch-plan.md:253](plans/completion-launch-plan.md#L253)
-> گام بعدی خطی پس از بستن گام ۱۲ (`[F1-2]`). این گام **L** است و دو تصمیم باز دارد (بخش ۵) — عمداً قبل از نوشتن کد، ممیزی و طرح آمده تا کار روی انتخاب درست بنشیند.
+> **وضعیت: ✅ بسته شد (۲۰۲۶-۱۰-۱۸)** · اندازه: L · ایستگاه ۴ (قابلیت‌های ناقص) · منبع: [completion-launch-plan.md:253](plans/completion-launch-plan.md#L253)
+> گام بعدی خطی پس از بستن گام ۱۲ (`[F1-2]`). سه تصمیم باز بخش ۵ با پاسخ کاربر قطعی شد: **فقط CSV**، **دسته/برند ناموجود → خطا + پیشنهاد نام نزدیک**، **Rollback نامحدود ولی فقط آخرین دستهٔ هر SKU**.
 
 ---
 
@@ -135,3 +135,22 @@ ImportBatchRow: id, batchId, rowNo, action(CREATE|UPDATE|SKIP|ERROR),
 | ۱۳-۶ + ۱۳-۷ | S+M |
 | ۱۳-۸ | M |
 | **جمع** | **۴ تا ۵ نشست کاری** |
+
+---
+
+## ۸) بسته‌شدن (۲۰۲۶-۱۰-۱۸)
+
+| فایل | نقش |
+|---|---|
+| [csv-parse.ts](../apps/api/src/import/csv-parse.ts) | پارسر خالص RFC4180 + BOM + نرمال‌سازی فارسی + نگاشت هدر فارسی/انگلیسی |
+| [import.service.ts](../apps/api/src/import/import.service.ts) | پیش‌نمایش (بدون نوشتن)، اعمال تراکنشی، بازگردانی idempotent |
+| [import.controller.ts](../apps/api/src/import/import.controller.ts) · [import.module.ts](../apps/api/src/import/import.module.ts) | `admin/import` (قالب · پیش‌نمایش · اعمال · بازگردانی · دسته‌ها) |
+| [migration](../packages/database/prisma/migrations/20261018090000_step13_bulk_import/migration.sql) | `ImportBatch` + `ImportBatchRow` (additive) |
+| [ImportClient.tsx](../apps/admin/app/products/import/clients/ImportClient.tsx) · [page.tsx](../apps/admin/app/products/import/page.tsx) | UI ادمین `/products/import` (آپلود، فیلتر، دو مرحله تأیید، تاریخچه) |
+| [phase18-bulk-import.spec.ts](../apps/api/test/phase18-bulk-import.spec.ts) | ۸ تست روی سرویس/کنترلر واقعی |
+
+**سه چیزی که در پیاده‌سازی «تقریباً درست» بود و اصلاح شد:** (۱) هش خام روی `JSON.stringify` با ستون `JSONB` جواب نمی‌دهد (ترتیب کلید حفظ نمی‌شود) → هش متعارف کلیدهای مرتب‌شده؛ (۲) قاعدهٔ «آخرین دستهٔ هر SKU» بدون `appliedAt` مقایسه‌پذیر نبود → شرط `batch.status=APPLIED AND appliedAt >`؛ (۳) پیام موفقیت در UI با `loadBatch` پاک می‌شد → ترتیب تازه‌سازی/پیام عوض شد.
+
+**شاهد runtime:** `node C:/ghasedak-tools/import-e2e.mjs` روی API زندهٔ rehearsal — فایل ۱۰۰سطری: `preview {rowCount:100, CREATE:100}` → `apply {CREATE:100}` → `apply` دوباره `alreadyApplied:true` → `revert {CREATE:100}` → `products live=0`, `ledger net=0`, `journal=200` → `revert` دوباره `alreadyReverted:true`.
+
+**دنبالهٔ باز:** Excel بومی (`.xlsx`)، ورود تصویر/ویژگی، و ورود چندسطحی قیمت — عمداً خارج از V1.

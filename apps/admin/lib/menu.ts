@@ -51,6 +51,7 @@ export const MENU: MenuGroup[] = [
     title: "فروشگاه",
     items: [
       { title: "محصولات", href: "/products", permission: "products.view" },
+      { title: "ورود گروهی محصولات", href: "/products/import", permission: "products.view" },
       { title: "دسته‌ها", href: "/categories", permission: "categories.view" },
       { title: "برندها", href: "/brands", permission: "brands.view" },
       { title: "ویژگی‌ها", href: "/attributes", permission: "attributes.view" },
