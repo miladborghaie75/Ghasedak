@@ -3,6 +3,7 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { AccountingController } from "./accounting.controller";
 import { AccountingReportsController } from "./accounting-reports.controller";
 import { JournalService } from "./journal.service";
+import { CashFlowService } from "./cash-flow.service";
 import { ReportsService } from "./reports.service";
 import { ReportsController } from "./reports.controller";
 import { DashboardService } from "./dashboard.service";
@@ -22,7 +23,7 @@ import { ProductsModule } from "../products/products.module";
     ReportsController,
     DashboardController,
   ],
-  providers: [JournalService, FiscalYearService, ReportsService, DashboardService],
+  providers: [JournalService, CashFlowService, FiscalYearService, ReportsService, DashboardService],
   // FiscalYearService هم export می‌شود چون فازهای بعد (سند اختتامیه، کنترل
   // دسترسی سال مالی در مسیرهای فروش/خرید) به آن نیاز دارند.
   exports: [JournalService, FiscalYearService],

@@ -3,6 +3,7 @@ import { JournalService, type PostEntryInput } from "./journal.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
 import { Identity } from "../auth/identity.decorator";
+import { optionalDate } from "../common/query-date";
 
 @Controller("admin/accounting")
 export class AccountingController {
@@ -104,10 +105,11 @@ export class AccountingController {
     return this.journal.finalize(id, actor?.userId);
   }
 
+  /** تراز آزمایشی — با بازهٔ اختیاری (گام ۱۲: جمع Dr/Cr و فلگ توازن هم برمی‌گردد) */
   @Get("trial-balance")
   @RequirePermission("accounting.reports")
-  trialBalance() {
-    return this.journal.trialBalance();
+  trialBalance(@Query() q: { from?: string; to?: string }) {
+    return this.journal.trialBalance(optionalDate(q.from, "from"), optionalDate(q.to, "to"));
   }
 
   @Get("integrity")

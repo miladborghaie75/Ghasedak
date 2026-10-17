@@ -2,8 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useAdminApi, fa } from "@/components/useAdminApi";
+import { downloadCsv } from "@/lib/download";
 
 interface TBRow { code: string; name: string; debit: string; credit: string; }
+/** گام ۱۲ (`[F1-2]`): تراز آزمایشی حالا بازه و جمع و فلگ توازن دارد */
+interface TrialBalance {
+  from: string | null; to: string | null;
+  items: TBRow[];
+  totals: { debit: string; credit: string };
+  balanced: boolean;
+}
 interface Integrity { balanced: boolean; debit: string; credit: string; }
 interface PnL { revenue: string; cogs: string; grossProfit: string; expenses: string; netProfit: string; grossMargin: number | null; netMargin: number | null; }
 interface Monthly { month: number; revenue: string; expense: string; }
@@ -15,11 +23,32 @@ interface BalanceSheet {
 }
 /** فاز ۱۱ (P3): گردش حساب */
 interface TurnoverRow { code: string; name: string; type: string; opening: string; debit: string; credit: string; closing: string; }
-/** فاز ۱۲ (گام ۳): جریان نقدینگی */
+type CashFlowClassKey = "OPERATING" | "INVESTING" | "FINANCING" | "UNCLASSIFIED";
+interface CashFlowClassTotals { inflow: string; outflow: string; net: string; }
+/**
+ * صورت جریان نقدی (گام ۱۲ · `[F1-2]`).
+ *
+ * «خالص» هر طبقه دقیق است و جمع طبقه‌ها = خالص کل. «ورودی/خروجی» هر طبقه
+ * از طرفِ سند می‌آید (منابع و مصارف)، پس لزوماً با ورودی/خروجی ناخالص نقدی
+ * یکی نیست — در UI هم همین‌طور نمایش داده می‌شود تا کسی اشتباه جمع نزند.
+ */
 interface CashFlow {
-  inflow: string; outflow: string; net: string;
+  from: string; to: string;
+  cashAccounts: Array<{ code: string; name: string }>;
+  opening: string; inflow: string; outflow: string; net: string; closing: string;
+  internalTransfers: { count: number; gross: string };
+  classes: Record<CashFlowClassKey, CashFlowClassTotals>;
+  unclassified: Array<{ code: string; name: string; net: string }>;
   monthly: Array<{ month: number; inflow: string; outflow: string }>;
+  monthlyClasses: Array<{ month: number } & Record<CashFlowClassKey, string>>;
 }
+
+const CLASS_LABELS: Record<CashFlowClassKey, string> = {
+  OPERATING: "عملیاتی",
+  INVESTING: "سرمایه‌ای",
+  FINANCING: "تأمین مالی",
+  UNCLASSIFIED: "طبقه‌بندی‌نشده",
+};
 interface EntryRow { id: string; number: string; date: string; description: string | null; lines: Array<{ account: { code: string; name: string }; debit: string; credit: string }>; }
 interface SaleRow { number: string; total: string; party: string; channel: string; kind: string; createdAt: string; }
 /** فاکتور خرید — پیش‌تر یک متن ثابت بود؛ حالا دادهٔ واقعی */
@@ -65,10 +94,48 @@ type TabKey = (typeof TABS)[number]["key"];
 
 const MONTHS_FA = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"];
 
+/**
+ * نوار بازهٔ تاریخ + خروجی CSV — مشترک تراز آزمایشی و جریان نقدی (گام ۱۲ · `[F1-2]`).
+ *
+ * راهنما هر بار می‌گوید «خالی» یعنی چه، چون پیش‌فرض دو گزارش یکی نیست
+ * (تراز: کل دوره · جریان نقدی: از ابتدای سال).
+ */
+function RangeBar({
+  range,
+  setRange,
+  onApply,
+  onExport,
+  hint,
+}: {
+  range: { from: string; to: string };
+  setRange: (r: { from: string; to: string }) => void;
+  onApply: () => void;
+  onExport: () => void;
+  hint: string;
+}) {
+  const input = "mt-1 block h-9 rounded-xl border border-line bg-surface px-2 text-xs";
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded-card border border-line bg-surface p-3">
+      <label className="text-[10px] text-muted">از
+        <input type="date" value={range.from} onChange={(e) => setRange({ ...range, from: e.target.value })} className={input} />
+      </label>
+      <label className="text-[10px] text-muted">تا
+        <input type="date" value={range.to} onChange={(e) => setRange({ ...range, to: e.target.value })} className={input} />
+      </label>
+      <button type="button" onClick={onApply} className="h-9 rounded-full bg-primary px-4 text-xs font-black text-on-accent">اعمال بازه</button>
+      <button type="button" onClick={onExport} className="h-9 rounded-full border border-line bg-surface px-4 text-xs font-black text-ink">خروجی CSV</button>
+      <p className="ms-auto text-[10px] leading-5 text-muted">{hint}</p>
+    </div>
+  );
+}
+
 export default function AccountingClient() {
   const { call, loading } = useAdminApi();
   const [tab, setTab] = useState<TabKey>("balance");
   const [tb, setTb] = useState<TBRow[]>([]);
+  const [tbMeta, setTbMeta] = useState<{ totals: { debit: string; credit: string }; balanced: boolean; from: string | null; to: string | null } | null>(null);
+  // بازهٔ مشترک دو گزارش مالی — خالی یعنی «پیش‌فرض همان گزارش» (نه بازهٔ ساختگی)
+  const [range, setRange] = useState({ from: "", to: "" });
   const [integrity, setIntegrity] = useState<Integrity | null>(null);
   const [pnl, setPnl] = useState<PnL | null>(null);
   const [monthly, setMonthly] = useState<Monthly[]>([]);
@@ -108,20 +175,48 @@ export default function AccountingClient() {
   useEffect(() => {
     void (async () => {
       const [tbR, intR, failR] = await Promise.all([
-        call<{ items?: TBRow[] } | TBRow[]>("/admin/accounting/trial-balance"),
+        // بار اول بدون بازه = کل دوره (رفتار قبلی حفظ شده؛ بازه با «اعمال» می‌آید)
+        call<TrialBalance>("/admin/accounting/trial-balance"),
         call<Integrity>("/admin/accounting/integrity"),
         call<{ items: PostFailure[]; failureCount7d: number }>("/admin/accounting/post-failures"),
       ]);
-      if (tbR.ok && tbR.data) setTb(Array.isArray(tbR.data) ? tbR.data : (tbR.data.items ?? []));
+      if (tbR.ok && tbR.data) {
+        setTb(tbR.data.items);
+        setTbMeta({ totals: tbR.data.totals, balanced: tbR.data.balanced, from: tbR.data.from, to: tbR.data.to });
+      }
       if (intR.ok && intR.data) setIntegrity(intR.data);
       if (failR.ok && failR.data) { setPostFailures(failR.data.items); setFailureCount(failR.data.failureCount7d); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** querystring بازه — مقدارهای خالی حذف می‌شوند تا پیش‌فرض همان گزارش بماند */
+  const rangeQs = (): string => {
+    const p = new URLSearchParams();
+    if (range.from) p.set("from", range.from);
+    if (range.to) p.set("to", range.to);
+    const s = p.toString();
+    return s ? `?${s}` : "";
+  };
+
+  /** خروجی CSV همان گزارش و همان بازهٔ روی صفحه */
+  const exportCsv = async (report: "cash-flow" | "trial-balance" | "pnl") => {
+    setError(null);
+    setMsg(null);
+    const r = await downloadCsv(`/admin/accounting/export/${report}${rangeQs()}`);
+    if (r.ok) setMsg("خروجی CSV ذخیره شد.");
+    else setError(r.error ?? "دریافت خروجی ناموفق بود.");
+  };
+
   const loadTab = async (t: TabKey) => {
     setError(null);
-    if (t === "pnl") {
+    if (t === "balance") {
+      const r = await call<TrialBalance>(`/admin/accounting/trial-balance${rangeQs()}`);
+      if (r.ok && r.data) {
+        setTb(r.data.items);
+        setTbMeta({ totals: r.data.totals, balanced: r.data.balanced, from: r.data.from, to: r.data.to });
+      } else setError(r.error?.message ?? "خطا");
+    } else if (t === "pnl") {
       const [p, m] = await Promise.all([
         call<PnL>("/admin/accounting/pnl"),
         call<Monthly[]>("/admin/accounting/monthly"),
@@ -148,7 +243,7 @@ export default function AccountingClient() {
       const r = await call<{ items: TurnoverRow[] }>("/admin/accounting/account-turnover");
       if (r.ok && r.data) setTurnover(r.data.items); else setError(r.error?.message ?? "خطا");
     } else if (t === "cashflow") {
-      const r = await call<CashFlow>("/admin/accounting/cash-flow");
+      const r = await call<CashFlow>(`/admin/accounting/cash-flow${rangeQs()}`);
       if (r.ok && r.data) setCf(r.data); else setError(r.error?.message ?? "خطا");
     }
   };
@@ -332,22 +427,46 @@ export default function AccountingClient() {
       {loading ? <p className="text-xs text-ink/50">در حال بارگذاری…</p> : null}
 
       {tab === "balance" ? (
-        <div className="overflow-x-auto rounded-card border border-line bg-surface">
-          <div className="admin-table-wrap"><table className="w-full text-sm">
-            <thead><tr className="border-b border-line text-right text-xs text-ink/60">
-              <th className="px-4 py-3">کد</th><th className="px-4 py-3">حساب</th><th className="px-4 py-3">بدهکار</th><th className="px-4 py-3">بستانکار</th>
-            </tr></thead>
-            <tbody>
-              {tb.map((r) => (
-                <tr key={r.code} className="border-b border-line/60 last:border-0">
-                  <td className="px-4 py-3" dir="ltr">{r.code}</td>
-                  <td className="px-4 py-3 font-bold">{r.name}</td>
-                  <td className="px-4 py-3 tabular-nums">{Number(r.debit) ? fa(r.debit) : "—"}</td>
-                  <td className="px-4 py-3 tabular-nums">{Number(r.credit) ? fa(r.credit) : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table></div>
+        <div className="flex flex-col gap-3">
+          <RangeBar
+            range={range}
+            setRange={setRange}
+            onApply={() => void loadTab("balance")}
+            onExport={() => void exportCsv("trial-balance")}
+            hint="خالی = کل دوره"
+          />
+          {tbMeta ? (
+            <div className={`rounded-card border p-4 text-sm font-black ${tbMeta.balanced ? "border-app-ok/40 bg-app-ok/5 text-app-ok" : "border-app-err/40 bg-app-err/5 text-app-err"}`}>
+              {tbMeta.balanced ? "جمع بدهکار و بستانکار برابر است ✅" : "⚠️ تراز نامتوازن است — ایراد در ثبت سند"}
+              <p className="mt-1 text-xs font-bold">جمع بدهکار: {fa(tbMeta.totals.debit)} — جمع بستانکار: {fa(tbMeta.totals.credit)}</p>
+            </div>
+          ) : null}
+          <div className="overflow-x-auto rounded-card border border-line bg-surface">
+            <div className="admin-table-wrap"><table className="w-full text-sm">
+              <thead><tr className="border-b border-line text-right text-xs text-ink/60">
+                <th className="px-4 py-3">کد</th><th className="px-4 py-3">حساب</th><th className="px-4 py-3">بدهکار</th><th className="px-4 py-3">بستانکار</th>
+              </tr></thead>
+              <tbody>
+                {tb.map((r) => (
+                  <tr key={r.code} className="border-b border-line/60 last:border-0">
+                    <td className="px-4 py-3" dir="ltr">{r.code}</td>
+                    <td className="px-4 py-3 font-bold">{r.name}</td>
+                    <td className="px-4 py-3 tabular-nums">{Number(r.debit) ? fa(r.debit) : "—"}</td>
+                    <td className="px-4 py-3 tabular-nums">{Number(r.credit) ? fa(r.credit) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {tbMeta ? (
+                <tfoot>
+                  <tr className="border-t-2 border-line bg-ink/5 text-xs font-black">
+                    <td className="px-4 py-3" colSpan={2}>جمع</td>
+                    <td className="px-4 py-3 tabular-nums">{fa(tbMeta.totals.debit)}</td>
+                    <td className="px-4 py-3 tabular-nums">{fa(tbMeta.totals.credit)}</td>
+                  </tr>
+                </tfoot>
+              ) : null}
+            </table></div>
+          </div>
         </div>
       ) : null}
 
@@ -603,16 +722,69 @@ export default function AccountingClient() {
         </div>
       ) : null}
 
-      {/* فاز ۱۲ (گام ۳): جریان نقدینگی */}
+      {/* گام ۱۲ (`[F1-2]`): صورت جریان نقدی با طبقه‌بندی */}
       {tab === "cashflow" ? (
         <div className="flex flex-col gap-4">
+          <RangeBar
+            range={range}
+            setRange={setRange}
+            onApply={() => void loadTab("cashflow")}
+            onExport={() => void exportCsv("cash-flow")}
+            hint="خالی = از ابتدای سال تا امروز"
+          />
           {cf ? (
             <>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">مانده ابتدای دوره</p><p className="mt-1 text-lg font-black tabular-nums">{fa(cf.opening)}</p></div>
                 <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">ورودی نقدینگی</p><p className="mt-1 text-lg font-black tabular-nums text-app-ok">{fa(cf.inflow)}</p></div>
                 <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">خروجی نقدینگی</p><p className="mt-1 text-lg font-black tabular-nums text-app-err">{fa(cf.outflow)}</p></div>
                 <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">خالص نقدینگی</p><p className="mt-1 text-lg font-black tabular-nums">{fa(cf.net)}</p></div>
+                <div className="rounded-card border border-line bg-surface p-4"><p className="text-xs text-ink/60">مانده پایان دوره</p><p className="mt-1 text-lg font-black tabular-nums">{fa(cf.closing)}</p></div>
               </div>
+
+              <div className="overflow-x-auto rounded-card border border-line bg-surface">
+                <div className="admin-table-wrap"><table className="w-full text-sm">
+                  <thead className="bg-ink/5 text-xs text-ink/60"><tr>
+                    <th className="px-4 py-2 text-start">طبقه</th>
+                    <th className="px-4 py-2 text-start">ورودی</th>
+                    <th className="px-4 py-2 text-start">خروجی</th>
+                    <th className="px-4 py-2 text-start">خالص</th>
+                  </tr></thead>
+                  <tbody>
+                    {(Object.keys(CLASS_LABELS) as CashFlowClassKey[]).map((k) => (
+                      <tr key={k} className="border-t border-line/60">
+                        <td className="px-4 py-2 font-bold">{CLASS_LABELS[k]}</td>
+                        <td className="px-4 py-2 tabular-nums text-app-ok">{fa(cf.classes[k].inflow)}</td>
+                        <td className="px-4 py-2 tabular-nums text-app-err">{fa(cf.classes[k].outflow)}</td>
+                        <td className="px-4 py-2 tabular-nums font-bold">{fa(cf.classes[k].net)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table></div>
+              </div>
+              <p className="rounded-xl bg-app-bg px-4 py-3 text-[11px] leading-6 text-ink/70">
+                خالص هر طبقه دقیق است و جمع سه طبقه با خالص نقدینگی می‌خواند. ورودی/خروجی هر طبقه از
+                حساب‌های طرفِ سند می‌آید (منابع و مصارف)، پس لزوماً با ورودی/خروجی ناخالص نقدی یکی نیست.
+              </p>
+
+              {cf.unclassified.length > 0 ? (
+                <div className="rounded-card border border-app-warning/40 bg-app-warning/5 p-4 text-xs leading-6 text-ink">
+                  <p className="font-black text-app-warning">⚠️ {fa(cf.unclassified.length)} حساب طبقه‌بندی‌نشده</p>
+                  <p className="mt-1">این مبالغ عمداً داخل «عملیاتی» نیامده‌اند؛ هر کدام باید در کدینگ صریح تعیین تکلیف شود:</p>
+                  <ul className="mt-1 list-inside list-disc">
+                    {cf.unclassified.map((u) => (
+                      <li key={u.code}><span dir="ltr">{u.code}</span> — {u.name}: {fa(u.net)}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {cf.internalTransfers.count > 0 ? (
+                <p className="rounded-xl bg-app-bg px-4 py-3 text-[11px] leading-6 text-ink/70">
+                  {fa(cf.internalTransfers.count)} انتقال داخلی بین حساب‌های نقد ({fa(cf.internalTransfers.gross)}) — پول از یک
+                  حساب به حساب دیگر رفته، پس نه ورودی است نه خروجی و در خالص نیامده.
+                </p>
+              ) : null}
               <div className="overflow-x-auto rounded-card border border-line bg-surface">
                 <div className="admin-table-wrap"><table className="w-full text-sm">
                   <thead className="bg-ink/5 text-xs text-ink/60"><tr><th className="px-4 py-2 text-start">ماه</th><th className="px-4 py-2 text-start">ورودی</th><th className="px-4 py-2 text-start">خروجی</th></tr></thead>

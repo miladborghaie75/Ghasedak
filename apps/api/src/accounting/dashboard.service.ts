@@ -202,6 +202,31 @@ export class DashboardService {
   }
 
   /**
+   * ماندهٔ دفتری نقد و بانک — گروه (`1000`/`1100`) + همهٔ زیرحساب‌ها، فقط FINAL.
+   *
+   * همان دامنهٔ حساب‌هایی که `cashFlowTrend` می‌شناسد، ولی با یک `aggregate`
+   * به‌جای خواندن خطوط و جمع در Node — این عدد در کارتِ صفحهٔ اول داشبورد است
+   * و نباید به حجم دفتر وابسته باشد.
+   */
+  async cashBalance(): Promise<number> {
+    const accounts = await this.prisma.account.findMany({
+      where: {
+        OR: [
+          { code: { in: CASH_CODES } },
+          ...CASH_PREFIXES.map((p) => ({ code: { startsWith: `${p}-` } })),
+        ],
+      },
+      select: { id: true },
+    });
+    if (accounts.length === 0) return 0;
+    const agg = await this.prisma.journalLine.aggregate({
+      where: { accountId: { in: accounts.map((a) => a.id) }, entry: { state: "FINAL" } },
+      _sum: { debit: true, credit: true },
+    });
+    return Number(agg._sum.debit ?? 0) - Number(agg._sum.credit ?? 0);
+  }
+
+  /**
    * جریان نقدی — ورود و خروج واقعی پول.
    *
    * از ماندهٔ حساب‌های نقد (۱۰۰۰ و زیرحساب‌هایش + ۱۱۰۰ و زیرحساب‌هایش)
@@ -279,13 +304,14 @@ export class DashboardService {
    * گزارش‌ها **یک عدد** نشان دهند — نه دو عدد متفاوت در دو صفحه.
    */
   async overview() {
-    const [checksDue, arAp, warehouses, bank, settlement, todayRevenue] = await Promise.all([
+    const [checksDue, arAp, warehouses, bank, settlement, todayRevenue, cash] = await Promise.all([
       this.reports.checksDue(30),
       this.reports.receivablesPayables(),
       this.warehouseValuation(),
       this.reports.bankReconciliation(),
       this.settlementSummary(),
       this.todayRevenue(),
+      this.cashBalance(),
     ]);
 
     const book = warehouses.totals.bookValue;
@@ -300,7 +326,15 @@ export class DashboardService {
 
     return {
       cards: {
-        cash: bank.accounts.reduce((s, a) => s + a.bookBalance, 0),
+        // «نقد» = ماندهٔ دفتری صندوق + بانک (گروه و همهٔ زیرحساب‌ها) از دفتر کل.
+        //
+        // چرا از خزانه خوانده نمی‌شود: قبلاً همین کارت از گزارش مغایرت بانکی
+        // جمع می‌شد، یعنی فقط حساب‌های بانکی که **در خزانه ثبت شده‌اند** — و چون
+        // گردش فروش روی گروه `1100` می‌نشیند و هیچ حساب بانکی به آن وصل نیست،
+        // کارت «نقد (بانک + صندوق)» عدد ۰ نشان می‌داد در حالی که ۹۰ میلیون
+        // تومان نقد در دفتر بود (دیده‌شده در بازرسی گام ۱۲). برچسب کارت هم
+        // «بانک + صندوق» است ولی مقدارش فقط بانک را جمع می‌کرد.
+        cash,
         receivable: arAp.receivables.total,
         payable: arAp.payables.total,
         netWorth: book - arAp.payables.total,
