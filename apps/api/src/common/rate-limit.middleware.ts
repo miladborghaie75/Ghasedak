@@ -35,6 +35,9 @@ const RULES: Array<{ match: RegExp; max: number; windowMs: number }> = [
 
   // Wishlist routes (گام ۱۱ — بند ۴۲) — تغییر علاقه‌مندی مهمان
   { match: /\/wishlist\/items(\/.+)?$/, max: 60, windowMs: 60_000 }, // 60/min per IP (toggle سبک)
+
+  // Analytics public (گام ۱۵-۶) — ping بازدید؛ سقف شل تا ناوبری طبیعی سالم بماند
+  { match: /\/analytics\/public\/visit$/, max: 120, windowMs: 60_000 }, // 120/min per IP
 ];
 
 @Injectable()

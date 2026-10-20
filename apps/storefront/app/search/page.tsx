@@ -6,8 +6,9 @@ import { faNum } from "@/lib/format";
 import { loadCatalog, searchV2, sortV2 } from "@/lib/catalog-repo";
 import { parseSortParam } from "@/lib/sort";
 import { CATEGORIES } from "@/lib/categories";
-import { NEEDS, matchesNeed } from "@/lib/needs";
+import { loadNeedFinderSteps, matchesNeed } from "@/lib/needs";
 import { COPY } from "@/lib/copy";
+import { TrackOnMount } from "@/components/analytics/TrackOnMount";
 
 export const metadata: Metadata = { title: COPY.search };
 
@@ -22,21 +23,24 @@ export default async function SearchPage({
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q : "";
   const needSlug = typeof sp.need === "string" ? sp.need : "";
-  const all = await loadCatalog();
+  const [all, steps] = await Promise.all([loadCatalog(), loadNeedFinderSteps()]);
 
-  const need = NEEDS.find((n) => n.slug === needSlug);
+  // گام ۱۶: `need` = id گزینهٔ گام ۱ ویزارد (تک‌منبع) — با rule همان گزینه فیلتر می‌کنیم
+  const situation = needSlug ? steps[0]?.options.find((o) => o.id === needSlug) : undefined;
   const sort = parseSortParam(sp);
   // مرتب‌سازی مثل صفحهٔ دسته — همان قاعدهٔ lib/sort.ts (تک‌منبع):
   // «بیشترین امتیاز» فقط از نظر تأییدشده می‌آید و بی‌نظرها پایین می‌مانند.
-  const matched = need
-    ? all.filter((p) => matchesNeed(p, need))
+  const matched = situation
+    ? all.filter((p) => matchesNeed(p, [situation.rule]))
     : searchV2(q, all);
   const results = sortV2(matched, sort);
 
   return (
     <div className="mx-auto max-w-7xl px-3 py-6 sm:px-4">
+      {/* گام ۱۵ — رویداد search از تک‌نقطهٔ ورود به این صفحه (گارد رضایت داخل track) */}
+      {q ? <TrackOnMount event="search" params={{ search_term: q }} /> : null}
       <h1 className="font-display text-3xl text-plum">
-        {q ? `جستجو: «${q}»` : need ? need.label : COPY.search}
+        {q ? `جستجو: «${q}»` : situation ? situation.label : COPY.search}
       </h1>
 
       {results.length === 0 ? (
@@ -59,7 +63,7 @@ export default async function SearchPage({
             <p className="text-[13px] text-muted tnum">
               {faNum(results.length)} محصول پیدا شد
             </p>
-            {need && <p className="text-[12px] text-muted">{need.why}</p>}
+            {situation?.rule?.why && <p className="text-[12px] text-muted">{situation.rule.why}</p>}
             <SortSelect sort={sort} className="ms-auto" />
           </div>
           <ProductGrid products={results} />

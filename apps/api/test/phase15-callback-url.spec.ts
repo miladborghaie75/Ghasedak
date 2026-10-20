@@ -20,6 +20,7 @@ import { TreasuryService } from "../src/treasury/treasury.service";
 import { PaymentsService } from "../src/payments/payments.service";
 import { ZarinpalProvider } from "../src/payments/zarinpal.provider";
 import { MockPaymentProvider } from "../src/payments/mock.provider";
+import { MeasurementService } from "../src/analytics/measurement.service";
 import {
   allowedCallbackOrigins,
   normalizeOrigins,
@@ -114,6 +115,7 @@ describe("Phase 15 — allowlist آدرس بازگشت درگاه (F0-5)", () =>
         new TreasuryService(prisma, journal),
         new ZarinpalProvider(),
         new MockPaymentProvider(),
+        new MeasurementService(prisma),
       );
       payments.onModuleInit();
 

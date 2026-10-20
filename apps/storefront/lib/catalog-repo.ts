@@ -53,6 +53,8 @@ function toV2(raw: Record<string, unknown>): ProductV2 {
     brandId: (raw.brandId as string) ?? null,
     short: (raw.short as string) ?? "",
     attributeIds: (raw.attributeIds as string[]) ?? [],
+    /** ترم‌های سطح محصول (جنس و …) — slug + مقدار واقعی برای ویزارد و متن دلیل */
+    attributeTerms: (raw.attributeTerms as ProductV2["attributeTerms"]) ?? [],
     createdAt: String(raw.createdAt ?? new Date().toISOString()),
     image,
     // خلاصهٔ نظرات تأییدشده — API همیشه می‌فرستد؛ فقط وقتی نظر هست ستاره می‌خشد
@@ -137,6 +139,11 @@ export function hydrateCatalog(products: ProductV2[]): void {
       for (const [tid, label] of Object.entries(v.termLabels ?? {})) {
         putTermLabel(tid, label);
       }
+    }
+    // ترم‌های سطح محصول (جنس و …) هم برچسب واقعی دارند — وگرنه متن دلیل ویزارد
+    // شناسهٔ خام نشان می‌دهد
+    for (const t of p.attributeTerms ?? []) {
+      putTermLabel(t.id, t.value);
     }
   }
   if (!g.__ghCatalog || g.__ghCatalog.products.length === 0) {

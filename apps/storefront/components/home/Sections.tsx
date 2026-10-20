@@ -2,16 +2,23 @@ import Link from "next/link";
 import { Chip } from "@/components/ui/Chip";
 import { faNum } from "@/lib/format";
 import { COPY } from "@/lib/copy";
-import { NEEDS } from "@/lib/needs";
+import { loadNeedFinderSteps } from "@/lib/needs";
 import type { ArtKind } from "@/components/commerce/ProductArt";
 
-/** ریل چیپ‌های نیازمحور — برای کاربری که «نمی‌داند دقیقاً چه می‌خواهد» */
-export function NeedNav() {
+/**
+ * ریل چیپ‌های نیازمحور — برای کاربری که «نمی‌داند دقیقاً چه می‌خواهد».
+ * گام ۱۶: گزینه‌ها از همان تک‌منبع ویزارد می‌آیند (API → fallback contracts)؛
+ * هر چیپ = گزینهٔ گام ۱ که در `/need?start=…` از پیش انتخاب می‌شود.
+ */
+export async function NeedNav() {
+  const steps = await loadNeedFinderSteps();
+  const situations = steps[0]?.options ?? [];
+  if (!situations.length) return null;
   return (
     <nav aria-label="خرید بر اساس نیاز" className="mt-3 flex flex-wrap items-center justify-center gap-2 px-3 sm:px-4">
-      {NEEDS.map((n) => (
-        <Link key={n.slug} href={`/need?start=${n.slug}`} className="inline-flex">
-          <Chip>{n.label}</Chip>
+      {situations.map((o) => (
+        <Link key={o.id} href={`/need?start=${encodeURIComponent(o.id)}`} className="inline-flex">
+          <Chip>{o.label}</Chip>
         </Link>
       ))}
     </nav>

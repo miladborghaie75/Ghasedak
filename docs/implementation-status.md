@@ -1,6 +1,6 @@
 # وضعیت پیاده‌سازی — Ghasedak (بند ۲/۱۱۸ سند Master)
 
-> آخرین به‌روزرسانی: ۲۰۲۶-۱۰-۱۸ — ایستگاه ۳/`F1-13` + گام ۱۰/`F1-14` + گام ۱۱ + گام ۱۲ (`F1-2` — گزارش‌های مالی) + **گام ۱۳ (`F1-3` — ورود گروهی CSV: پیش‌نمایش/اعمال/بازگردانی) بسته شد**؛ جزئیات در جدول ایستگاه ۴/گام‌های ۱۲ و ۱۳ پایین‌تر.
+> آخرین به‌روزرسانی: ۲۰۲۶-۱۰-۲۰ — ایستگاه ۳/`F1-13` + گام ۱۰/`F1-14` + گام ۱۱ + گام ۱۲ (`F1-2` — گزارش‌های مالی) + گام ۱۳ (`F1-3` — ورود گروهی CSV: پیش‌نمایش/اعمال/بازگردانی) + گام ۱۴ (`F1-15` — بازیابی رمز با کانال) + گام ۱۵ (`F1-16` — آنالیتیکس) + **گام ۱۶ (`F1-4` — ویزارد «چی لازم داری؟») بسته شد**؛ جزئیات در جدول ایستگاه ۴/گام‌های ۱۲ و ۱۶ پایین‌تر (گام‌های ۱۴ و ۱۵ فقط در [نقشهٔ راه](../plans/completion-launch-plan.md) بسته شده‌اند).
 >
 > (پیش‌تر: **گام ۱۱ (بند ۴۱ — نظرات و امتیاز) بسته شد**: چرخهٔ کامل OTP → توکن یک‌بارمصرف → ثبت PENDING → بج «خرید واقعی» از سفارش PAID → صف ادمین (تأیید/رد/پاسخ + AuditLog) → انتشار عمومی بدون PII؛ UI ادمین `/reviews` + بخش نظرات PDP فروشگاه (خلاصهٔ امتیاز + لیست + فرم OTP) + `aggregateRating` در JSON-LD. سوئیت محلی روی DB تازه‌کار (migrate+seed طبق رویهٔ CI): **۴۱/۴۱ سوئیت · ۲۳۵/۲۳۵ تست**؛ typecheck+build سه اپ سبز؛ ممیزی لحن دو اپ ۰ تخلف.
 > تعریف «پیاده‌سازی‌شده»: مسیر runtime کامل کار کند (بند ۱۱۴/۱۱۸). Schema و سند به‌تنهایی «پیاده‌شده» نیست.
@@ -78,6 +78,24 @@
 | کشف جانبی ۲: کارت «نقد (بانک + صندوق)» داشبورد عدد ۰ نشان می‌داد | ✅ IMPLEMENTED | `DashboardService.cashBalance()` از دفتر کل (گروه + زیرحساب)؛ داشبورد ۹۰٬۴۲۷٬۷۴۲ = خالص جریان نقدی؛ تست regression |
 | سوئیت کامل API روی DB تمرین | ✅ IMPLEMENTED | **۴۳/۴۳ سوئیت · ۲۵۹/۲۵۹ تست**؛ typecheck سه اپ + build API/ادمین سبز؛ ممیزی لحن ادمین ۰ تخلف |
 | دنبالهٔ باز (خارج از این گام) | ❌ NOT IMPLEMENTED | گردش فروش روی **گروه** `1100` می‌نشیند نه یک حساب بانکی مشخص؛ مغایرت‌گیری به‌تفکیک بانک تا وقتی پرداخت مقصد را صریح ندهد کامل نیست |
+
+## ایستگاه ۴/گام ۱۶ (`F1-4` — ویزارد «چی لازم داری؟») — ۲۰۲۶-۱۰-۲۰ — runtime-tested
+| قابلیت | وضعیت | مدرک |
+|---|---|---|
+| تک‌منبع ویزارد: DTO مشترک + دادهٔ fallback سه‌گامی (موقعیت → اولویت → بودجه) در `packages/contracts` — هم API، هم seed، هم «بازگردانی پیش‌فرض‌ها» | ✅ IMPLEMENTED | [need-finder.ts](../packages/contracts/src/need-finder.ts) — `NEED_FINDER_FALLBACK` |
+| مدل داده: `NeedFinderStep`/`NeedFinderOption` (قاعدهٔ انطباق JSON) — از قبل در شِما بود؛ این گام runtime را ساخت، **بدون مهاجرت جدید** | ✅ IMPLEMENTED | [schema.prisma](../packages/database/prisma/schema.prisma) (مدل‌ها از مهاجرت baseline) |
+| API عمومی: `GET /api/v1/need-finder/steps` — بدون احراز هویت، فقط گام/گزینهٔ `active` به‌ترتیب `sortOrder`؛ DB خالی → fallback تک‌منبع | ✅ IMPLEMENTED | [need-finder.controller.ts](../apps/api/src/catalog/need-finder.controller.ts)؛ تست «DB خالی → fallback» |
+| API ادمین: CRUD گام/گزینه + واژگان (دسته/ترم واقعی کاتالوگ) + ترتیب‌دهی (فهرست کامل در یک تراکنش) + بازگردانی پیش‌فرض‌ها؛ `marketing.view` برای خواندن، `marketing.manage` برای نوشتن + `AuditLog` روی هر نوشتن | ✅ IMPLEMENTED | [admin-need-finder.controller.ts](../apps/api/src/catalog/admin-need-finder.controller.ts) |
+| دروازهٔ «گزینهٔ مرده»: دسته/جنس ناشناخته در قاعده با خطای روشن رد می‌شود (نه ذخیرهٔ بی‌صدا) | ✅ IMPLEMENTED | `assertRuleMatchesCatalog`؛ تست «دستهٔ جعلی و جنسِ جعلی رد شد» |
+| نرمال‌سازی قاعده: کلید ناشناخته/نوع غلط **رد** می‌شود (نه sanitize)، `priceMax` عدد صحیح مثبت، `why` با گارد متن (U+FFFD)، قاعدهٔ خالی = «بدون محدودیت» | ✅ IMPLEMENTED | `normalizeNeedRule` — تست `phase16-need-finder-admin` (۱۱ تست) |
+| فروشگاه — ویزارد `/need`: بدون دکمهٔ Next (هر انتخاب = پیشروی) + `?start=…` گام ۱ را از قبل انتخاب می‌کند | ✅ IMPLEMENTED | [NeedFinder.tsx](../apps/storefront/components/commerce/NeedFinder.tsx) — شاهد مرورگر: سه گام تا انتها |
+| فروشگاه — نتیجهٔ `/need/result?a0=…&a1=…&a2=…`: URL **اشتراک‌پذیر**، رندر سروری، خط «دلیل انطباق»، بخش «نزدیک‌ترین‌ها» وقتی انطباق کم است، پیام صریح وقتی صفر است | ✅ IMPLEMENTED | [need/result/page.tsx](../apps/storefront/app/need/result/page.tsx) — شاهد زنده: «پشتیبانی مناسب در حرکت · جنس پنبه یا میکروفایبر · بودجه تا ۳۰۰٬۰۰۰ تومان» |
+| منطق انطباق مستقل و قابل تست: AND بین گام‌ها · OR داخل هر بُعد · قاعدهٔ خالی = بی‌محدودیت · بودجه روی حداقل قیمت مؤثر (تخفیف فعال) · جنس با slug ترم (id برای دادهٔ قدیمی) | ✅ IMPLEMENTED | [lib/needs.ts](../apps/storefront/lib/needs.ts) + تست واحد **۸/۸** |
+| امنیت URL: شناسهٔ ناشناخته از پاسخ‌ها حذف می‌شود — ورودی URL هرگز به کوئری DB نمی‌رسد | ✅ IMPLEMENTED | `parseNeedAnswers`؛ تست `a0=DROP TABLE products;--` → پاسخ خالی |
+| پنل ادمین `/need-finder` + ورودی منو: ویرایش گام/گزینه، انتخاب دسته و جنس از فهرست کاتالوگ، فعال/غیرفعال، ترتیب، بازگردانی پیش‌فرض‌ها | ✅ IMPLEMENTED | [need-finder/page.tsx](../apps/admin/app/need-finder/page.tsx) + [NeedFinderClient](../apps/admin/app/need-finder/clients/NeedFinderClient.tsx) — build ادمین سبز، `/need-finder` در خروجی |
+| کشف جانبی (داده): جنس فقط روی **واریانت‌ها** بود و سطح محصول خالی — قاعدهٔ «جنس» ویزارد چیزی برای سنجیدن نداشت؛ seed این گام جنس سطح محصول را می‌نویسد | ✅ IMPLEMENTED | [seed.ts](../packages/database/scripts/seed.ts) — بخش «جنس سطح محصول» |
+| گیت سبز این گام | ✅ IMPLEMENTED | API **۲۱/۲۱** (سه سوئیت `phase16-need-finder*`) + فروشگاه **۸/۸** · typecheck **۱۰/۱۰** · build فروشگاه و ادمین · ممیزی لحن دو اپ **۰ تخلف** |
+| رفت‌وبرگشت ادمین → DB → فروشگاه | ✅ IMPLEMENTED | ویرایش گزینهٔ «ورزش» در پنل → API → DB → فروشگاه (کش ۶۰ ثانیه) → بازگردانی و تأیید پاک‌شدن اثر |
 
 ## فاز ۱۳ (۲۰۲۶-۰۹-۳۰) — runtime-tested
 | قابلیت | وضعیت | مدرک |

@@ -4,6 +4,7 @@ import { AuthModule } from "../auth/auth.module";
 import { InventoryModule } from "../inventory/inventory.module";
 import { AccountingModule } from "../accounting/accounting.module";
 import { TreasuryModule } from "../treasury/treasury.module";
+import { AnalyticsModule } from "../analytics/analytics.module";
 import { PaymentsService } from "./payments.service";
 import { PaymentsController } from "./payments.controller";
 import { SettlementService } from "./settlement.service";
@@ -22,6 +23,7 @@ import { MockPaymentProvider } from "./mock.provider";
     InventoryModule,
     forwardRef(() => AccountingModule),
     TreasuryModule,
+    AnalyticsModule,
   ],
   controllers: [PaymentsController, SettlementController],
   providers: [PaymentsService, SettlementService, ZarinpalProvider, MockPaymentProvider],

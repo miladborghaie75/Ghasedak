@@ -136,6 +136,7 @@ export const MENU: MenuGroup[] = [
     title: "بازاریابی",
     items: [
       { title: "کدهای تخفیف و گزارش فروش", href: "/marketing", permission: "marketing.view" },
+      { title: "ویزارد «چی لازم داری؟»", href: "/need-finder", permission: "marketing.view" },
       { title: "صفحه‌ساز زنده", href: "/builder", permission: "marketing.view" },
     ],
   },

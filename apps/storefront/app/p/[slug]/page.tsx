@@ -26,6 +26,7 @@ import { CATEGORIES } from "@/lib/categories";
 import { ReviewsSection } from "@/components/commerce/ReviewsSection";
 import { loadReviews } from "@/lib/reviews";
 import { SITE_URL, site } from "@/lib/site";
+import { TrackOnMount } from "@/components/analytics/TrackOnMount";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -98,6 +99,11 @@ export default async function ProductPage({ params }: PageProps) {
     // در چاپ پدینگِ نوار چسبندهٔ موبایل لازم نیست — همان ۷rem باعث می‌شد
     // کارت‌ها با break-inside:avoid به صفحهٔ بعد بروند (تست واقعی PDF: ۳ → ۱)
     <div className="mx-auto max-w-7xl px-3 pb-28 sm:px-4 lg:pb-0 print:pb-0">
+      {/* گام ۱۵ — رویداد view_item (گارد رضایت داخل track؛ بدون رضایت no-op) */}
+      <TrackOnMount
+        event="view_item"
+        params={{ item_id: product.slug, item_name: product.name, value: sale ?? base, currency: "IRR" }}
+      />
       <nav aria-label={COPY.breadcrumb} className="py-3 text-[12px] text-muted">
         <ol className="flex flex-wrap items-center gap-1.5">
           <li><Link href="/" className="hover:text-primary-strong">خانه</Link></li>

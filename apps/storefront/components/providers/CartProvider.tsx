@@ -18,6 +18,7 @@ import {
   useState,
 } from "react";
 import { ensureCatalogClient } from "@/lib/catalog-repo";
+import { track } from "@/lib/analytics";
 /** خط سبد: شناسه واریانت (SKU) + تعداد */
 export interface CartLine {
   variantId: string;
@@ -212,6 +213,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const addLine = useCallback(
     (variantId: string, qty = 1) => {
       const next = sanitize([...lines.filter((l) => l.variantId !== variantId), { variantId, qty: (lines.find((l) => l.variantId === variantId)?.qty ?? 0) + qty }]);
+      // گام ۱۵ — تنگای واحد همهٔ دکمه‌های افزودن (گارد رضایت داخل track)
+      track("add_to_cart", { item_id: variantId, quantity: qty });
       void mutate("POST", "/api/cart/items", { variantId, qty: next.find((l) => l.variantId === variantId)?.qty ?? qty }, next);
     },
     [lines, mutate],

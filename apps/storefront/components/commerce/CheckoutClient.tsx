@@ -10,6 +10,7 @@ import { cn } from "@/lib/cn";
 import { faNum } from "@/lib/format";
 import { COPY } from "@/lib/copy";
 import { ensureCatalogClient, type ProductV2 } from "@/lib/catalog-repo";
+import { getStoredUtm, track } from "@/lib/analytics";
 import type { VariantV2 } from "@/lib/catalog";
 
 /** خواندن توکن CSRF از کوکی (double-submit) و ساخت هدر */
@@ -150,7 +151,12 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
     }
 
     setSubmitting(true);
-    // فلو واقعی: ثبت سفارش سرور-محور (قیمت/موجودی/کد تخفیف همگی سمت سرور — بند ۵۱)
+    // گام ۱۵ — begin_checkout: تنگای واحد ارسال فرم تسویه (گارد رضایت داخل track)
+    track("begin_checkout", {
+      value: total,
+      currency: "IRR",
+      items: lines.map((l) => ({ item_id: l.variantId, quantity: l.qty })),
+    });
     // کلید فقط یک‌بار برای این سبد ساخته می‌شود؛ کلیک دوباره همان کلید را می‌فرستد (ضد سفارش تکراری)
     if (!idemRef.current) {
       idemRef.current =
@@ -176,6 +182,8 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
           couponCode: coupon?.code ?? null,
           lines: lines.map((l) => ({ sku: l.variantId, qty: l.qty })),
           idempotencyKey: idem,
+          // گام ۱۵ (D-4) — UTM first-touch ذخیره‌شده در ورود اول به فروشگاه
+          utm: getStoredUtm(),
         }),
       });
       const body = (await res.json().catch(() => null)) as

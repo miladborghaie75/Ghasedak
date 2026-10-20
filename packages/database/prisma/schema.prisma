@@ -455,6 +455,9 @@ model Order {
   total                  BigInt
   currency               String        @default("IRT")
   shippingMethodSnapshot Json?
+  // گام ۱۵ (تصمیم D-4) — UTM first-touch لحظهٔ ورود؛ با checkout ذخیره می‌شود.
+  // فقط utm_source/medium/campaign/term/content — هیچ PII اینجا نمی‌ریزد.
+  utmSnapshot            Json?
   trackingCode           String?
   notes                  String?
   customerNotes          String?
@@ -2884,6 +2887,42 @@ model ConsentRecord {
 
   @@unique([ownerKey, kind])
   @@index([ownerKey])
+}
+
+/// آمار بازدید روزانهٔ فروشگاه (گام ۱۵-۶، first-party) — همیشه‌روشن (D-5)،
+/// رضایت فقط دروازهٔ GA4 است نه این جدول. «روز» = روز تهران (آفست ثابت +۳:۳۰).
+/// views پس از D-6 پنجره‌ای است: هر (روز، نشست، مسیر) در بازهٔ ۳۰ دقیقه یک‌بار.
+model DailyVisit {
+  day      DateTime  @id // آغاز روز به وقت تهران (به‌صورت UTC ذخیره می‌شود)
+  views    Int       @default(0) // بازدید صفحه — پنجرهٔ ۳۰ دقیقه‌ای (D-6)، نه هر پینگ
+  sessions Int       @default(0) // بازدیدکنندهٔ یکتا (توکن سبد) — روزی حداکثر یک‌بار
+  updatedAt DateTime @updatedAt
+}
+
+/// بازدیدکنندهٔ یکتای هر روز — با unique([day, sessionKey]) هر session
+/// روزی فقط یک‌بار در شمارش sessions می‌نشیند؛ رشدش با DailyVisit هم‌پایه است.
+model DailyVisitSession {
+  day        DateTime
+  sessionKey String
+  createdAt  DateTime @default(now())
+
+  @@id([day, sessionKey])
+  @@index([sessionKey])
+}
+
+/// پنجرهٔ یکتاییِ بازدید (گام ۱۵-۶، D-6) — هر (روز، نشست، مسیر) فقط وقتی
+/// views را بالا می‌برد که آخرین پینگش دست‌کم ۳۰ دقیقه قبل بوده باشد؛
+/// refresh و برگشتِ سریع به همان صفحه دوباره‌شماری نمی‌کند (از هر دو سمت:
+/// sessionStorage کلاینت + این جدول سرور — سرور مرز حقیقت است).
+/// updatedMany/createMany اتمیک‌اند؛ ردیف‌های قدیمی‌تر از ۲ روز پاک می‌شوند.
+model DailyVisitPath {
+  day        DateTime // آغاز روز تهران (UTC)
+  sessionKey String // همان توکن سبد
+  path       String // مسیر صفحه (سقف ۲۰۰)
+  updatedAt  DateTime @default(now()) // آخرین پینگِ شمرده — لغزنده
+
+  @@id([day, sessionKey, path])
+  @@index([day])
 }
 
 /// Event Outbox — Checklist (Event Bus): رویداد دامنه در همان تراکنش ثبت، worker توزیع می‌کند؛ idempotent

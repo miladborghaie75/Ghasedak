@@ -18,7 +18,13 @@ export type ShapedVariant = {
 export type ShapedProduct = {
   id: string; slug: string; name: string; short: string | null;
   category: string | null; brandId: string | null;
-  attributeIds: string[]; createdAt: string;
+  attributeIds: string[];
+  /**
+   * ترم‌های سطح محصول (جنس و …) با slug و مقدار — ویزارد «چی لازم داری؟» قاعده
+   * را با slug می‌سنجد (پایدار)، و فروشگاه برچسب واقعی را از همین‌جا نشان می‌دهد.
+   */
+  attributeTerms: Array<{ id: string; slug: string; value: string }>;
+  createdAt: string;
   image: string | null; images: Array<{ url: string; alt: string | null }>;
   isNew: boolean; inStock: boolean; minPrice: number | null; maxPrice: number | null;
   description?: string | null; tags?: string[];
@@ -170,6 +176,34 @@ export class PublicCatalogController {
     return map;
   }
 
+  /**
+   * اتریبیوت‌های سطح محصول (جنس و …) — batch، بدون N+1.
+   * کلید = productId، مقدار = ترم‌های محصول با id/slug/value.
+   */
+  private async productAttributeMap(
+    productIds: string[],
+  ): Promise<Map<string, Array<{ id: string; slug: string; value: string }>>> {
+    const map = new Map<string, Array<{ id: string; slug: string; value: string }>>();
+    const ids = [...new Set(productIds.filter(Boolean))];
+    if (ids.length === 0) return map;
+    const rows = await this.prisma.productAttributeTerm.findMany({
+      where: { productId: { in: ids } },
+      select: {
+        productId: true,
+        term: { select: { id: true, slug: true, value: true, sortOrder: true } },
+      },
+    });
+    for (const r of rows) {
+      const list = map.get(r.productId) ?? [];
+      list.push({ id: r.term.id, slug: r.term.slug, value: r.term.value });
+      map.set(r.productId, list);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.slug.localeCompare(b.slug, "fa"));
+    }
+    return map;
+  }
+
   /** mediaId → storageKey برای تصاویر چند محصول — batch */
   private async mediaKeyMap(mediaIds: string[]): Promise<Map<string, string>> {
     const map = new Map<string, string>();
@@ -279,12 +313,17 @@ export class PublicCatalogController {
     const priceMap = await this.channelPriceMap(rows.flatMap((r) => r.variants.map((v) => v.sku)), channelSlug);
     const mediaMap = await this.mediaKeyMap(rows.flatMap((r) => r.images.map((i) => i.mediaId)));
     const ratings = await this.ratingMap(rows.map((r) => r.id));
+    const attributes = await this.productAttributeMap(rows.map((r) => r.id));
     const items = rows.map((p) => {
     const shaped = shapeCommon(
       { ...p, images: resolveImages(p.images, mediaMap), variants: p.variants.map(flattenVariantTerms) },
       priceMap,
     ) as unknown as ShapedProduct;
       shaped.rating = ratings.get(p.id) ?? { avg: null, count: 0 };
+      // اتریبیوت‌های سطح محصول — ویزارد «چی لازم داری؟» و فیلتر جنس به آن نیاز دارند
+      const terms = attributes.get(p.id) ?? [];
+      shaped.attributeTerms = terms;
+      shaped.attributeIds = terms.map((t) => t.id);
       return shaped;
     });
     return { items, page: pageNum, perPage: take, total, hasMore: skip + rows.length < total };
@@ -312,11 +351,10 @@ export class PublicCatalogController {
       priceMap,
     ) as unknown as ShapedProduct;
     // اتریبیوت‌های سطح محصول (جنس و …) — برای فیلتر material و نمایش
-    const productTerms = await this.prisma.productAttributeTerm.findMany({
-      where: { productId: p.id },
-      select: { attributeTermId: true },
-    });
-    shaped.attributeIds = productTerms.map((t) => t.attributeTermId);
+    const attributes = await this.productAttributeMap([p.id]);
+    const terms = attributes.get(p.id) ?? [];
+    shaped.attributeTerms = terms;
+    shaped.attributeIds = terms.map((t) => t.id);
     shaped.description = p.description;
     shaped.tags = p.tags;
     // خلاصهٔ نظرات تأییدشدهٔ همین محصول — کارت/لیست و PDP هم‌منبع‌اند (بند ۴۱)

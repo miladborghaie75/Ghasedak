@@ -6,6 +6,7 @@ import { AppProviders } from "@/components/providers/AppProviders";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { QuickAddHost } from "@/components/commerce/QuickAddHost";
+import { ConsentGate } from "@/components/analytics/ConsentGate";
 import { ThemeInit } from "@/components/providers/theme-init";
 import { MotionReveal } from "@/components/MotionReveal";
 import { site, SITE_URL } from "@/lib/site";
@@ -103,6 +104,8 @@ export default async function RootLayout({
           <MotionReveal />
           <Footer />
           <QuickAddHost />
+          {/* گام ۱۵ — رضایت آنالیتیکس: بنر تصمیم + لود GA4 فقط پس از رضایت */}
+          <ConsentGate />
         </AppProviders>
       </body>
     </html>

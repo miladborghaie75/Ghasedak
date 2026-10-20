@@ -98,6 +98,16 @@ Start-Process -WindowStyle Hidden -FilePath cmd -ArgumentList '/c','npx next sta
 
 > نکتهٔ امنیتی: در بازیابی رمز، پاسخ برای حساب موجود و ناموجود **یکسان** است و اگر کانال انتخابی دادهٔ مخاطب نداشته باشد هیچ کد بی‌اطلاع کاربر از راه دیگری نمی‌رود.
 
+## ۵٫۶ آنالیتیکس (GA4 — گام ۱۵)
+
+سازوکار: اسکریپت GA4 در فروشگاه **فقط پس از رضایت کاربر** از بنر لود می‌شود (رضایت در جدول `ConsentRecord` با هویت نشست ناشناس ثبت می‌شود). شمارش بازدید first-party خودمان (جدول روزانهٔ تب «بازدید فروشگاه») اما **همیشه فعال است و به رضایت وصل نیست** (تصمیم D-5: دادهٔ تجمیعیِ بدون PII؛ رضایت فقط دروازهٔ گوگل است). رویداد `purchase` از **سمت سرور** می‌رود (Measurement Protocol) — مستقل از رضایت و adblock، دقیقاً یک‌بار با تایید پرداخت.
+
+1. در پنل GA4 یک جریان Web بسازید و `Measurement ID` (قالب `G-…`) را در `NEXT_PUBLIC_GA4_MEASUREMENT_ID` بگذارید — این مقدار عمومی است و در HTML دیده می‌شود.
+2. در همان صفحهٔ جریان، بخش «Measurement Protocol API secrets» → یک secret بسازید و در `GA4_API_SECRET` بگذارید — فقط سمت سرور است؛ هرگز در storefront build نشود.
+3. API همان `NEXT_PUBLIC_GA4_MEASUREMENT_ID` را می‌خواند؛ اگر فایل‌های env جدا دارید، می‌توانید به‌جایش `GA4_MEASUREMENT_ID` را فقط در env سرویس API بگذارید.
+4. خاموش صادقانه: اگر هر دو مقدار ست نباشند، هیچ درخواستی به GA4 نمی‌رود و در بوت API هشدار `NOT CONFIGURED` لاگ می‌شود — هیچ «ارسال شد» جعلی ثبت نمی‌شود (بند ۱۱۱).
+5. تست واقعی: یک سفارش سندباکسی کامل کنید؛ در DebugView پنل GA4 باید رویداد `purchase` با `transaction_id` = کد سفارش ببینید. UTM ورودی (اولین بازدید) روی خود سفارش هم ذخیره می‌شود (`utm_source/utm_medium/utm_campaign`).
+
 ## ۶. بکاپ و بازیابی
 
 - اسکریپت: `node infrastructure/backup/ghasedak-backup.mjs --url "<DATABASE_URL>" --out C:/ghasedak-backups`
@@ -114,6 +124,7 @@ Start-Process -WindowStyle Hidden -FilePath cmd -ArgumentList '/c','npx next sta
 - [ ] تست کلید پیامک با شمارهٔ خودتان
 - [ ] تست ایمیل تراکنشی: بازیابی رمز با کانال ایمیل → ردیف «ارسال‌شده» در صف اعلان‌ها
 - [ ] بکاپ دستی اول + بررسی `manifest.json`
+- [ ] آنالیتیکس: سفارش سندباکسی → رویداد `purchase` در GA4 DebugView با کد سفارش درست
 - [ ] `NODE_ENV=production` و `ZARINPAL_SANDBOX=false` فقط بعد از اطمینان
 
 ## ۸. عیب‌یابی سریع
@@ -125,4 +136,6 @@ Start-Process -WindowStyle Hidden -FilePath cmd -ArgumentList '/c','npx next sta
 | SMS تست «تنظیم نشده» | کلید اپراتور فعال ذخیره نشده | کارت پیامک → کلید → ذخیره |
 | ایمیل بازیابی رمز در صف می‌ماند | `SMTP_*` ذخیره نشده یا API بعد از ذخیره ری‌استارت نشده | کارت «کلیدهای API» → مقادیر → ری‌استارت API؛ سپس dispatch فوری |
 | storefront محصولات را نمی‌بینید | `API_ORIGIN` اشتباه یا API پایین | `curl 127.0.0.1:4000/api/v1/catalog/products` |
+| purchase در GA4 ثبت نمی‌شود | `GA4_API_SECRET`/Measurement ID ست نشده (هشدار بوت API) یا سرور به `google-analytics.com` نمی‌رسد | env سرویس API را چک کنید؛ در ایران خروجی GA4 ممکن است نیاز به پروکسی خروجی داشته باشد |
+| بنر رضایت نمی‌آید | `NEXT_PUBLIC_GA4_MEASUREMENT_ID` خالی است (بدون آن، آنالیتیکس کاملاً خاموش است) | مقدار `G-…` را در env فروشگاه بگذارید و rebuild کنید |
 | بکاپ lastResult=1 | DB در دسترس نیست یا کرئنشیال غلط | لاگ `backup.log` آخرین اجرا |
