@@ -114,8 +114,15 @@ describe("Phase 14 item 1 — financial documents", () => {
 
   it("فروش POS وقتی بهای دارد: سند شامل Dr 5000 / Cr 1200 است و تراز است", async () => {
     // شیفت باز + واریانت با بهای مشخص
-    const warehouse = await prisma.warehouse.findFirst({ where: { active: true } });
-    const channel = await prisma.salesChannel.findFirst({ where: { defaultWarehouseId: warehouse!.id } });
+    //
+    // انبار از روی کانالِ POS خوانده می‌شود، نه «اولین انبارِ فعال».
+    // چرا؟ فروشِ POS موجودی را از `channel.defaultWarehouseId` کم می‌کند؛
+    // اگر تست انبارِ دیگری را انتخاب کند، موجودی جایی شارژ می‌شود که فروش
+    // از آن کم نمی‌شود ⇒ «موجودی کافی نیست». با انبارِ خودِ کانال، تست
+    // مستقل از داده‌های باقی‌ماندهٔ انبارهای آزمایشیِ قبلی می‌ماند.
+    const channel = await prisma.salesChannel.findFirst({ where: { slug: "pos" } });
+    expect(channel).toBeTruthy();
+    const warehouseId = channel!.defaultWarehouseId!;
     const admin = await prisma.user.findFirst({ where: { email: "admin@ghasedak.demo" } });
     const sku = `TESTSKU-POS-${Date.now()}`;
     const unitCost = 50000n;
@@ -126,7 +133,7 @@ describe("Phase 14 item 1 — financial documents", () => {
     // ورود بهایی (OPENING)
     await prisma.$transaction(async (tx) => {
       await inv.moveInTx(tx, {
-        warehouseId: warehouse!.id, variantSku: sku, type: "OPENING", qty: 10, unitCost,
+        warehouseId, variantSku: sku, type: "OPENING", qty: 10, unitCost,
         refType: "opening", refId: "spec-open", idempotencyKey: `spec-open:${sku}`, actorId,
       });
     });
@@ -159,7 +166,10 @@ describe("Phase 14 item 1 — financial documents", () => {
   });
 
   it("فروش POS بدون بهای ثبت‌شده: سند COGS ندارد ولی تراز می‌ماند (صادقانه)", async () => {
-    const warehouse = await prisma.warehouse.findFirst({ where: { active: true } });
+    // همان قاعدهٔ تستِ بالا: انبارِ فروش، انبارِ کانالِ POS است
+    const channel = await prisma.salesChannel.findFirst({ where: { slug: "pos" } });
+    expect(channel).toBeTruthy();
+    const warehouseId = channel!.defaultWarehouseId!;
     const admin = await prisma.user.findFirst({ where: { email: "admin@ghasedak.demo" } });
     const sku = `TESTSKU-NOCOST-${Date.now()}`;
     // واریانت اول — FK
@@ -169,7 +179,7 @@ describe("Phase 14 item 1 — financial documents", () => {
     // OPENING بدون بها (unitCost: null) — سند COGS زده نمی‌شود (صادقانه)
     await prisma.$transaction(async (tx) => {
       await inv.moveInTx(tx, {
-        warehouseId: warehouse!.id, variantSku: sku, type: "OPENING", qty: 3,
+        warehouseId, variantSku: sku, type: "OPENING", qty: 3,
         refType: "opening", refId: "spec-open-nocost", idempotencyKey: `spec-open-nocost:${sku}`, actorId,
       } as never);
     });

@@ -306,7 +306,7 @@ export default function PosClient() {
     const lines = Object.entries(refundQty)
       .filter(([, q]) => q > 0)
       .map(([sku, q]) => ({ variantSku: sku, qty: q }));
-    if (lines.length === 0) { setError("حداقل یک قلم انتخاب کنید."); return; }
+    if (lines.length === 0) { setError("حداقل یک قلم انتخاب کن."); return; }
     setRefundBusy(true); setError(null);
     try {
       // گام ۱: بازکردن مرجوعی (انبار همان‌جا برمی‌گردد)
@@ -320,7 +320,7 @@ export default function PosClient() {
         method: "POST",
         body: JSON.stringify({ reason: "مرجوعی حضوری صندوق" }),
       });
-      if (!f.ok || !f.data) { setError(f.error?.message ?? "مرجوعی باز شد اما نهایی نشد — از لیست مرجوعی‌ها نهایی کنید."); return; }
+      if (!f.ok || !f.data) { setError(f.error?.message ?? "مرجوعی باز شد اما نهایی نشد — از لیست مرجوعی‌ها نهایی کن."); return; }
       setMsg(`مرجوعی ${f.data.number} ثبت شد — ${fa(f.data.amount)} تومان بازگشت داده شد.`);
       setRefundOpen(false); setRefundInvoice(null); setRefundQty({}); setRefundQuery(""); setRefundHits([]);
     } finally {
@@ -330,7 +330,7 @@ export default function PosClient() {
 
   /** finalize با پرداخت‌ها (بخش ۲/۳) — همان POST /pos/sale موجود */
   const finalize = async (pays: PayLine[]) => {
-    if (!shift) { setError("اول شیفت را باز کنید."); return; }
+    if (!shift) { setError("اول شیفت را باز کن."); return; }
     if (!active || active.lines.length === 0) { setError("Ticket خالی است."); return; }
     setBusy(true); setError(null);
     try {

@@ -199,7 +199,7 @@ export default function InvoicePrintClient({ code }: { code: string }) {
 
         <p className="mt-6 text-[10px] leading-5 text-muted">
           بازگشت کالا طبق شرایط فروشگاه و در مهلت مقرر پذیرفته می‌شود. این فاکتور را برای
-          پیگیری سفارش نزد خود نگه دارید.
+          پیگیری سفارش نزد خود نگه دار.
         </p>
 
         <footer className="mt-8 flex justify-between gap-8 text-[10px] text-muted">

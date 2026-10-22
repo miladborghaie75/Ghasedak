@@ -2,6 +2,9 @@
  * Proxy بدون دستکاری قیمت — کلاینت فقط sku/qty/آدرس می‌فرستد؛
  * اعتبارسنجی و محاسبه کامل در NestJS API (بند ۵۱/۵۹).
  */
+import { COPY } from "@/lib/copy";
+import { getMaintenance } from "@/lib/maintenance";
+
 export const dynamic = "force-dynamic";
 
 /** بررسی double-submit CSRF: هدر `x-csrf-token` باید با کوکی `csrf_token` یکی باشد */
@@ -14,9 +17,28 @@ function csrfOk(req: Request): boolean {
 }
 
 export async function POST(req: Request) {
+  // حالت تعمیر (گام ۱۰): حتی اگر رابط بسته نشده باشد، ثبت سفارش در تعمیر ممنوع است
+  if ((await getMaintenance()).enabled) {
+    return Response.json(
+      {
+        ok: false,
+        error: {
+          code: "MAINTENANCE",
+          message: "فروشگاه دموتازه است و سفارش‌گیری موقتاً بسته است؛ کمی بعد دوباره تلاش کن.",
+        },
+      },
+      { status: 503 },
+    );
+  }
   if (!csrfOk(req)) {
     return Response.json(
-      { ok: false, error: { code: "CSRF_INVALID", message: "توکن امنیتی نامعتبر است؛ صفحه را دوباره باز کنید." } },
+      {
+        ok: false,
+        error: {
+          code: "CSRF_INVALID",
+          message: "نشست این صفحه منقضی شده؛ صفحه را دوباره باز کن و سفارش را ثبت کن.",
+        },
+      },
       { status: 403 },
     );
   }
@@ -25,7 +47,7 @@ export async function POST(req: Request) {
     payload = await req.json();
   } catch {
     return Response.json(
-      { ok: false, error: { code: "VALIDATION_ERROR", message: "درخواست نامعتبر است." } },
+      { ok: false, error: { code: "VALIDATION_ERROR", message: COPY.incompleteRequest } },
       { status: 400 },
     );
   }
@@ -51,7 +73,7 @@ export async function POST(req: Request) {
 
   if (!upstream) {
     return Response.json(
-      { ok: false, error: { code: "API_UNAVAILABLE", message: "سرویس فروش در دسترس نیست؛ بعداً تلاش کنید." } },
+      { ok: false, error: { code: "API_UNAVAILABLE", message: "سرویس فروش در دسترس نیست؛ چند دقیقه بعد دوباره تلاش کن." } },
       { status: 502 },
     );
   }
@@ -64,7 +86,7 @@ export async function POST(req: Request) {
     const msg =
       (body as unknown as { message?: string; error?: { message?: string } } | null)?.error?.message ??
       (body as unknown as { message?: string } | null)?.message ??
-      "ثبت سفارش ناموفق بود.";
+      "ثبت سفارش ناموفق بود؛ دوباره تلاش کن.";
     return Response.json({ ok: false, error: { code: "CHECKOUT_FAILED", message: msg } }, { status: upstream.status });
   }
 

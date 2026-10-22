@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
+import { COPY } from "@/lib/copy";
 
 /** جستجوی واضح: اینپوت همیشه لیبل sr-only + دکمه مشخص دارد */
 export function SearchBox({
@@ -45,7 +46,7 @@ export function SearchBox({
       />
       <button
         type="submit"
-        aria-label="جستجو"
+        aria-label={COPY.search}
         className="absolute inset-y-0 start-0 flex w-11 items-center justify-center text-muted hover:text-primary-strong"
       >
         <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>

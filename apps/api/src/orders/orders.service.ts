@@ -30,6 +30,11 @@ export interface CheckoutInput {
   couponCode?: string | null;
   lines: CheckoutLineInput[];
   idempotencyKey?: string;
+  /**
+   * گام ۱۵ (D-4) — UTM first-touch از کلاینت؛ فقط پنج کلید استاندارد پذیرفته
+   * می‌شود و هر مقدار کوتاه‌سازی/پاک‌سازی می‌گردد تا Json تزریقی وارد نشود.
+   */
+  utm?: Record<string, string> | null;
 }
 
 export interface ChannelPricing {
@@ -38,6 +43,22 @@ export interface ChannelPricing {
 }
 
 export const RESERVATION_TTL_MINUTES = 120;
+
+/** کلیدهای مجاز UTM — گام ۱۵ (D-4)؛ فقط این پنج مورد ذخیره می‌شود */
+const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"] as const;
+
+/** پاک‌سازی UTM — کلید ناشناس حذف؛ مقدار trim + سقف ۲۰۰ نویسه */
+function sanitizeUtm(utm: unknown): Record<string, string> | null {
+  if (!utm || typeof utm !== "object") return null;
+  const out: Record<string, string> = {};
+  for (const k of UTM_KEYS) {
+    const v = (utm as Record<string, unknown>)[k];
+    if (typeof v === "string" && v.trim()) {
+      out[k] = v.trim().slice(0, 200);
+    }
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
 
 @Injectable()
 export class OrdersService {
@@ -183,6 +204,8 @@ export class OrdersService {
       fullName: input.guestName,
       mobile: input.guestMobile,
     };
+    // گام ۱۵ (D-4) — UTM first-touch پاک‌سازی‌شده
+    const utmSnapshot = sanitizeUtm(input.utm);
 
     // اعتبارسنجی آدرس (فاز ۲ — B3): فرمت همیشه؛ وجود استان/شهر فقط وقتی
     // دادهٔ جغرافیایی seed شده باشد — وگرنه جدولهای خالی همهٔ خریدها را میشکستند.
@@ -234,6 +257,7 @@ export class OrdersService {
           guestName: input.guestName,
           guestMobile: input.guestMobile,
           addressSnapshot: addressSnapshot as object,
+          ...(utmSnapshot ? { utmSnapshot: utmSnapshot as object } : {}),
           status: "PENDING",
           paymentStatus: "PENDING",
           subtotal,

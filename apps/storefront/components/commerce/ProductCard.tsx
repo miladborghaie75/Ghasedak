@@ -11,8 +11,9 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useCart } from "@/components/providers/CartProvider";
-import { ProductArt, type ArtKind } from "./ProductArt";
+import { ArtFrame, type ArtKind } from "./ProductArt";
 import { cn } from "@/lib/cn";
+import { COPY } from "@/lib/copy";
 import { faNum } from "@/lib/format";
 import { getTerm } from "@/lib/attributes";
 import {
@@ -94,12 +95,12 @@ export function ProductCard({ product }: CardProps) {
               className="object-cover"
             />
           ) : (
-            <span className="flex h-full w-full items-center justify-center p-3">
-              <ProductArt
-                kind={product.category as ArtKind}
-                colorId={activeColor ?? product.variants[0].colorId}
-              />
-            </span>
+            /* بدون عکس: پاسپارتو + نشان برند — همان زبان قاب هیرو (تنها آرت تزئینی دسته) */
+            <ArtFrame
+              kind={product.category as ArtKind}
+              colorId={activeColor ?? product.variants[0].colorId}
+              className="h-full w-full"
+            />
           )}
         </Link>
 
@@ -133,7 +134,7 @@ export function ProductCard({ product }: CardProps) {
           )}
           {!inStock ? (
             <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] font-semibold text-muted">
-              ناموجود
+              {COPY.outOfStock}
             </span>
           ) : (
             isNew && (
@@ -153,81 +154,124 @@ export function ProductCard({ product }: CardProps) {
           </Link>
         </h3>
 
-        {/* سواچ رنگ — وابسته (بند ۱۲) */}
-        {colors.length > 1 && (
-          <div className="mt-1.5 flex items-center justify-center gap-1.5" role="group" aria-label="رنگ‌های موجود">
-            {colors.slice(0, 4).map((cid) => {
-              const t = getTerm(cid);
-              const isActive = activeColor === cid;
-              return (
-                <button
-                  key={cid}
-                  type="button"
-                  aria-label={`رنگ ${t.label}`}
-                  aria-pressed={isActive}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setColorId(isActive ? null : cid);
-                  }}
-                  className={cn(
-                    "size-4 rounded-full border transition-transform",
-                    isActive ? "border-ink scale-110" : "border-line hover:scale-105",
-                  )}
-                  style={{ backgroundColor: t.hex }}
-                />
-              );
-            })}
-            {colors.length > 4 && (
-              <span className="text-[10px] text-muted tnum">+{faNum(colors.length - 4)}</span>
-            )}
-          </div>
-        )}
+        {/*
+         * امتیاز نظرات تأییدشده (بند ۴۱/۸۸) — «هر ردیف بدنهٔ کارت ارتفاع ثابت دارد»
+         * تا کارت‌های گرید — با/بدون امتیاز، تکرنگ/چندرنگ، با/بدون تخفیف —
+         * هم‌قد و هم‌ساخت بمانند (بند ۱۱). برای کارت بی‌امتیاز پنج ستارهٔ خاموش
+         * (هم‌رنگ ستاره‌های خالی امتیازدار) رندر می‌شود تا کارت با امتیاز و بدون
+         * امتیاز از نظر ساختار و اندازه یکسان دیده شوند — نه جای خالی، نه متن ساختگی.
+         */}
+        <div className="mt-1 flex h-[18px] items-center justify-center gap-1">
+          {product.rating && product.rating.count > 0 ? (
+            <span
+              className="flex items-center justify-center gap-1"
+              aria-label={`میانگین امتیاز ${faNum(product.rating.avg ?? 0)} از ۵ بر اساس ${faNum(product.rating.count)} نظر`}
+            >
+              <span className="text-[13px] leading-none text-amber-500" aria-hidden>
+                {"★".repeat(Math.round(product.rating.avg ?? 0))}
+                <span className="text-line">{"★".repeat(5 - Math.round(product.rating.avg ?? 0))}</span>
+              </span>
+              <span className="text-[10px] leading-none text-muted tnum">({faNum(product.rating.count)})</span>
+            </span>
+          ) : (
+            <span className="text-[13px] leading-none text-line" aria-label="هنوز نظری برای این محصول ثبت نشده است">
+              {"★★★★★"}
+            </span>
+          )}
+        </div>
 
-        {/* سایز — فشرده و وابسته (بند ۱۲) */}
-        <p className="mt-1 truncate text-[11px] text-muted">
+        {/*
+         * سواچ رنگ — وابسته (بند ۱۲). ردیف همیشه رندر می‌شود و h-4 ثابت دارد
+         * تا کارت تکرنگ با کارت چندرنگ هم‌قد بماند؛ محتوا فقط وقتی هست که
+         * واقعاً بیش از یک رنگ وجود دارد (بدون سواچ ساختگی).
+         */}
+        <div
+          className="mt-1.5 flex h-4 items-center justify-center gap-1.5"
+          role={colors.length > 1 ? "group" : undefined}
+          aria-label={colors.length > 1 ? "رنگ‌های موجود" : undefined}
+        >
+          {colors.length > 1 ? (
+            <>
+              {colors.slice(0, 4).map((cid) => {
+                const t = getTerm(cid);
+                const isActive = activeColor === cid;
+                return (
+                  <button
+                    key={cid}
+                    type="button"
+                    aria-label={`رنگ ${t.label}`}
+                    aria-pressed={isActive}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setColorId(isActive ? null : cid);
+                    }}
+                    className={cn(
+                      "size-4 rounded-full border transition-transform",
+                      isActive ? "border-ink scale-110" : "border-line hover:scale-105",
+                    )}
+                    data-swatch
+                    /* رنگ از متغیر می‌آید تا در چاپ حفظ شود (به‌جای backgroundColor مستقیم) */
+                    style={{ "--swatch": t.hex } as React.CSSProperties}
+                  />
+                );
+              })}
+              {colors.length > 4 && (
+                <span className="text-[10px] leading-none text-muted tnum">+{faNum(colors.length - 4)}</span>
+              )}
+            </>
+          ) : null}
+        </div>
+
+        {/* سایز — فشرده و وابسته (بند ۱۲) — ارتفاع ثابت h-4 */}
+        <p className="mt-1 h-4 truncate text-[11px] leading-4 text-muted">
           {sizeTerms.length
             ? sizeTerms.map((t) => t.label).join(" · ")
             : "بدون موجودی"}
         </p>
 
-        {/* قیمت میانه — تخفیف با خط‌خوردگی در همین کارت (بند ۱۱) */}
-        <div className="mt-2 flex items-center justify-center gap-1.5" aria-label={`از ${faNum(sale ?? price)} تومان`}>
-          {sale != null && (
-            <del className="text-[11px] text-muted tnum">{faNum(price)}</del>
-          )}
-          <strong className="text-[15px] font-extrabold text-plum tnum">
-            {faNum(sale ?? price)}
-          </strong>
-          <span className="text-[10px] font-medium text-muted">تومان</span>
-        </div>
+        {/*
+         * قیمت و Quick Add در یک بلوک پایانی mt-auto — هر فضای اضافی بین
+         * سایز و قیمت می‌افتد، نه زیر دکمه؛ دکمه همیشه چسبیده به پایین و
+         * با فاصلهٔ حداقلی pt-2 از قیمت (بند ۱۳).
+         */}
+        <div className="mt-auto w-full pt-2">
+          <div className="flex items-center justify-center gap-1.5" aria-label={`از ${faNum(sale ?? price)} تومان`}>
+            {sale != null && (
+              <del className="text-[11px] text-muted tnum">{faNum(price)}</del>
+            )}
+            <strong className="text-[15px] font-extrabold text-plum tnum">
+              {faNum(sale ?? price)}
+            </strong>
+            <span className="text-[10px] font-medium text-muted">تومان</span>
+          </div>
 
-        {/* Quick Add (بند ۱۳) */}
-        <button
-          type="button"
-          onClick={handleQuickAdd}
-          disabled={!inStock}
-          className={cn(
-            "relative z-10 mt-2 inline-flex h-10 w-full items-center justify-center gap-1 rounded-xl text-[12px] font-semibold transition-colors",
-            !inStock
-              ? "cursor-not-allowed bg-primary-light/50 text-muted"
-              : added
-                ? "bg-success text-on-accent"
-                : "bg-primary text-on-accent hover:bg-primary-hover",
-          )}
-          aria-live="polite"
-        >
-          {added ? (
-            "به سبدت اضافه شد 💜"
-          ) : inStock ? (
-            canDirectAdd ? (
-              "افزودن به سبد"
+          <button
+            type="button"
+            onClick={handleQuickAdd}
+            disabled={!inStock}
+            className={cn(
+              "relative z-10 mt-2 inline-flex h-10 w-full items-center justify-center gap-1 rounded-xl text-[12px] font-semibold transition-colors",
+              !inStock
+                ? "cursor-not-allowed bg-primary-light/50 text-muted"
+                : added
+                  ? "bg-success text-on-accent"
+                  : "bg-primary text-on-accent hover:bg-primary-hover",
+            )}
+            aria-live="polite"
+          >
+            {added ? (
+              COPY.addedToCart
+            ) : inStock ? (
+              canDirectAdd ? (
+                COPY.addToCart
+              ) : (
+                COPY.chooseVariantFirst
+              )
             ) : (
-              "انتخاب سایز و رنگ"
-            )
-          ) : (
-            "ناموجود"
-          )}
-        </button>
+              COPY.outOfStock
+            )}
+          </button>
+        </div>
       </div>
     </article>
   );

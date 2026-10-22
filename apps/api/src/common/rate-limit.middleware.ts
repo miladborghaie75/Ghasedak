@@ -26,6 +26,18 @@ const RULES: Array<{ match: RegExp; max: number; windowMs: number }> = [
   { match: /\/payments\/admin\/list$/, max: 20, windowMs: 60_000 }, // 20/min per IP (admin list)
   { match: /\/payments\/callback\/.+$/, max: 30, windowMs: 60_000 }, // 30/min per IP (callback from providers)
   { match: /\/payments\/.+$/, max: 20, windowMs: 60_000 }, // 20/min per IP for other payment routes
+  
+  // Review routes (گام ۱۱ — بند ۴۱) — OTP/submit حساس به اسپم است
+  { match: /\/reviews\/otp\/request$/, max: 3, windowMs: 60_000 }, // 3/min per IP (پیامک واقعی — گران)
+  { match: /\/reviews\/otp\/verify$/, max: 10, windowMs: 60_000 }, // 10/min per IP
+  { match: /\/reviews\/submit$/, max: 5, windowMs: 300_000 }, // 5/5min per IP
+  { match: /\/reviews\/product\/.+$/, max: 60, windowMs: 60_000 }, // 60/min per IP (نمایش عمومی)
+
+  // Wishlist routes (گام ۱۱ — بند ۴۲) — تغییر علاقه‌مندی مهمان
+  { match: /\/wishlist\/items(\/.+)?$/, max: 60, windowMs: 60_000 }, // 60/min per IP (toggle سبک)
+
+  // Analytics public (گام ۱۵-۶) — ping بازدید؛ سقف شل تا ناوبری طبیعی سالم بماند
+  { match: /\/analytics\/public\/visit$/, max: 120, windowMs: 60_000 }, // 120/min per IP
 ];
 
 @Injectable()

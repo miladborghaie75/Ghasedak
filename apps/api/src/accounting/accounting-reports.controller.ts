@@ -1,8 +1,12 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, Res } from "@nestjs/common";
+import type { Response } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { JournalService } from "./journal.service";
+import { CashFlowService } from "./cash-flow.service";
+import { CSV_BOM, csvFilename, toCsv } from "./csv";
 import { RequirePermission } from "../auth/permissions.guard";
 import { Identity } from "../auth/identity.decorator";
+import { optionalDate } from "../common/query-date";
 import { GL, GL_EXPENSE, GL_LIABILITIES } from "@ghasedak/contracts";
 
 /**
@@ -15,6 +19,7 @@ export class AccountingReportsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly journal: JournalService,
+    private readonly cashFlowService: CashFlowService,
   ) {}
 
   /** سود و زیان — ناخالص (فروش − COGS) و خالص (− هزینه‌ها) از اسناد واقعی */
@@ -146,41 +151,91 @@ export class AccountingReportsController {
   }
 
   /**
-   * فاز ۱۲ (گام ۳): جریان نقدینگی (Cash-flow) — مستقیم و ماهانه از JournalLine.
-   * ورودی/خروجی = تغییر مانده حساب‌های نقد (1000) و بانک (1100)؛ بدون محاسبه موازی.
+   * صورت جریان نقدی — روش مستقیم با طبقه‌بندی عملیاتی/سرمایه‌ای/تأمین مالی.
+   *
+   * منطق در `CashFlowService` است (تست‌پذیر بدون HTTP)؛ اینجا فقط ورودی/خروجی.
+   * گام ۱۲ (`[F1-2]`) سه نقص واقعی همین مسیر را رفع کرد: زیرحساب‌های بانک دیده
+   * نمی‌شدند، سند `DRAFT` شمرده می‌شد، و طبقه‌بندی وجود نداشت.
    */
   @Get("cash-flow")
   @RequirePermission("accounting.reports")
-  async cashFlow(@Query() q: { from?: string; to?: string }) {
-    const yearStart = new Date(new Date().getFullYear(), 0, 1);
-    const from = q.from ? new Date(q.from) : yearStart;
-    const to = q.to ? new Date(q.to) : new Date();
-    const cashAccounts = await this.prisma.account.findMany({
-      where: { code: { in: ['1000', '1100'] } },
-    });
-    const cashIds = new Set(cashAccounts.map((a) => a.id));
-    const lines = await this.prisma.journalLine.findMany({
-      where: { entry: { date: { gte: from, lte: to } } },
-      select: { accountId: true, debit: true, credit: true, entry: { select: { date: true } } },
-    });
-    const months: Array<{ month: number; inflow: bigint; outflow: bigint }> = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, inflow: 0n, outflow: 0n }));
-    let inflow = 0n;
-    let outflow = 0n;
-    for (const l of lines) {
-      if (!cashIds.has(l.accountId)) continue;
-      const delta = (l.debit ?? 0n) - (l.credit ?? 0n);
-      const m = l.entry.date.getMonth();
-      if (delta > 0n) { months[m].inflow += delta; inflow += delta; }
-      else { months[m].outflow += -delta; outflow += -delta; }
+  cashFlow(@Query() q: { from?: string; to?: string }) {
+    return this.cashFlowService.statement(q.from, q.to);
+  }
+
+  /**
+   * خروجی CSV گزارش‌های مالی (گام ۱۲ · `[F1-2]`).
+   *
+   * سه گزارش با همان منبع حقیقت endpointهای JSON: جریان نقدی، تراز آزمایشی،
+   * سود و زیان. فایل با BOM و پایان‌خط ویندوزی صادر می‌شود تا Excel فارسی
+   * درست باز کند؛ سلول‌های فرمول‌نما خنثی می‌شوند (`csv.ts`).
+   */
+  @Get("export/:report")
+  @RequirePermission("accounting.reports")
+  async exportReport(
+    @Param("report") report: string,
+    @Query() q: { from?: string; to?: string },
+    @Res() res: Response,
+  ): Promise<void> {
+    // بازه از خودِ گزارش خوانده می‌شود (نه از query خام): وقتی کاربر بازه
+    // نداده، گزارش بازهٔ واقعی خودش را می‌داند و نام فایل همان را نشان می‌دهد.
+    const { rows, from, to } = await this.buildExport(report, q);
+    res.setHeader("content-type", "text/csv; charset=utf-8");
+    res.setHeader("content-disposition", `attachment; filename="${csvFilename(report, from, to)}"`);
+    res.send(CSV_BOM + toCsv(rows));
+  }
+
+  private async buildExport(
+    report: string,
+    q: { from?: string; to?: string },
+  ): Promise<{ rows: Array<Array<string | number | null>>; from: Date | null; to: Date | null }> {
+    if (report === "cash-flow") {
+      const cf = await this.cashFlowService.statement(q.from, q.to);
+      const rows: Array<Array<string | number | null>> = [
+        ["ردیف", "کد", "مبلغ"],
+        ["مانده ابتدای دوره", "OPENING", cf.opening],
+        ["جریان عملیاتی", "OPERATING", cf.classes.OPERATING.net],
+        ["جریان سرمایه‌ای", "INVESTING", cf.classes.INVESTING.net],
+        ["جریان تأمین مالی", "FINANCING", cf.classes.FINANCING.net],
+        ["طبقه‌بندی‌نشده", "UNCLASSIFIED", cf.classes.UNCLASSIFIED.net],
+        ["خالص تغییر نقدی", "NET", cf.net],
+        ["مانده پایان دوره", "CLOSING", cf.closing],
+        ["انتقال داخلی — تعداد", "INTERNAL_COUNT", cf.internalTransfers.count],
+        ["انتقال داخلی — مبلغ ناخالص (در جمع نیامده)", "INTERNAL_GROSS", cf.internalTransfers.gross],
+      ];
+      return { rows, from: new Date(cf.from), to: new Date(cf.to) };
     }
-    return {
-      from: from.toISOString(),
-      to: to.toISOString(),
-      inflow: inflow.toString(),
-      outflow: outflow.toString(),
-      net: (inflow - outflow).toString(),
-      monthly: months.map((m) => ({ month: m.month, inflow: m.inflow.toString(), outflow: m.outflow.toString() })),
-    };
+
+    if (report === "trial-balance") {
+      const tb = await this.journal.trialBalance(optionalDate(q.from, "from"), optionalDate(q.to, "to"));
+      const rows: Array<Array<string | number | null>> = [
+        ["کد حساب", "نام حساب", "نوع", "بدهکار", "بستانکار"],
+        ...tb.items.map((r) => [r.code, r.name, r.type, r.debit, r.credit]),
+        ["جمع", "", "", tb.totals.debit, tb.totals.credit],
+      ];
+      return { rows, from: tb.from ? new Date(tb.from) : null, to: tb.to ? new Date(tb.to) : null };
+    }
+
+    if (report === "pnl") {
+      const p = await this.pnl(q);
+      const rows: Array<Array<string | number | null>> = [
+        ["شرح", "مبلغ"],
+        ["درآمد", p.revenue],
+        ["بهای تمام‌شده", p.cogs],
+        ["سود ناخالص", p.grossProfit],
+        ["هزینه‌ها", p.expenses],
+        ["سود خالص", p.netProfit],
+        ["حاشیهٔ ناخالص (٪)", p.grossMargin ?? ""],
+        ["حاشیهٔ خالص (٪)", p.netMargin ?? ""],
+      ];
+      // سود و زیان همیشه یک بازه دارد (پیش‌فرض از ابتدای سال)
+      return { rows, from: new Date(p.from), to: new Date(p.to) };
+    }
+
+    throw new BadRequestException({
+      code: "VALIDATION_ERROR",
+      message: "گزارش ناشناخته برای خروجی (cash-flow | trial-balance | pnl)",
+    });
   }
 
   /** روند ماهانه درآمد/هزینه — برای نمودار داشبورد */

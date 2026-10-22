@@ -38,6 +38,14 @@ jobs:
         run: pnpm db:generate
       - name: typecheck همهٔ پکیج‌ها
         run: pnpm typecheck
+      - name: تست فروشگاه (لحن کپی و سیستم سایز)
+        run: pnpm --filter @ghasedak/storefront test
+      - name: تست لحن کپی پنل ادمین
+        run: pnpm --filter @ghasedak/admin test
+      - name: ممیزی لحن کپی فارسی (copy:audit)
+        run: pnpm --filter @ghasedak/storefront copy:audit
+      - name: ممیزی لحن کپی پنل ادمین (copy:audit)
+        run: pnpm --filter @ghasedak/admin copy:audit
       - name: build (API + فروشگاه + پنل)
         run: pnpm build
 
@@ -99,3 +107,120 @@ jobs:
           grep -E "^  ● " /tmp/jest.log | sort -u | head -15 | while IFS= read -r line; do
             echo "::error::$line"
           done
+
+  # کار ۳: تست بصری هندسهٔ کارت گرید (بند ۱۱/۴۱/۸۸).
+  # چرا اینجا و نه در کار quality: این تست به سرور زنده + دادهٔ واقعی نیاز دارد
+  # (کارت امتیازدار در کنار کارت بی‌امتیاز). طبق ریشهٔ گام F2-1، DB هر اجرا تازه است:
+  # migration از خود ریپو، seed دمو، و فیکسچرِ صریحاً-تستی (db:visual-fixture) که
+  # عمداً بخشی از seed دمو نیست — seed دمو «بدون نظر جعلی» است (بند ۹۶).
+  # اجزا: API (:4000) + فروشگاه (:3111) بالا می‌آیند، سپس اسکریپت بدون‌وابستگی
+  # apps/storefront/scripts/visual-card-parity.mjs هندسه را در ۳ عرض × ۲ تم می‌سنجد؛
+  # کد خروج غیرصفر یعنی ناهم‌ترازی کارت‌ها. اسکرین‌شات‌ها آرتیفکت همین کار است.
+  visual-parity:
+    name: تست بصری هندسهٔ کارت گرید
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ghasedak
+          POSTGRES_PASSWORD: ghasedak-ci
+          POSTGRES_DB: ghasedak_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ghasedak -d ghasedak_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://ghasedak:ghasedak-ci@127.0.0.1:5432/ghasedak_ci?schema=public
+      API_ORIGIN: http://127.0.0.1:4000
+      GHASEDAK_WORKERS: "off"
+      GHASEDAK_MOCK_GATEWAY: "on"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: نصب وابستگی‌ها
+        run: pnpm install --frozen-lockfile
+      - name: تولید Prisma Client
+        run: pnpm db:generate
+      # seed از distِ قراردادها می‌خواند (@ghasedak/contracts) — بدون این
+      # ساخت، «Cannot find module .../contracts/dist/index.js» می‌گیریم.
+      - name: build قراردادها (seed از dist می‌خواند)
+        run: pnpm --filter @ghasedak/contracts build
+      - name: اعمال migrationها روی DB تازه
+        run: pnpm --filter @ghasedak/database db:deploy
+      - name: seed دمو + فیکسچر تست بصری (کارت امتیازدار + بی‌امتیاز در یک دسته)
+        run: |
+          pnpm --filter @ghasedak/database db:seed
+          pnpm --filter @ghasedak/database db:visual-fixture
+      - name: build (API و فروشگاه با وابستگی‌های workspace)
+        run: pnpm exec turbo run build --filter=@ghasedak/api... --filter=@ghasedak/storefront...
+      - name: بالا آوردن API و فروشگاه + انتظار برای آمادگی
+        shell: bash
+        run: |
+          (cd apps/api && PORT=4000 nohup node dist/main.js > /tmp/api.log 2>&1 & echo $! > /tmp/api.pid)
+          (cd apps/storefront && nohup node node_modules/next/dist/bin/next start -p 3111 > /tmp/sf.log 2>&1 & echo $! > /tmp/sf.pid)
+
+          api_code=000
+          for i in $(seq 1 60); do
+            api_code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/api/v1/health || true)
+            [ "$api_code" = "200" ] && break
+            sleep 1
+          done
+          echo "api health: $api_code"
+          if [ "$api_code" != "200" ]; then
+            echo "::error::API بالا نیامد (health=$api_code)"
+            tail -40 /tmp/api.log || true
+            exit 1
+          fi
+
+          sf_code=000
+          for i in $(seq 1 60); do
+            sf_code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3111/c/bra" || true)
+            [ "$sf_code" = "200" ] && break
+            sleep 1
+          done
+          echo "storefront: $sf_code"
+          if [ "$sf_code" != "200" ]; then
+            echo "::error::فروشگاه بالا نیامد (code=$sf_code)"
+            tail -40 /tmp/sf.log || true
+            exit 1
+          fi
+      - name: تست هندسهٔ کارت (۳ عرض × ۲ تم)
+        working-directory: apps/storefront
+        shell: bash
+        run: |
+          # preflight: اگر سرویسی بین استپ‌ها مرده باشد، به‌جای خطای مبهم مرورگر،
+          # علت واقعی گزارش شود.
+          curl -sf -o /dev/null http://127.0.0.1:4000/api/v1/health || { echo "::error::API در دسترس نیست"; exit 1; }
+          curl -sf -o /dev/null "http://127.0.0.1:3111/c/bra" || { echo "::error::فروشگاه در دسترس نیست"; exit 1; }
+          SHOTS=1 node scripts/visual-card-parity.mjs http://127.0.0.1:3111 "/c/bra?sort=rating"
+      - name: ذخیرهٔ اسکرین‌شات‌های هر حالت (مدرک بصری)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: card-parity-shots
+          path: apps/storefront/.visual
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: گزارش لاگ سرویس‌ها هنگام شکست
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "### لاگ API"
+            echo '```'
+            tail -40 /tmp/api.log 2>/dev/null || true
+            echo '```'
+            echo "### لاگ فروشگاه"
+            echo '```'
+            tail -40 /tmp/sf.log 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -13,6 +13,8 @@ const ALLOWED_KEYS = [
   "GHASEDAKSMS_API_KEY", "MELIPAYAMAK_USERNAME", "MEDIANA_API_KEY", "IPPANEL_API_KEY", "SMSIR_API_KEY",
   "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_FROM",
   "ZARINPAL_MERCHANT_ID", "GHASEDAK_API_KEY",
+  // دستیار AI (تصمیم #۱۵) — سازگار OpenAI: base_url + api_key + model، بدون قفل ارائه‌دهنده
+  "AI_BASE_URL", "AI_API_KEY", "AI_MODEL",
 ] as const;
 type CredKey = (typeof ALLOWED_KEYS)[number];
 

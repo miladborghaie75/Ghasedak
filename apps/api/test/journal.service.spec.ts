@@ -80,9 +80,16 @@ describe("JournalService (integration با DB dev)", () => {
   });
 
   it("تراز آزمایشی از منبع حقیقت Ledger می‌آید", async () => {
+    // گام ۱۲: پاسخ گزارش از آرایه به آبجکت با بازه/جمع/فلگ توازن عوض شد؛
+    // ادعای اصلی همان است (جمع بدهکار = جمع بستانکار) و حالا جمع‌ها بخشی
+    // از خودِ گزارش‌اند، نه بازمحاسبه در مصرف‌کننده.
     const tb = await service.trialBalance();
-    const sumD = tb.reduce((acc, r) => acc + Number(r.debit), 0);
-    const sumC = tb.reduce((acc, r) => acc + Number(r.credit), 0);
+    const sumD = tb.items.reduce((acc, r) => acc + Number(r.debit), 0);
+    const sumC = tb.items.reduce((acc, r) => acc + Number(r.credit), 0);
     expect(sumD).toBe(sumC);
+    expect(tb.totals.debit).toBe(tb.totals.credit);
+    expect(tb.balanced).toBe(true);
+    expect(tb.from).toBeNull();
+    expect(tb.to).toBeNull();
   });
 });

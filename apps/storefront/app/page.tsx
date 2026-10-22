@@ -12,24 +12,37 @@ import {
 import { ProductCard } from "@/components/commerce/ProductCard";
 import { CATEGORIES } from "@/lib/categories";
 import { isNewProduct, loadCatalog } from "@/lib/catalog-repo";
-import { HOME_SLUG, buildCmsData, fetchCmsPage, loadLiveBrands, loadLiveCategories } from "@/lib/cms";
-import { CmsRenderer } from "@ghasedak/blocks";
+import type { ProductV2 } from "@/lib/catalog";
+import { HOME_SLUG, loadLiveBrands, loadLiveCategories } from "@/lib/cms";
+import CmsSlot from "@/components/cms/CmsSlot";
+import { ArtShowcaseBlock, EMPTY_CMS_DATA, makeBlock } from "@ghasedak/blocks";
 
 /** داده از API واقعی — رندر داینامیک (build به بالا بودن API وابسته نیست) */
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const all = await loadCatalog();
   // آیکون دسته‌ها و برندها زنده است — پیش از ساخت دادهٔ بلوک‌ها باید خوانده شود
   await Promise.all([loadLiveCategories(), loadLiveBrands()]);
 
-  // ── صفحه‌ساز: اگر برای صفحهٔ اصلی صفحه‌ای منتشر شده باشد، همان رندر می‌شود.
-  //    تا وقتی مدیر چیزی منتشر نکرده، چیدمان پیش‌فرض زیر اجرا می‌شود.
-  const cms = await fetchCmsPage(HOME_SLUG);
-  if (cms) {
-    return <CmsRenderer page={cms.page} data={buildCmsData(all)} />;
-  }
+  // ── صفحه‌ساز: اگر برای صفحهٔ اصلی صفحه‌ای ساخته شده باشد، همان رندر می‌شود.
+  //    تا وقتی مدیر چیزی نساخته، چیدمان پیش‌فرض زیر اجرا می‌شود.
+  return (
+    <CmsSlot
+      slug={HOME_SLUG}
+      products={all}
+      searchParams={searchParams}
+      fallback={<HomeDefault all={all} />}
+    />
+  );
+}
 
+/** چیدمان پیش‌فرض خانه — تا وقتی مدیر صفحه‌ای نساخته، همین نمایش داده می‌شود */
+function HomeDefault({ all }: { all: ProductV2[] }) {
   const newest = all.filter((p) => isNewProduct(p)).slice(0, 8);
   // دسته‌ها با شمارش واقعی محصولات (بدون دسته خالی نمایشی)
   const categories = CATEGORIES;
@@ -38,6 +51,14 @@ export default async function HomePage() {
     <>
       <HeroDrawer />
       <NeedNav />
+
+      {/*
+       * نمونه‌کار — قفسهٔ شش فرم با آرت برند. همان بلوکی است که مدیر در صفحه‌ساز
+       * می‌بیند، پس چیدمان پیش‌فرض و سایت منتشرشده یک زبان دارند.
+       */}
+      <SectionReveal>
+        <ArtShowcaseBlock block={makeBlock("ART_SHOWCASE")} data={EMPTY_CMS_DATA} />
+      </SectionReveal>
 
       {/* دسته‌ها — موشن ورود ملایم با اسکرول */}
       <SectionReveal className="mx-auto mt-12 max-w-7xl px-3 sm:px-4">
@@ -80,7 +101,7 @@ export default async function HomePage() {
               چی لازم داری؟
             </h2>
             <p className="mx-auto mt-2 max-w-md text-center text-[13px] leading-7 text-muted">
-              نمی‌دونی دقیقاً چی می‌خوای؟ سه سؤال کوتاه جوابت رو می‌دیم.
+              نمی‌دانی دقیقاً چه می‌خواهی؟ سه سؤال کوتاه، جوابت را می‌دهیم.
             </p>
             <div className="mt-5 text-center">
               <Link

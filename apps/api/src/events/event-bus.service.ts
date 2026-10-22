@@ -109,6 +109,45 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
         this.logger.log(`OrderPaid: order=${String(payload.orderId)} amount=${String(payload.amount)}`);
         return;
       }
+      case "OrderDelivered": {
+        // دعوت به ثبت نظر بعد از تحویل (فاز نظرات): ردیف SMS صف می‌شود و ارسال واقعی
+        // فقط با credential انجام می‌شود (بند ۱۱۱ — بدون credential ردیف با lastError
+        // NOT_CONFIGURED در صف می‌ماند؛ هیچ «ارسال شد» جعلی ساخته نمی‌شود و شکست auditable است).
+        const orderId = String(payload.orderId ?? "");
+        if (!orderId) return;
+        const order = await this.prisma.order.findUnique({
+          where: { id: orderId },
+          select: {
+            code: true,
+            guestMobile: true,
+            items: { take: 1, select: { variant: { select: { product: { select: { slug: true } } } } } },
+          },
+        });
+        if (!order?.guestMobile || !/^09\d{9}$/.test(order.guestMobile)) return;
+        const smsSetting = await this.prisma.setting.findUnique({ where: { key: "sms" } });
+        const cfg = (smsSetting?.value ?? {}) as { reviewInvite?: boolean };
+        if (cfg.reviewInvite === false) return;
+        // idempotent per order (بند ۱۱۶) — تحویل فقط یک دعوت می‌فرستد
+        const dup = await this.prisma.notification.findFirst({
+          where: { channel: "SMS", templateKey: `review-invite:${orderId}` },
+        });
+        if (dup) return;
+        const productSlug = order.items[0]?.variant?.product?.slug ?? null;
+        const base = process.env.STOREFRONT_URL ?? "https://lebaszirghasedak.ir";
+        await this.prisma.notification.create({
+          data: {
+            channel: "SMS",
+            templateKey: `review-invite:${orderId}`,
+            to: order.guestMobile,
+            payload: {
+              orderCode: order.code,
+              link: productSlug ? `${base}/p/${productSlug}` : base,
+            },
+          },
+        });
+        this.logger.log(`OrderDelivered: review invite queued for order=${order.code}`);
+        return;
+      }
       case "LowStockStockAlert": {
         // هشدار ادمین — فقط با تنظیم lowStockAlerts=true و حداقل هر ۶ ساعت
         const invSetting = await this.prisma.setting.findUnique({ where: { key: "inventory.lowStockAlerts" } });

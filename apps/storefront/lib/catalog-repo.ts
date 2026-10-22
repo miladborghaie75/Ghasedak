@@ -16,7 +16,7 @@ import {
 } from "./attributes";
 import type { ProductV2 as ProductV2Type, VariantV2 } from "./catalog";
 import { resetTermLabels, putTermLabel } from "./term-labels";
-import type { SortKey } from "./sort";
+import { compareRating, type SortKey } from "./sort";
 
 export type ProductV2 = ProductV2Type;
 export type { VariantV2 } from "./catalog";
@@ -53,8 +53,12 @@ function toV2(raw: Record<string, unknown>): ProductV2 {
     brandId: (raw.brandId as string) ?? null,
     short: (raw.short as string) ?? "",
     attributeIds: (raw.attributeIds as string[]) ?? [],
+    /** ترم‌های سطح محصول (جنس و …) — slug + مقدار واقعی برای ویزارد و متن دلیل */
+    attributeTerms: (raw.attributeTerms as ProductV2["attributeTerms"]) ?? [],
     createdAt: String(raw.createdAt ?? new Date().toISOString()),
     image,
+    // خلاصهٔ نظرات تأییدشده — API همیشه می‌فرستد؛ فقط وقتی نظر هست ستاره می‌خشد
+    rating: (raw.rating as ProductV2["rating"]) ?? undefined,
     variants: variants.map((v) => {
       const out: VariantV2 = {
         id: String(v.id),
@@ -73,11 +77,20 @@ function toV2(raw: Record<string, unknown>): ProductV2 {
   };
 }
 
+/**
+ * سقف ایمنی پیمایش صفحات — فقط برای جلوگیری از حلقهٔ بی‌پایان در پاسخ خراب سرور.
+ * قبلاً حلقه بی‌قید در ۱۰ صفحه (۱۰۰۰ محصول) متوقف می‌شد و بی‌صدا بقیهٔ کاتالوگ را
+ * می‌انداخت؛ نتیجه این بود که مرتب‌سازی «بیشترین امتیاز» روی کاتالوگ بزرگ‌تر از سقف
+ * بی‌آنکه کسی بفهمد نادرست می‌شد. از این پس تا تمام‌شدن hasMore می‌رویم و اگر به سقف
+ * ایمنی برسیم، صریحاً هشدار می‌دهیم (خطای دیدنی، نه برش خاموش).
+ */
+const MAX_CATALOG_PAGES = 50; // ۵۰۰۰ محصول
+
 async function fetchAllProducts(): Promise<ProductV2[]> {
   const origin = apiOrigin();
   const out: ProductV2[] = [];
   const perPage = 100;
-  for (let page = 1; page <= 10; page++) {
+  for (let page = 1; page <= MAX_CATALOG_PAGES; page++) {
     const res = await fetch(`${origin}/api/v1/catalog/products?per_page=${perPage}&page=${page}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(8_000),
@@ -85,8 +98,13 @@ async function fetchAllProducts(): Promise<ProductV2[]> {
     if (!res.ok) throw new Error(`catalog http ${res.status}`);
     const body = (await res.json()) as { items: Array<Record<string, unknown>>; hasMore: boolean };
     for (const it of body.items) out.push(toV2(it));
-    if (!body.hasMore) break;
+    if (!body.hasMore) return out; // کاتالوگ کامل خوانده شد
+    if (body.items.length === 0) break; // پاسخ ناسازگار (hasMore بدون آیتم) — حلقه نزن
   }
+  console.warn(
+    `[catalog] پیمایش در ${MAX_CATALOG_PAGES} صفحه متوقف شد و ممکن است بخشی از کاتالوگ نیامده باشد؛ ` +
+      "مرتب‌سازی/شمارش روی همین فهرست ناقص انجام می‌شود — سقف پیمایش یا per_page را بازبینی کن.",
+  );
   return out;
 }
 
@@ -121,6 +139,11 @@ export function hydrateCatalog(products: ProductV2[]): void {
       for (const [tid, label] of Object.entries(v.termLabels ?? {})) {
         putTermLabel(tid, label);
       }
+    }
+    // ترم‌های سطح محصول (جنس و …) هم برچسب واقعی دارند — وگرنه متن دلیل ویزارد
+    // شناسهٔ خام نشان می‌دهد
+    for (const t of p.attributeTerms ?? []) {
+      putTermLabel(t.id, t.value);
     }
   }
   if (!g.__ghCatalog || g.__ghCatalog.products.length === 0) {
@@ -307,6 +330,10 @@ export function sortV2(list: ProductV2[], sort: SortKey): ProductV2[] {
       return arr.sort((a, b) => minPrice(b) - minPrice(a));
     case "newest":
       return arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    case "rating":
+      // قاعدهٔ مقایسه در lib/sort.ts است (تک‌منبع، تست‌واحد دارد) —
+      // اینجا فقط اعمال می‌شود تا UI و تست از یک قاعده پیروی کنند.
+      return arr.sort(compareRating);
     default:
       return arr;
   }

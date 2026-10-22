@@ -4,7 +4,9 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { recommendBraSize, recommendLetterSize, isBraLike } from "./size-system";
+// پسوند «.ts» عمدی است: اجراکنندهٔ تست Node در حالت ESM پسوند بدون‌پسوند را
+// حل نمی‌کند و این تست پیش از این هرگز واقعاً اجرا نمی‌شد.
+import { recommendBraSize, recommendLetterSize, isBraLike } from "./size-system.ts";
 
 test("سایز پایه فنر از جدول: زیر سینه ۷۵ → فنر ۷۵", () => {
   const r = recommendBraSize({ underBust: 75, bust: 87 });

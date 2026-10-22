@@ -1,48 +1,53 @@
 import { redirect } from "next/navigation";
+import { entryNotice, postUpstream } from "@/lib/upstream";
 
 export const dynamic = "force-dynamic";
 
 async function forgotAction(formData: FormData): Promise<void> {
   "use server";
   const email = String(formData.get("email") ?? "").trim();
-  const api = process.env.API_ORIGIN ?? "http://localhost:4000";
-  const res = await fetch(`${api}/api/v1/auth/password/forgot`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ purpose: "admin", identifier: email }),
+  const res = await postUpstream<{ devToken?: string }>("/api/v1/auth/password/forgot", {
+    purpose: "admin",
+    identifier: email,
   });
+  if (!res.ok) {
+    // API خاموش ≠ ورودی غلط — پیام جدا تا کاربر دنبال اشتباه در ایمیلش نگردد
+    redirect(res.reason === "unreachable" ? "/forgot-password?error=down" : "/forgot-password?error=server");
+  }
   // پاسخ همیشه generic است — پیام یکسان برای حساب موجود/ناموجود (ضد enumeration)
-  const data = (await res.json().catch(() => null)) as { devToken?: string } | null;
-  const dev = data?.devToken ? `&dev=1&token=${encodeURIComponent(data.devToken)}` : "";
-  redirect(`/forgot-password?sent=1${dev}`);
+  const dev = res.data?.devToken ? `&dev=1&token=${encodeURIComponent(res.data.devToken)}` : "";
+  redirect(`/forgot-password?notice=sent${dev}`);
 }
 
 export default async function ForgotPasswordPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sent?: string; error?: string; dev?: string; token?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; dev?: string; token?: string }>;
 }) {
-  const { sent, error, dev, token } = await searchParams;
+  const { error, notice, dev, token } = await searchParams;
+  const banner = entryNotice(error) ?? entryNotice(notice);
   return (
     <div className="flex min-h-dvh items-center justify-center p-6">
       <form action={forgotAction} className="w-full max-w-sm rounded-3xl border border-line bg-surface p-8">
         <div className="mb-6 text-center">
           <div className="text-xl font-bold text-deep">بازیابی رمز پنل</div>
-          <div className="mt-1 text-xs text-muted">ایمیل حساب را وارد کنید؛ لینک/کد یک‌بارمصرف برایتان ارسال می‌شود.</div>
+          <div className="mt-1 text-xs text-muted">ایمیل حساب را وارد کن؛ لینک/کد یک‌بارمصرف برایت ارسال می‌شود.</div>
         </div>
-        {sent ? (
-          <div role="status" className="mb-4 rounded-xl bg-ok/10 px-3 py-2 text-sm text-ok">
-            اگر این ایمیل در سیستم باشد، پیام بازیابی ارسال شده است. (اعتبار کد: ۳۰ دقیقه)
+        {banner ? (
+          <div
+            role={banner.tone === "ok" ? "status" : "alert"}
+            className={
+              banner.tone === "ok"
+                ? "mb-4 rounded-xl bg-ok/10 px-3 py-2 text-sm text-ok"
+                : "mb-4 rounded-xl bg-err/10 px-3 py-2 text-sm text-err"
+            }
+          >
+            {banner.text}
             {dev && token ? (
               <p className="mt-2 text-[11px] text-muted" dir="ltr">
                 DEV token: <code className="break-all">{token}</code>
               </p>
             ) : null}
-          </div>
-        ) : null}
-        {error ? (
-          <div role="alert" className="mb-4 rounded-xl bg-err/10 px-3 py-2 text-sm text-err">
-            خطا در ارسال — ورودی را بررسی کنید یا کمی بعد تلاش کنید.
           </div>
         ) : null}
         <label className="mb-1 block text-sm text-ink" htmlFor="email">ایمیل</label>

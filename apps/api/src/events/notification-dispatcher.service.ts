@@ -55,28 +55,10 @@ export class NotificationDispatcherService implements OnModuleInit, OnModuleDest
       let sent = 0, failed = 0, notConfigured = 0;
       for (const n of rows) {
         try {
-          const r = n.channel === "SMS" ? await this.attemptSms(n) : await this.attemptEmail(n);
-          if (r.state === "SENT") {
-            await this.prisma.notification.updateMany({
-              where: { id: n.id, status: "QUEUED" },
-              data: { status: "SENT", sentAt: new Date(), lastError: null, attempts: { increment: 1 } },
-            });
-            sent++;
-          } else if (r.state === "FAILED") {
-            // خطای provider قطعی — FAILED صریح؛ retry آگاهانه با endpoint ادمین
-            await this.prisma.notification.updateMany({
-              where: { id: n.id, status: "QUEUED" },
-              data: { status: "FAILED", lastError: r.error ?? "UNKNOWN", attempts: { increment: 1 } },
-            });
-            failed++;
-          } else {
-            // بدون credential: QUEUED می‌ماند + lastError برای visibility ادمین (no fake success)
-            await this.prisma.notification.updateMany({
-              where: { id: n.id, status: "QUEUED" },
-              data: { lastError: r.error ?? "NOT_CONFIGURED", attempts: { increment: 1 } },
-            });
-            notConfigured++;
-          }
+          const state = await this.deliver(n);
+          if (state === "SENT") sent++;
+          else if (state === "FAILED") failed++;
+          else notConfigured++;
         } catch (e) {
           this.logger.warn(`dispatch error for ${n.id}: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -88,6 +70,48 @@ export class NotificationDispatcherService implements OnModuleInit, OnModuleDest
     } finally {
       this.running = false;
     }
+  }
+
+  /**
+   * ارسال **یک** ردیف مشخص — برای retry هدف‌دار ادمین.
+   *
+   * چرا جدا از `dispatchOnce`: retry یک ردیف نباید کل صف را بدوشد؛ پیش‌تر
+   * دکمهٔ «تلاش دوباره» تا ۵۰ ردیف دیگر را هم پردازش می‌کرد — اثر جانبی
+   * ناخواسته روی داده‌ای که ادمین درخواستش نکرده بود.
+   */
+  async dispatchOne(id: string): Promise<{ state: "SENT" | "FAILED" | "QUEUED" | "SKIPPED"; error: string | null }> {
+    const n = await this.prisma.notification.findUnique({ where: { id } });
+    if (!n) return { state: "SKIPPED", error: "NOT_FOUND" };
+    if (n.status !== "QUEUED") return { state: "SKIPPED", error: `STATUS_${n.status}` };
+    const state = await this.deliver(n);
+    const after = await this.prisma.notification.findUnique({ where: { id }, select: { lastError: true } });
+    return { state, error: after?.lastError ?? null };
+  }
+
+  /** یک تلاش ارسال + ثبت وضعیت در DB — مسیر مشترک dispatchOnce و dispatchOne */
+  private async deliver(n: { id: string; channel: string; to: string; templateKey: string; payload: unknown }): Promise<"SENT" | "FAILED" | "QUEUED"> {
+    const r = n.channel === "SMS" ? await this.attemptSms(n) : await this.attemptEmail(n);
+    if (r.state === "SENT") {
+      await this.prisma.notification.updateMany({
+        where: { id: n.id, status: "QUEUED" },
+        data: { status: "SENT", sentAt: new Date(), lastError: null, attempts: { increment: 1 } },
+      });
+      return "SENT";
+    }
+    if (r.state === "FAILED") {
+      // خطای provider قطعی — FAILED صریح؛ retry آگاهانه با endpoint ادمین
+      await this.prisma.notification.updateMany({
+        where: { id: n.id, status: "QUEUED" },
+        data: { status: "FAILED", lastError: r.error ?? "UNKNOWN", attempts: { increment: 1 } },
+      });
+      return "FAILED";
+    }
+    // بدون credential: QUEUED می‌ماند + lastError برای visibility ادمین (no fake success)
+    await this.prisma.notification.updateMany({
+      where: { id: n.id, status: "QUEUED" },
+      data: { lastError: r.error ?? "NOT_CONFIGURED", attempts: { increment: 1 } },
+    });
+    return "QUEUED";
   }
 
   /** SMS — از لایهٔ چند-اپراتور (بند ۱۶): اپراتور فعال از Setting، آداپتورها در sms-providers.service */
@@ -154,6 +178,7 @@ export class NotificationDispatcherService implements OnModuleInit, OnModuleDest
   private renderMessage(n: { templateKey: string; payload: unknown }): string {
     const p = (n.payload ?? {}) as Record<string, unknown>;
     const invoiceNumber = typeof p.invoiceNumber === "string" ? p.invoiceNumber : "";
+    const orderCode = typeof p.orderCode === "string" ? p.orderCode : "";
     const amount = typeof p.amount === "string" ? p.amount : typeof p.amount === "number" ? String(p.amount) : "";
     const store = process.env.STORE_NAME ?? "قاصدک";
     if (n.templateKey.startsWith("pos-sale-sms:")) {
@@ -162,6 +187,22 @@ export class NotificationDispatcherService implements OnModuleInit, OnModuleDest
     if (n.templateKey.startsWith("order-paid-sms:")) {
       return `${store} — پرداخت سفارش ${invoiceNumber} به مبلغ ${amount} تومان تایید شد. سپاس از خرید شما.`;
     }
+    if (n.templateKey.startsWith("review-invite:")) {
+      // دعوت ثبت نظر بعد از تحویل — لینک از payload واقعی رویداد می‌آید
+      const link = typeof p.link === "string" ? p.link : "";
+      return `${store} — سفارش ${orderCode} تحویل شد. اگر راضی بودید، نظرتان دربارهٔ خرید همین‌جا ثبت می‌شود و به انتخاب بقیه کمک می‌کند: ${link}`;
+    }
+    /**
+     * متن آمادهٔ تولیدکنندهٔ ردیف — مثل توکن بازیابی رمز.
+     *
+     * **باگ واقعی که اینجا رفع شد (گام ۱۴):** ردیف‌های `password-reset:*`
+     * متن را در `payload.message` می‌گذارند (شامل توکن)، ولی این تابع هیچ
+     * شاخه‌ای برایش نداشت و به fallback انتهایی می‌افتاد؛ یعنی کاربر «قاصدک —
+     * password-reset» می‌گرفت و **توکن هرگز به دستش نمی‌رسید**. تست قبلی فقط
+     * وجود ردیف در صف را می‌سنجید، نه محتوای پیام — برای همین دیده نشد.
+     */
+    const ready = typeof p.message === "string" ? p.message.trim() : "";
+    if (ready) return ready;
     return `${store} — ${n.templateKey}`;
   }
 }

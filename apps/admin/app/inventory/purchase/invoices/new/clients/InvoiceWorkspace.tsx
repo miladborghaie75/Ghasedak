@@ -100,8 +100,8 @@ export default function InvoiceWorkspace() {
 
   const submit = async () => {
     setError(null);
-    if (!supplierId) { setError("تامین‌کننده را انتخاب کنید."); return; }
-    if (!grnId) { setError("سند دریافت (GRN) را انتخاب کنید — Three-Way Match بر اساس آن است."); return; }
+    if (!supplierId) { setError("تأمین‌کننده را انتخاب کن."); return; }
+    if (!grnId) { setError("سند دریافت (GRN) را انتخاب کن — Three-Way Match بر اساس آن است."); return; }
     const valid = lines.filter((l) => l.sku && Number(l.qty) > 0);
     if (valid.length === 0) { setError("حداقل یک ردیف معتبر لازم است."); return; }
     setSaving(true);
@@ -173,7 +173,7 @@ export default function InvoiceWorkspace() {
         </div>
         {lines.length === 0 ? (
           <p className="mt-3 rounded-xl border border-dashed border-line p-6 text-center text-xs text-muted">
-            هنوز کالایی اضافه نشده — با «انتخاب کالا» جستجو کنید یا بارکد را اسکن کنید. اگر کالا در سیستم نیست، از همان‌جا «+ محصول جدید» بسازید.
+            هنوز کالایی اضافه نشده — با «انتخاب کالا» جستجو کن یا بارکد را اسکن کن. اگر کالا در سیستم نیست، از همان‌جا «+ محصول جدید» بساز.
           </p>
         ) : (
           <div className="mt-3 flex flex-col gap-2">

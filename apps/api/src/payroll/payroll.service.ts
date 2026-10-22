@@ -28,8 +28,14 @@ export class PayrollService {
     @Inject(forwardRef(() => JournalService)) private readonly journal: JournalService,
   ) {}
 
-  /** حساب بستانکار حقوق — از حساب پرداختنی فروشندگان جداست */
-  private static readonly PAYABLE_SALARY = "2101";
+  /**
+   * حساب بستانکار حقوق — از حساب پرداختنی فروشندگان جداست.
+   *
+   * کد از کدینگ مرجع (`@ghasedak/contracts`) می‌آید، نه رشتهٔ محلی: گام ۱۲
+   * همین حساب را در طبقه‌بندی جریان نقدی لازم داشت و دو منبع حقیقت برای یک
+   * کد حساب یعنی ناسازگاری بی‌صدا.
+   */
+  private static readonly PAYABLE_SALARY = GL_LIABILITIES.PAYABLE_SALARY;
 
   // ---------------- قراردادهای حقوق ----------------
 

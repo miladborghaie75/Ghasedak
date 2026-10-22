@@ -18,10 +18,18 @@ export type ShapedVariant = {
 export type ShapedProduct = {
   id: string; slug: string; name: string; short: string | null;
   category: string | null; brandId: string | null;
-  attributeIds: string[]; createdAt: string;
+  attributeIds: string[];
+  /**
+   * ترم‌های سطح محصول (جنس و …) با slug و مقدار — ویزارد «چی لازم داری؟» قاعده
+   * را با slug می‌سنجد (پایدار)، و فروشگاه برچسب واقعی را از همین‌جا نشان می‌دهد.
+   */
+  attributeTerms: Array<{ id: string; slug: string; value: string }>;
+  createdAt: string;
   image: string | null; images: Array<{ url: string; alt: string | null }>;
   isNew: boolean; inStock: boolean; minPrice: number | null; maxPrice: number | null;
   description?: string | null; tags?: string[];
+  /** خلاصهٔ نظرات تأییدشده — فقط APPROVED؛ بدون نظر → count=0/avg=null (بند ۴۱/۸۸) */
+  rating?: { avg: number | null; count: number };
   variants: ShapedVariant[];
 };
 
@@ -101,11 +109,20 @@ export function shapeCommon(p: ProductRow, priceMap: Map<string, { price: bigint
   const variants = shapeVariants(p.variants, priceMap);
   const imgs = [...p.images].sort((a, b) => (a.isPrimary === b.isPrimary ? a.sortOrder - b.sortOrder : a.isPrimary ? -1 : 1));
   const prices = variants.map((v) => v.salePrice ?? v.price);
+  /**
+   * «عکسِ اصلی» فقط از تصویرِ primary خوانده می‌شود.
+   *
+   * چرا این سخت‌گیری؟ برنامهٔ عکاسی (گام ۲۰) آرتِ جانشین را فقط با «نمای صافِ
+   * جلو»ِ تأییدشده عوض می‌کند. اگر عکسِ گالری (مثلاً جزئیاتِ پارچه) خودش را
+   * جای عکسِ اصلی می‌نشاند، مشتری یک عکسِ نیم‌کاره می‌بیند و برنامه با آن
+   * نمی‌خواند. پس: primary ندارد ⇒ عکسِ اصلی نیست ⇒ فروشگاه آرت می‌کشد.
+   */
+  const hero = imgs.find((i) => i.isPrimary) ?? null;
   return {
     id: p.id, slug: p.slug, name: p.name, short: p.shortDescription,
     category: p.category?.slug ?? null, brandId: p.brand?.slug ?? null,
     createdAt: p.createdAt.toISOString(),
-    image: imgs[0] ? `/api/media/${imgs[0].storageKey}` : null,
+    image: hero ? `/api/media/${hero.storageKey}` : null,
     images: imgs.map((i) => ({ url: `/api/media/${i.storageKey}`, alt: i.alt })),
     isNew: Date.now() - p.createdAt.getTime() <= NEW_WINDOW_DAYS * 86_400_000,
     inStock: variants.some((v) => v.stock > 0),
@@ -145,6 +162,54 @@ export class PublicCatalogController {
       select: { variantSku: true, price: true, salePrice: true, saleStartsAt: true, saleEndsAt: true },
     });
     for (const r of rows) map.set(r.variantSku, r);
+    return map;
+  }
+
+  /** خلاصهٔ امتیاز نظرات تأییدشدهٔ چند محصول — batch groupBy (بدون N+1) */
+  private async ratingMap(productIds: string[]): Promise<Map<string, { avg: number | null; count: number }>> {
+    const map = new Map<string, { avg: number | null; count: number }>();
+    const ids = [...new Set(productIds)];
+    if (ids.length === 0) return map;
+    const rows = await this.prisma.review.groupBy({
+      by: ["productId"],
+      where: { productId: { in: ids }, status: "APPROVED" },
+      _count: { _all: true },
+      _avg: { rating: true },
+    });
+    for (const r of rows) {
+      map.set(r.productId, {
+        avg: r._avg.rating != null ? Math.round(r._avg.rating * 10) / 10 : null,
+        count: r._count._all,
+      });
+    }
+    return map;
+  }
+
+  /**
+   * اتریبیوت‌های سطح محصول (جنس و …) — batch، بدون N+1.
+   * کلید = productId، مقدار = ترم‌های محصول با id/slug/value.
+   */
+  private async productAttributeMap(
+    productIds: string[],
+  ): Promise<Map<string, Array<{ id: string; slug: string; value: string }>>> {
+    const map = new Map<string, Array<{ id: string; slug: string; value: string }>>();
+    const ids = [...new Set(productIds.filter(Boolean))];
+    if (ids.length === 0) return map;
+    const rows = await this.prisma.productAttributeTerm.findMany({
+      where: { productId: { in: ids } },
+      select: {
+        productId: true,
+        term: { select: { id: true, slug: true, value: true, sortOrder: true } },
+      },
+    });
+    for (const r of rows) {
+      const list = map.get(r.productId) ?? [];
+      list.push({ id: r.term.id, slug: r.term.slug, value: r.term.value });
+      map.set(r.productId, list);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.slug.localeCompare(b.slug, "fa"));
+    }
     return map;
   }
 
@@ -256,10 +321,20 @@ export class PublicCatalogController {
     ]);
     const priceMap = await this.channelPriceMap(rows.flatMap((r) => r.variants.map((v) => v.sku)), channelSlug);
     const mediaMap = await this.mediaKeyMap(rows.flatMap((r) => r.images.map((i) => i.mediaId)));
-    const items = rows.map((p) => shapeCommon(
+    const ratings = await this.ratingMap(rows.map((r) => r.id));
+    const attributes = await this.productAttributeMap(rows.map((r) => r.id));
+    const items = rows.map((p) => {
+    const shaped = shapeCommon(
       { ...p, images: resolveImages(p.images, mediaMap), variants: p.variants.map(flattenVariantTerms) },
       priceMap,
-    ));
+    ) as unknown as ShapedProduct;
+      shaped.rating = ratings.get(p.id) ?? { avg: null, count: 0 };
+      // اتریبیوت‌های سطح محصول — ویزارد «چی لازم داری؟» و فیلتر جنس به آن نیاز دارند
+      const terms = attributes.get(p.id) ?? [];
+      shaped.attributeTerms = terms;
+      shaped.attributeIds = terms.map((t) => t.id);
+      return shaped;
+    });
     return { items, page: pageNum, perPage: take, total, hasMore: skip + rows.length < total };
   }
 
@@ -285,13 +360,15 @@ export class PublicCatalogController {
       priceMap,
     ) as unknown as ShapedProduct;
     // اتریبیوت‌های سطح محصول (جنس و …) — برای فیلتر material و نمایش
-    const productTerms = await this.prisma.productAttributeTerm.findMany({
-      where: { productId: p.id },
-      select: { attributeTermId: true },
-    });
-    shaped.attributeIds = productTerms.map((t) => t.attributeTermId);
+    const attributes = await this.productAttributeMap([p.id]);
+    const terms = attributes.get(p.id) ?? [];
+    shaped.attributeTerms = terms;
+    shaped.attributeIds = terms.map((t) => t.id);
     shaped.description = p.description;
     shaped.tags = p.tags;
+    // خلاصهٔ نظرات تأییدشدهٔ همین محصول — کارت/لیست و PDP هم‌منبع‌اند (بند ۴۱)
+    const ratings = await this.ratingMap([p.id]);
+    shaped.rating = ratings.get(p.id) ?? { avg: null, count: 0 };
     return shaped;
   }
 }

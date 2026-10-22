@@ -16,11 +16,18 @@ export interface ProductV2 {
   short: string;
   /** شناسه‌های اتریبیوت سطح محصول (جنس، …) */
   attributeIds: string[];
+  /**
+   * ترم‌های سطح محصول با slug و مقدار واقعی — ویزارد «چی لازم داری؟» قاعدهٔ
+   * جنس را با slug می‌سنجد (slug پایدار است) و متن دلیل از همین مقدار می‌آید.
+   */
+  attributeTerms?: Array<{ id: string; slug: string; value: string }>;
   variants: VariantV2[];
   /** تاریخ ایجاد نمایشی (ISO) — مبنای بج «جدید» */
   createdAt: string;
   /** عکس اصلی محصول — `/media/<key>` (هم‌مبدأ)؛ null اگر رسانه‌ای آپلود نشده */
   image?: string | null;
+  /** خلاصهٔ نظرات تأییدشده از API (فاز نظرات) — undefined یعنی بدون نظر */
+  rating?: { avg: number | null; count: number };
 }
 
 export interface VariantV2 {

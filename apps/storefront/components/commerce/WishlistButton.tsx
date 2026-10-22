@@ -26,7 +26,8 @@ export function WishlistButton({
         toggleWishlist(productId);
       }}
       className={cn(
-        "flex size-10 items-center justify-center rounded-full bg-surface/95 shadow-clay-1 transition-colors hover:shadow-clay-2",
+        // روی کاغذ بی‌معناست — قلب فقط یک کنترل تعاملی است، نه اطلاعات
+        "flex size-10 items-center justify-center rounded-full bg-surface/95 shadow-clay-1 transition-colors hover:shadow-clay-2 print:hidden",
         active ? "text-primary-strong" : "text-muted hover:text-primary-strong",
         className,
       )}

@@ -31,12 +31,12 @@ export default async function CustomerResetPage({
         <h1 className="font-display text-lg font-bold text-ink">ثبت رمز جدید</h1>
         {done ? (
           <div role="status" className="mt-4 rounded-xl bg-primary-tint px-3 py-2 text-[13px] leading-6 text-ink">
-            رمز جدید ثبت شد. از این پس با همین رمز وارد شوید.
+            رمز جدید ثبت شد. از این پس با همین رمز وارد شو.
           </div>
         ) : null}
         {error ? (
           <div role="alert" className="mt-4 rounded-xl bg-app-error/10 px-3 py-2 text-[13px] text-app-error">
-            کد نامعتبر/منقضی یا رمزها هم‌خوان نیستند (حداقل ۸ کاراکتر).
+            کد نامعتبر یا منقضی است؛ کد تازه بگیر یا رمزها را با حداقل ۸ کاراکتر یکسان وارد کن.
           </div>
         ) : null}
         <label className="mt-5 mb-1 block text-[13px] text-ink" htmlFor="token">کد پیامک‌شده</label>

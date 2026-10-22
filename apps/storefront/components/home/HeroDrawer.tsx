@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
+import { COPY } from "@/lib/copy";
 
 /**
  * HeroDrawer — هیرو با عکس واقعی کشوی لباس زیر (بند ۵: عکس محصول، بدون مدل).
@@ -55,7 +56,7 @@ export function HeroDrawer() {
             </h1>
             <p className="mt-3 text-sm leading-8 text-muted sm:text-base">
               از سوتین‌های راحت و جدید تا ست‌های فانتزی و لباس خواب‌های دلنشین.
-              روی هر چیزی که توی کشو می‌بینی بزن و همین‌جا شروع کن.
+              روی هر چیزی که در کشو می‌بینی بزن و همین‌جا شروع کن.
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
               <Link
@@ -68,7 +69,7 @@ export function HeroDrawer() {
                 href="/guides/size"
                 className="inline-flex h-12 items-center rounded-full border border-line bg-surface px-6 text-sm font-bold text-primary-strong shadow-clay-1 transition-all hover:bg-primary-tint"
               >
-                راهنمای سایز
+                {COPY.sizeGuide}
               </Link>
             </div>
           </div>

@@ -2,7 +2,15 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { CmsRenderer } from "@ghasedak/blocks";
 import { loadCatalog } from "@/lib/catalog-repo";
-import { buildCmsData, fetchCmsPage, loadLiveBrands, loadLiveCategories } from "@/lib/cms";
+import {
+  buildCmsData,
+  fetchCmsPage,
+  isPreview,
+  loadLiveBrands,
+  loadLiveCategories,
+  resolveCmsSlot,
+} from "@/lib/cms";
+import CmsPreviewSurface from "@/components/cms/CmsPreviewSurface";
 
 /**
  * صفحاتی که مدیر در صفحه‌ساز ساخته و منتشر کرده است.
@@ -32,15 +40,28 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default async function CmsSlugPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function CmsSlugPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { slug } = await params;
   const clean = String(slug ?? "").toLowerCase();
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(clean) || RESERVED.has(clean)) notFound();
 
-  const res = await fetchCmsPage(clean);
-  if (!res) notFound();
+  const previewMode = isPreview(await searchParams);
+  const slot = await resolveCmsSlot(clean, previewMode);
+  if (!slot.page && !slot.previewMode) notFound();
 
   const products = await loadCatalog();
   await Promise.all([loadLiveCategories(), loadLiveBrands()]);
-  return <CmsRenderer page={res.page} data={buildCmsData(products)} />;
+  const data = buildCmsData(products);
+
+  // حالت پیش‌نمایش: همان صفحه ولی زنده و قابل‌ویرایش از داخل پنل
+  if (slot.previewMode) {
+    return <CmsPreviewSurface page={slot.page ?? { version: 1, title: "", blocks: [] }} data={data} />;
+  }
+  return <CmsRenderer page={slot.page!} data={data} />;
 }

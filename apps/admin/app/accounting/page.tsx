@@ -9,7 +9,7 @@ export default function AccountingPage() {
     <PageShell permission="accounting.view" title="درخت حساب‌ها و کدینگ">
       <p className="mb-4 text-[12px] leading-6 text-muted">
         ساختار حساب‌ها و کدینگ حسابداری، با ماندهٔ هر حساب از دفتر واقعی. برای دیدن و اصلاح
-        اسناد به صفحهٔ «اسناد حسابداری» بروید.
+        اسناد به صفحهٔ «اسناد حسابداری» برو.
       </p>
       <AccountingClient />
     </PageShell>

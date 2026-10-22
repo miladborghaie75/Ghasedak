@@ -30,6 +30,26 @@ bash infrastructure/run-local.sh stop    # خاموشی کامل
   جدید اجرا نشده باشند، ReminderService هنگام استارت با خطای `P2022` کرش می‌کند.
 - لاگ‌ها و pidها در `.run-local/` (gitignore شده).
 
+### اگر پنل ادمین با رمز باز نشد
+
+پنل ادمین رمز را خودش نمی‌سنجد؛ API این کار را می‌کند. پس اول ببینید کدام سرویس خاموش است:
+
+```bash
+bash infrastructure/run-local.sh status   # postgres / API / storefront / admin
+```
+
+سه حالت متفاوت (صفحهٔ ورود این‌ها را از هم جدا می‌گوید):
+
+| پیام | علت | کار |
+|---|---|---|
+| «سرور پنل پاسخ نمی‌دهد» | API یا Postgres خاموش | `bash infrastructure/run-local.sh start` |
+| «ایمیل یا رمز نادرست است» | واقعاً ۴۰۱ از API | ایمیل/رمز حساب دمو را چک کن |
+| «سرور پنل خطا داد» | API بالا ولی خطای داخلی | `.run-local/api.log` را بخوان |
+
+اگر `status` می‌گوید storefront خاموش است ولی build نداری: `next start` بدون
+`next build` بالا نمی‌آید — یا `pnpm --filter @ghasedak/storefront build` بزن، یا در حالت
+توسعه `pnpm --filter @ghasedak/storefront dev`.
+
 ## پیش‌نیازها
 
 - Node.js ≥ 20 + pnpm (`npx pnpm`)
@@ -92,8 +112,36 @@ curl -X POST :4000/api/v1/payments/verify/<authority>   # → PAID
 ## تست
 
 ```bash
-npx pnpm --filter @ghasedak/api test   # Journal (Dr=Cr, DB واقعی) + RBAC Guard
+npx pnpm --filter @ghasedak/api test          # Journal (Dr=Cr, DB واقعی) + RBAC Guard
+npx pnpm --filter @ghasedak/storefront test   # لحن/کپی + سایز + مرتب‌سازی امتیاز
 ```
+
+### تست بصری کارت گرید (نیازمند سرور بالا)
+
+هندسهٔ کارت محصول — هم‌اندازه‌بودن کارت‌های امتیازدار و بی‌امتیاز و هم‌ترازی ردیف
+امتیاز و دکمهٔ خرید — در سه عرض (۳۹۰/۷۶۸/۱۲۸۰) و هر دو تم سنجیده می‌شود. اسکریپت
+بدون وابستگی بیرونی است (CDP خود Chrome/Edge + WebSocket توکار Node) و کد خروج
+غیرصفر یعنی شکست:
+
+```bash
+# سرور فروشگاه باید بالا باشد (نکست start/dev)
+node apps/storefront/scripts/visual-card-parity.mjs http://127.0.0.1:3111 "/search?q=تست&sort=rating"
+BREAK_GEOMETRY=1 node apps/storefront/scripts/visual-card-parity.mjs   # اثبات این‌که شکست را می‌گیرد (باید exit=1)
+SELFTEST=1 node apps/storefront/scripts/visual-card-parity.mjs         # همان تزریق با معنای معکوس: گرفتن باگ = موفقیت
+SHOTS=1 node apps/storefront/scripts/visual-card-parity.mjs            # ذخیرهٔ اسکرین‌شات هر حالت در .visual/
+```
+
+برای اینکه لیست هم کارت امتیازدار داشته باشد و هم بی‌امتیاز (بدون آن، تست معنایش را
+از دست می‌دهد و صریحاً FAIL می‌دهد):
+
+```bash
+npx pnpm --filter @ghasedak/database db:visual-fixture   # دو محصول در دستهٔ bra؛ یکی با نظر تأییدشده
+```
+
+در CI این تست در job مستقل `visual-parity` اجرا می‌شود: پستگرس تازه +
+migration + seed دمو + فیکسچر → build و بالا آوردن API و فروشگاه روی همان DB →
+اجرای اسکریپت روی `/c/bra?sort=rating`؛ خرابی یعنی کار قرمز، و
+اسکرین‌شات‌های هر حالت به‌عنوان artifact ذخیره می‌شوند.
 
 ## وضعیت پیاده‌سازی
 

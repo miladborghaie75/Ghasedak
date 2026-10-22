@@ -35,4 +35,20 @@ export class PublicThemeController {
   }
 
   /** سکشن‌های صفحه اصلی از صفحه‌ساز زنده (`/cms/page/home`) می‌آیند؛ این مسیر حذف شد. */
+
+  /**
+   * وضعیت تعمیر فروشگاه (گام ۱۰) — عمومی و ایمن؛ فقط enabled/پیام/مهلت.
+   * فروشگاه با همین مسیر تصمیم می‌گیرد صفحهٔ اطلاع نشان بدهد؛ پیش‌فرض خاموش.
+   */
+  @Get("maintenance")
+  async maintenance() {
+    const row = await this.prisma.setting.findUnique({ where: { key: "maintenance" } });
+    if (!row) return { enabled: false };
+    const v = row.value as Record<string, unknown>;
+    return {
+      enabled: v.enabled === true,
+      message: typeof v.message === "string" && v.message.trim() ? v.message : undefined,
+      until: typeof v.until === "string" && v.until.trim() ? v.until : undefined,
+    };
+  }
 }

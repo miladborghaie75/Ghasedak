@@ -6,10 +6,13 @@ import { AppProviders } from "@/components/providers/AppProviders";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { QuickAddHost } from "@/components/commerce/QuickAddHost";
+import { ConsentGate } from "@/components/analytics/ConsentGate";
 import { ThemeInit } from "@/components/providers/theme-init";
 import { MotionReveal } from "@/components/MotionReveal";
 import { site, SITE_URL } from "@/lib/site";
 import { hydrateCatalog, loadCatalog } from "@/lib/catalog-repo";
+import { getMaintenance } from "@/lib/maintenance";
+import { MaintenanceNotice } from "@/components/MaintenanceNotice";
 
 /** لایهٔ ریشه با دادهٔ زندهٔ کاتالوگ/تم — استاتیک build نمی‌شود */
 export const dynamic = "force-dynamic";
@@ -26,7 +29,7 @@ export const metadata: Metadata = {
   keywords: ["لباس زیر زنانه", "سوتین", "شورت", "گن", "لباس خواب", "قاصدک"],
   openGraph: {
     title: `${site.fullName} | فروشگاه آنلاین لباس زیر زنانه`,
-    description: "سوتین، شورت، ست، گن، ورزشی و لباس خواب — ساده و مطمئن خرید کنید.",
+    description: "سوتین، شورت، ست، گن، ورزشی و لباس خواب — ساده و مطمئن خرید کن.",
     locale: "fa_IR",
     type: "website",
   },
@@ -54,11 +57,21 @@ export default async function RootLayout({
   try {
     const api = process.env.API_ORIGIN ?? "http://localhost:4000";
     const r = await fetch(`${api}/api/v1/admin/public/theme`, { next: { revalidate: 60 } });
-    if (r.ok) {
-      const t = (await r.json()) as { primary?: string; ink?: string; bg?: string; fontHeading?: string; fontBody?: string } | null;
+    if (r.ok) {      const t = (await r.json()) as { primary?: string; ink?: string; bg?: string; fontHeading?: string; fontBody?: string } | null;
       if (t?.primary) {
-        themeCss = `:root{--color-primary:${t.primary};--color-plum:${t.primary};--color-ink:${t.ink ?? ""};--color-bg:${t.bg ?? ""};}`
-          .replace(",--color-ink:;", "").replace(",--color-bg:;", "");
+        /*
+         * فقط توکن‌هایی که مدین واقعاً تعیین کرده تزریق می‌شوند.
+         *
+         * چرا `--color-plum` تزریق نمی‌شود؟ «بنفش تیره» یک توکنِ ثابتِ برند
+         * است (تیترها، بنفش تیرهٔ قاب‌ها). اگر آن را با رنگ اصلیِ مدیر یکی
+         * کنیم، دو رنگِ متفاوتِ پالت به یک رنگ می‌افتند: تیترهای سایت رنگ
+         * اصلی می‌گیرند و قاب «بنفش تیره» دیگر با «بنفش برند» فرقی ندارد —
+         * یعنی زبان بصری برند می‌شکند.
+         */
+        const decls: string[] = [`--color-primary:${t.primary}`];
+        if (t.ink) decls.push(`--color-ink:${t.ink}`);
+        if (t.bg) decls.push(`--color-bg:${t.bg}`);
+        themeCss = `:root{${decls.join(";")};}`;
       }
     }
     const rm = await fetch(`${api}/api/v1/admin/public/motion`, { next: { revalidate: 60 } });
@@ -69,6 +82,21 @@ export default async function RootLayout({
   } catch {
     // API در دسترس نیست — تم پیش‌فرض
   }
+
+  // حالت تعمیر (گام ۱۰): ادمین از پنل فعالش می‌کند؛ فروشگاه یک‌جا، در ریشه،
+  // بسته می‌شود و به‌جای همهٔ صفحه‌ها فقط اطلاعِ تماس‌خدار نشان می‌دهد.
+  const maintenance = await getMaintenance();
+  if (maintenance.enabled) {
+    return (
+      <html lang="fa" dir="rtl" data-motion-enabled="off" data-motion-intensity="subtle" suppressHydrationWarning>
+        <body className="min-h-dvh antialiased">
+          {themeCss ? <style dangerouslySetInnerHTML={{ __html: themeCss }} /> : null}
+          <ThemeInit />
+          <MaintenanceNotice message={maintenance.message} until={maintenance.until} />
+        </body>
+      </html>
+    );
+  }
   return (
     <html lang="fa" dir="rtl" data-motion-enabled="on" data-motion-intensity="subtle" suppressHydrationWarning>
       <body className="min-h-dvh antialiased">
@@ -77,7 +105,7 @@ export default async function RootLayout({
         <AppProviders>
           <a
             href="#main"
-            className="sr-only focus:not-sr-only focus:absolute focus:start-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-plum focus:px-4 focus:py-2 focus:text-sm focus:text-on-accent"
+            className="sr-only focus:not-sr-only focus:absolute focus:start-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-plum focus:px-4 focus:py-2 focus:text-sm focus:text-on-accent print:hidden"
           >
             پرش به محتوای اصلی
           </a>
@@ -86,6 +114,8 @@ export default async function RootLayout({
           <MotionReveal />
           <Footer />
           <QuickAddHost />
+          {/* گام ۱۵ — رضایت آنالیتیکس: بنر تصمیم + لود GA4 فقط پس از رضایت */}
+          <ConsentGate />
         </AppProviders>
       </body>
     </html>

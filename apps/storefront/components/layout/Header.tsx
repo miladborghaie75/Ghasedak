@@ -10,6 +10,7 @@ import { Sheet } from "@/components/ui/Sheet";
 import { cn } from "@/lib/cn";
 import { faNum } from "@/lib/format";
 import { site } from "@/lib/site";
+import { COPY } from "@/lib/copy";
 import { CATEGORIES as categories } from "@/lib/categories";
 
 /**
@@ -58,7 +59,8 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 px-3 pb-2 pt-2 sm:px-4">
+      {/* روی کاغذ، منوی سایت معنا ندارد — برگه با هویت چاپی خودش می‌آید */}
+      <header className="sticky top-0 z-40 px-3 pb-2 pt-2 sm:px-4 print:hidden">
         <div className="mx-auto max-w-7xl rounded-blob border border-line bg-surface/95 px-3 shadow-clay-1 backdrop-blur sm:px-5">
           {/* ── موبایل: ردیف ۱ — منو راست، لوگو وسط، اکشن‌ها چپ ── */}
           <div className="flex h-14 items-center justify-between md:hidden">
@@ -137,7 +139,7 @@ export function Header() {
               href="/guides/size"
               className="rounded-full px-3 py-2 text-[13px] font-medium text-muted transition-colors hover:bg-primary-tint hover:text-primary-strong"
             >
-              راهنمای سایز
+              {COPY.sizeGuide}
             </Link>
           </nav>
         </div>
@@ -175,7 +177,7 @@ function MobileMenu({
         <ThemeToggle />
       </div>
       <Link href="/guides/size" onClick={onNavigate} className="flex h-12 items-center rounded-xl px-3 text-sm font-medium text-ink hover:bg-primary-tint">
-        راهنمای سایز
+        {COPY.sizeGuide}
       </Link>
       <Link href="/wishlist" onClick={onNavigate} className="flex h-12 items-center rounded-xl px-3 text-sm font-medium text-ink hover:bg-primary-tint">
         علاقه‌مندی‌ها

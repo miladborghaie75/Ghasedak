@@ -301,7 +301,7 @@ export default function ReportsClient() {
             <p className="rounded-xl bg-app-warning/10 px-4 py-3 text-[11px] leading-6 text-app-warning">
               سود {profit.totals.unknownCostCount} کالا **قابل اتکا نیست**: بهای خریدشان ثبت نشده، پس
               سودشان بیشتر از واقع نشان داده می‌شود. برای درست‌شدن، «بهای خرید» را در صفحهٔ محصول
-              وارد کنید یا سند بهای تمام‌شده ثبت کنید.
+              وارد کن یا سند بهای تمام‌شده را ثبت کن.
             </p>
           )}
 
@@ -461,7 +461,7 @@ export default function ReportsClient() {
           {checks.overdue.count > 0 && (
             <p className="rounded-xl bg-app-err/10 px-4 py-3 text-[11px] leading-6 text-app-err">
               {fa(String(checks.overdue.count))} چک از سررسید گذشته است. چک برگشتی یعنی یک چک
-              وصول‌نشده و کسری نقدینگی — این‌ها را اول پیگیری کنید.
+              وصول‌نشده و کسری نقدینگی — این‌ها را اول پیگیری کن.
             </p>
           )}
 

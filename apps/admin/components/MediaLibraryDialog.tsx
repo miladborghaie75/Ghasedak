@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAdminApi } from "@/components/useAdminApi";
+import { uploadMedia, useAdminApi } from "@/components/useAdminApi";
 
 /**
  * کتابخانهٔ رسانه به‌صورت دیالوگ — هرجا در پنل لازم باشد باز می‌شود.
@@ -87,41 +87,29 @@ export default function MediaLibraryDialog({
 
   const upload = async () => {
     if (!file) {
-      setErr("اول یک فایل انتخاب کنید.");
+      setErr("اول یک فایل انتخاب کن.");
       return;
     }
     setBusy(true);
     setErr(null);
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onload = () => resolve(String(fr.result).split(",")[1] ?? "");
-        fr.onerror = () => reject(new Error("خواندن فایل ناموفق"));
-        fr.readAsDataURL(file);
+      const r = await uploadMedia(file, call, {
+        // alt و title در همان آپلود ذخیره می‌شوند — بعداً یادآوری نمی‌شود
+        alt: alt.trim() || null,
+        title: seoTitle.trim() || null,
       });
-      const r = await call<{ id: string; storageKey?: string; url?: string }>("/admin/capabilities/media", {
-        method: "POST",
-        body: JSON.stringify({
-          filename: file.name,
-          mime: file.type,
-          dataBase64: base64,
-          // alt و title در همان آپلود ذخیره می‌شوند — بعداً یادآوری نمی‌شود
-          alt: alt || undefined,
-          title: seoTitle || undefined,
-        }),
-      });
-      if (!r.ok || !r.data?.id) {
-        setErr(r.error?.message ?? "آپلود ناموفق");
-        setBusy(false);
+      if (!r.ok || !r.id) {
+        setErr(r.error ?? "آپلود ناموفق");
         return;
       }
+      const key = r.storageKey ?? file.name;
       const created: PickedMedia = {
-        id: r.data.id,
-        storageKey: r.data.storageKey ?? file.name,
+        id: r.id,
+        storageKey: key,
         // مسیر رسانه در پنل ادمین از rewrite خود Next می‌آید (/api/media → API)
-url: r.data.url ?? `/api/media/${r.data.storageKey ?? file.name}`,
-        alt: alt || null,
-        title: seoTitle || null,
+        url: r.url ?? `/api/media/${key}`,
+        alt: alt.trim() || null,
+        title: seoTitle.trim() || null,
       };
       onPick(created);
       onClose();

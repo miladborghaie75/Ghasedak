@@ -87,12 +87,23 @@ interface CashPoint {
   outflow: number;
   balance: number;
 }
+interface VisitBucket {
+  views: number;
+  sessions: number;
+}
+interface VisitsSummary {
+  range: { from: string; to: string };
+  points: Array<{ day: string; views: number; sessions: number }>;
+  totals: VisitBucket;
+  quick: { today: VisitBucket; week: VisitBucket; month: VisitBucket; year: VisitBucket };
+}
 
-type Tab = "overview" | "trend" | "channels" | "expenses" | "cash";
+type Tab = "overview" | "trend" | "channels" | "expenses" | "cash" | "visits";
 
 const TABS: Array<{ key: Tab; label: string }> = [
   { key: "overview", label: "نگاه کلی" },
   { key: "trend", label: "روند فروش و سود" },
+  { key: "visits", label: "بازدید فروشگاه" },
   { key: "channels", label: "فروش بر حسب کانال" },
   { key: "expenses", label: "ساختار هزینه" },
   { key: "cash", label: "جریان نقدی" },
@@ -122,12 +133,13 @@ export default function DashboardClient() {
   const [cashOpen, setCashOpen] = useState(0);
   const [cashClose, setCashClose] = useState(0);
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [visits, setVisits] = useState<VisitsSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     const q = `?from=${range.from}&to=${range.to}`;
-    const [t, c, e, n, o] = await Promise.all([
+    const [t, c, e, n, o, v] = await Promise.all([
       call<TrendResult>(`/admin/accounting/dashboard/trend${q}`),
       call<{ items: ChannelRow[]; total: number }>(`/admin/accounting/dashboard/channels${q}`),
       call<{ items: ExpenseRow[]; total: number; breakdownAvailable: boolean }>(
@@ -137,6 +149,7 @@ export default function DashboardClient() {
         `/admin/accounting/dashboard/cash-flow${q}`,
       ),
       call<Overview>("/admin/accounting/dashboard/overview"),
+      call<VisitsSummary>(`/admin/analytics/visits${q}`),
     ]);
 
     if (t.ok && t.data) setTrend(t.data);
@@ -156,6 +169,8 @@ export default function DashboardClient() {
       setCashClose(n.data.closingBalance);
     }
     if (o.ok && o.data) setOverview(o.data);
+    // بازدید بخش اختیاری است — اگر مجوز/endpoint نبود، تب خالی می‌ماند نه خطا
+    if (v.ok && v.data) setVisits(v.data);
   }, [call, range.from, range.to]);
 
   useEffect(() => {
@@ -262,6 +277,80 @@ export default function DashboardClient() {
             <ChartEmpty reason="برای این بازه فروشی ثبت نشده است. به‌محض ثبت اولین سند فروش، نمودار پر می‌شود." />
           )}
         </section>
+      )}
+
+      {/* ══════════ بازدید فروشگاه ══════════ */}
+      {tab === "visits" && (
+        <div className="space-y-4">
+          {/* تجمیع‌های تقویمی — روز/هفته (از شنبه)/ماه/سال به وقت تهران */}
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            <StatCard
+              label="بازدید امروز"
+              value={fa(visits?.quick.today.views)}
+              sub={`بازدیدکنندهٔ یکتا ${fa(visits?.quick.today.sessions)}`}
+            />
+            <StatCard
+              label="این هفته (از شنبه)"
+              value={fa(visits?.quick.week.views)}
+              sub={`بازدیدکنندهٔ یکتا ${fa(visits?.quick.week.sessions)}`}
+            />
+            <StatCard
+              label="این ماه"
+              value={fa(visits?.quick.month.views)}
+              sub={`بازدیدکنندهٔ یکتا ${fa(visits?.quick.month.sessions)}`}
+            />
+            <StatCard
+              label="امسال"
+              value={fa(visits?.quick.year.views)}
+              sub={`بازدیدکنندهٔ یکتا ${fa(visits?.quick.year.sessions)}`}
+            />
+          </div>
+
+          <section className="rounded-card border border-app-line bg-surface p-4">
+            <h3 className="mb-3 text-xs font-black">بازدید روزانه در بازهٔ انتخابی</h3>
+            {visits && visits.totals.views > 0 ? (
+              <>
+                <LineChart
+                  labels={visits.points.map((p) => formatPeriod(p.day, "day"))}
+                  series={[
+                    {
+                      key: "views",
+                      label: "بازدید صفحه",
+                      color: CHART_COLORS.revenue,
+                      points: visits.points.map((p) => p.views),
+                    },
+                    {
+                      key: "sessions",
+                      label: "بازدیدکنندهٔ یکتا",
+                      color: CHART_COLORS.line3,
+                      points: visits.points.map((p) => p.sessions),
+                    },
+                  ]}
+                  ariaLabel="نمودار بازدید روزانه و بازدیدکنندهٔ یکتای فروشگاه"
+                />
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-[11px] font-bold text-app-muted">
+                    نمایش به‌صورت جدول
+                  </summary>
+                  <SeriesTable
+                    labels={visits.points.map((p) => p.day)}
+                    series={[
+                      { key: "views", label: "بازدید صفحه", color: CHART_COLORS.revenue, points: visits.points.map((p) => p.views) },
+                      { key: "sessions", label: "بازدیدکنندهٔ یکتا", color: CHART_COLORS.line3, points: visits.points.map((p) => p.sessions) },
+                    ]}
+                  />
+                </details>
+                <p className="mt-2 text-[10px] text-app-muted">
+                  جمع بازه: {fa(visits.totals.views)} بازدید از {fa(visits.totals.sessions)} بازدیدکنندهٔ یکتا — شمارش
+                  first-party همیشه‌روشن است و به رضایت وصل نیست؛ خزنده‌ها و تکرار ۳۰ دقیقه‌ای هر صفحه شمرده
+                  نمی‌شوند، پس این عددها بازدید واقعی انسانی‌اند، نه کل ترافیک خام.
+                </p>
+              </>
+            ) : (
+              <ChartEmpty reason="هنوز بازدیدی ثبت نشده است. شمارش بازدید سایت همیشه روشن است و از اولین بازدید واقعی شروع می‌شود؛ ابزار Google Analytics فقط با اجازهٔ کاربر در فروشگاه فعال می‌شود." />
+            )}
+          </section>
+        </div>
       )}
 
       {/* ══════════ کانال ══════════ */}

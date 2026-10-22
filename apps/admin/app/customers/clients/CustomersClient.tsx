@@ -150,7 +150,7 @@ export default function CustomersClient() {
             <div className="admin-table-wrap"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line text-right text-xs text-ink/60">
-                  <th className="px-4 py-3">توکن سبد</th>
+                  <th className="px-4 py-3">شناسهٔ سبد</th>
                   <th className="px-4 py-3">آیتم‌ها</th>
                   <th className="px-4 py-3">ارزش تقریبی (تومان)</th>
                   <th className="px-4 py-3">آخرین تغییر</th>

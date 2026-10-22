@@ -1,16 +1,25 @@
 import Link from "next/link";
 import { Chip } from "@/components/ui/Chip";
 import { faNum } from "@/lib/format";
-import { NEEDS } from "@/lib/needs";
+import { COPY } from "@/lib/copy";
+import { loadNeedFinderSteps } from "@/lib/needs";
+import { ArtSilhouette } from "@ghasedak/blocks";
 import type { ArtKind } from "@/components/commerce/ProductArt";
 
-/** ریل چیپ‌های نیازمحور — برای کاربری که «نمی‌داند دقیقاً چه می‌خواهد» */
-export function NeedNav() {
+/**
+ * ریل چیپ‌های نیازمحور — برای کاربری که «نمی‌داند دقیقاً چه می‌خواهد».
+ * گام ۱۶: گزینه‌ها از همان تک‌منبع ویزارد می‌آیند (API → fallback contracts)؛
+ * هر چیپ = گزینهٔ گام ۱ که در `/need?start=…` از پیش انتخاب می‌شود.
+ */
+export async function NeedNav() {
+  const steps = await loadNeedFinderSteps();
+  const situations = steps[0]?.options ?? [];
+  if (!situations.length) return null;
   return (
     <nav aria-label="خرید بر اساس نیاز" className="mt-3 flex flex-wrap items-center justify-center gap-2 px-3 sm:px-4">
-      {NEEDS.map((n) => (
-        <Link key={n.slug} href={`/need?start=${n.slug}`} className="inline-flex">
-          <Chip>{n.label}</Chip>
+      {situations.map((o) => (
+        <Link key={o.id} href={`/need?start=${encodeURIComponent(o.id)}`} className="inline-flex">
+          <Chip>{o.label}</Chip>
         </Link>
       ))}
     </nav>
@@ -99,9 +108,12 @@ export function PromoBanners() {
             </div>
             <span
               aria-hidden
-              className="flex size-16 shrink-0 items-center justify-center rounded-full bg-surface/70 shadow-clay-1 transition-transform group-hover:scale-105"
+              className="flex size-16 shrink-0 items-center justify-center rounded-full bg-surface/70 p-3 shadow-clay-1 transition-transform group-hover:scale-105"
             >
-              <CategoryGlyph kind={b.icon} className="size-9" />
+              {/* همان آرتِ کارت محصول، نه یک گلیفِ دوم — بنر و کارت باید یک زبان داشته باشند */}
+              <span className="block size-full">
+                <ArtSilhouette kind={b.icon} color="var(--color-primary)" />
+              </span>
             </span>
           </Link>
         ))}
@@ -115,7 +127,7 @@ export function TrustBar() {
   const items = [
     { title: "ارسال سریع", sub: "بسته‌بندی محرمانه", icon: "truck" as const },
     { title: "پرداخت امن", sub: "درگاه معتبر بانکی", icon: "shield" as const },
-    { title: "راهنمای سایز", sub: "قبل از خرید اندازه بگیرید", icon: "ruler" as const },
+    { title: COPY.sizeGuide, sub: "قبل از خرید اندازه بگیر", icon: "ruler" as const },
     { title: "پشتیبانی واقعی", sub: "پاسخ انسانی، نه ربات", icon: "chat" as const },
   ];
   return (
@@ -141,7 +153,7 @@ export function TrustBar() {
 /** تیزر راهنماها */
 export function GuideTeasers() {
   return (
-    <section aria-label="راهنمای خرید" className="mx-auto mt-12 max-w-7xl px-3 sm:px-4">
+    <section aria-label={COPY.shoppingGuide} className="mx-auto mt-12 max-w-7xl px-3 sm:px-4">
       <SectionHeader title="راهنمای انتخاب" href="/guides/size" linkLabel="همه راهنماها" />
       <div className="grid gap-3 sm:grid-cols-3">
         {[
@@ -167,40 +179,6 @@ export function GuideTeasers() {
 }
 
 /* ── گلیف‌های خطی مشترک ───────────────────────────── */
-function CategoryGlyph({ kind, className }: { kind: ArtKind; className?: string }) {
-  const s = { fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-  switch (kind) {
-    case "sport":
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden>
-          <path d="M6 8h12v9a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z" {...s} />
-          <path d="M8 8c0-3 1.7-5 4-5s4 2 4 5" {...s} />
-        </svg>
-      );
-    case "set":
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden>
-          <path d="M6 9c-.5-3 .5-5.5 2-6.5C8.7 2 9.4 2 10 2s1.3 0 2 .5c1.5 1 2.5 3.5 2 6.5" {...s} />
-          <path d="M10 14h4c0 3-.6 5-2 6.5-1.4-1.5-2-3.5-2-6.5z" {...s} />
-        </svg>
-      );
-    case "bra":
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden>
-          <path d="M3 13c2-1 3.5-4 4-7 .2-1 1.8-1 2 0 .4 3.4 1.6 6 3 7.5" {...s} />
-          <path d="M12 13.5c1.4-1.5 2.6-4.1 3-7.5.2-1 1.8-1 2 0 .5 3 2 6 4 7" {...s} />
-          <path d="M3 13c2 2.5 5.5 4 9 4s7-1.5 9-4" {...s} />
-        </svg>
-      );
-    default:
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden>
-          <circle cx="12" cy="12" r="8" {...s} />
-        </svg>
-      );
-  }
-}
-
 function TrustIcon({ kind }: { kind: "truck" | "shield" | "ruler" | "chat" }) {
   const s = { fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   switch (kind) {

@@ -149,6 +149,50 @@ export async function fetchCmsPage(slug: string, preview = false): Promise<CmsFe
   }
 }
 
+/** شکل پارامترهای جست‌وجوی صفحه (Next 15 آن را Promise می‌دهد) */
+export type PreviewParams = Record<string, string | string[] | undefined>;
+
+/**
+ * آیا درخواست پیش‌نمایش از پنل صفحه‌ساز آمده؟
+ *
+ * پنل، صفحهٔ واقعی را داخل iframe با `?cmsPreview=1` باز می‌کند. همین
+ * پرچم باعث می‌شود:
+ *  ۱) API نسخهٔ «پیش‌نویس» صفحه را هم بدهد (نه فقط منتشرشده)؛
+ *  ۲) فروشگاه به‌جای رندر ساده، «سطح پیش‌نمایش» را بگذارد که با پنل حرف می‌زند.
+ *
+ * در Next 15 پارامترهای جست‌وجو فقط از طریق prop صفحه می‌آیند (نه
+ * `next/headers`)، پس صفحه آن را به `CmsSlot` می‌دهد.
+ */
+export function isPreview(sp: PreviewParams | undefined): boolean {
+  const raw = sp?.cmsPreview;
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return v === "1" || v === "true";
+}
+
+/** نتیجهٔ resolve — وضعیت صفحه به‌همراه اینکه در حالت پیش‌نمایش هستیم یا نه */
+export interface CmsSlotResult {
+  /** صفحهٔ CMS این مسیر — `null` یعنی هنوز چیزی ساخته نشده */
+  page: CmsPageData | null;
+  status: string | null;
+  /** نسخهٔ پیش‌نویس (منتشر نشده) است؟ */
+  draft: boolean;
+  /** درخواست از پنل صفحه‌ساز آمده؟ */
+  previewMode: boolean;
+}
+
+/**
+ * حلّ یک «جایگاه صفحه» روی مسیر واقعی سایت.
+ *
+ * `page === null` یعنی برای این مسیر صفحه‌ای در صفحه‌ساز نیست → فروشگاه
+ * چیدمان پیش‌فرض خودش را نشان می‌دهد. ولی در حالت پیش‌نمایش باز هم
+ * `previewMode` روشن است، چون پنل باید بتواند پیش‌نویس را بفرستد.
+ */
+export async function resolveCmsSlot(slug: string, previewMode: boolean): Promise<CmsSlotResult> {
+  const res = await fetchCmsPage(slug, previewMode);
+  if (!res) return { page: null, status: null, draft: false, previewMode };
+  return { page: res.page, status: res.status, draft: res.preview, previewMode };
+}
+
 /**
  * کوکی نشست ادمین برای پیش‌نمایش — در Next 15 کوکی‌ها async خوانده می‌شوند.
  * اگر در دسترس نبود، پیش‌نمایش به حالت عمومی برمی‌گردد (بی‌خطر).

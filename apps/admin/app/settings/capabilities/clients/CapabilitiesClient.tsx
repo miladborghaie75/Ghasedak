@@ -63,7 +63,7 @@ export default function CapabilitiesClient() {
     const r = await call<{ written: string[] }>("/admin/capabilities/credentials", { method: "POST", body: JSON.stringify(payload) });
     if (r.ok) {
       setCredDraft({});
-      setMsg("کلیدها ذخیره شد ✅ — برای اعمال کامل، API را ری‌استارت کنید.");
+      setMsg("کلیدها ذخیره شد ✅ — برای اعمال کامل، API را ری‌استارت کن.");
       await load();
     } else {
       setMsg(r.error?.message ?? "خطا در ذخیرهٔ کلید");
@@ -96,7 +96,7 @@ export default function CapabilitiesClient() {
   /** کلید همان اپراتور + فعال‌شدنش — یک اقدام از کارت پیامک */
   const saveSmsKey = async (id: string) => {
     const key = (smsKeyDraft[id] ?? "").trim();
-    if (!key) { setMsg("کلید را وارد کنید."); setTimeout(() => setMsg(""), 3000); return; }
+    if (!key) { setMsg("کلید را وارد کن."); setTimeout(() => setMsg(""), 3000); return; }
     const r = await call("/admin/capabilities/sms/providers/key", { method: "POST", body: JSON.stringify({ provider: id, key }) });
     if (r.ok) {
       setSmsKeyDraft((d) => ({ ...d, [id]: "" }));
@@ -108,9 +108,9 @@ export default function CapabilitiesClient() {
 
   const saveMerchant = async () => {
     const v = merchantDraft.trim();
-    if (!v) { setMsg("Merchant ID را وارد کنید."); setTimeout(() => setMsg(""), 3000); return; }
+    if (!v) { setMsg("Merchant ID را وارد کن."); setTimeout(() => setMsg(""), 3000); return; }
     const r = await call<{ written: string[] }>("/admin/capabilities/credentials", { method: "POST", body: JSON.stringify({ ZARINPAL_MERCHANT_ID: v }) });
-    if (r.ok) { setMerchantDraft(""); setMsg("Merchant ID ذخیره شد ✅ — حالا تست اتصال را بزنید."); await load(); }
+    if (r.ok) { setMerchantDraft(""); setMsg("Merchant ID ذخیره شد ✅ — حالا تست اتصال را بزن."); await load(); }
     else setMsg(r.error?.message ?? "خطا در ذخیره");
     setTimeout(() => setMsg(""), 5000);
   };
@@ -120,7 +120,7 @@ export default function CapabilitiesClient() {
     setPayBusy(true);
     const r = await call<{ ok?: boolean; message?: string; endpoint?: string; authorityMasked?: string }>("/admin/capabilities/payment-gateway/test", { method: "POST" });
     if (!r.ok) setPayTest({ ok: false, text: r.error?.message ?? "خطا" });
-    else if (r.data?.ok) setPayTest({ ok: true, text: `اتصال موفق (${r.data.endpoint}) — authority: ${r.data.authorityMasked ?? "—"}` });
+    else if (r.data?.ok) setPayTest({ ok: true, text: `اتصال موفق ✅ — درگاه پاسخ داد (شناسهٔ مرجع: ${r.data.authorityMasked ?? "—"})` });
     else setPayTest({ ok: false, text: r.data?.message ?? "تست ناموفق" });
     setPayBusy(false);
   };
@@ -262,7 +262,7 @@ export default function CapabilitiesClient() {
                         autoComplete="off"
                         value={credDraft[k] ?? ""}
                         onChange={(e) => setCredDraft((d) => ({ ...d, [k]: e.target.value }))}
-                        placeholder={it.configured ? "(بدون تغییر اگر خالی بماند)" : "کلید را وارد کنید"}
+                        placeholder={it.configured ? "(بدون تغییر اگر خالی بماند)" : "کلید را وارد کن"}
                         className="w-56 rounded-lg border border-line bg-bg px-2 py-1.5 font-mono text-[11px]"
                         dir="ltr"
                       />

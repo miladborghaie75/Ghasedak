@@ -1,0 +1,14 @@
+{
+  "name": "@ghasedak/copy-rules",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./core.d.ts",
+      "default": "./core.mjs"
+    },
+    "./audit": { "types": "./audit.d.mts", "default": "./audit.mjs" },
+    "./apply": { "types": "./apply.d.mts", "default": "./apply.mjs" }
+  }
+}

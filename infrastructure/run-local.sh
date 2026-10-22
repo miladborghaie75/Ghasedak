@@ -7,6 +7,13 @@
 #   bash infrastructure/run-local.sh stop      # خاموشی کامل
 #   bash infrastructure/run-local.sh restart
 #
+# حالت توسعه (بدون build):
+#   GHASEDAK_DEV=1 bash infrastructure/run-local.sh start
+#   → فروشگاه و پنل با «next dev» بالا می‌آیند (کامپایل در لحظه، بدون build).
+#     برای کسی که هم‌زمان روی صفحه‌ساز کار می‌کند بهترین انتخاب است.
+#   بدون این متغیر، اگر build تولیدی نباشد خودِ اسکریپت اول build می‌گیرد
+#   (لاگ: .run-local/<نام>-build.log) تا بومِ صفحه‌ساز همیشه زنده باشد.
+#
 # انتخاب دیتابیس با متغیر محیطی GHASEDAK_DB:
 #   rehearsal (پیش‌فرض) — کلاستر تمرین :55433 / wave1rehearsal3
 #                          (اسکیما هم‌راستا با کد فعلی + seed دمو — گزینهٔ امن)
@@ -174,6 +181,39 @@ start_api() {
   fi
 }
 
+# build_frontend <نام> <دایرکتوری اپ>
+#
+# چرا این تابع لازم است؟ «next start» بدون build تولیدی با خطای
+# «Could not find a production build in the '.next' directory» می‌میرد و
+# بومِ صفحه‌ساز (iframe) روی ERR_CONNECTION_REFUSED می‌ماند — یعنی صفحه
+# هرگز بالا نمی‌آید و مدیر یک جعبهٔ سفیدِ بی‌پیام می‌بیند. پس اگر build
+# تولیدی نیست، اول همان را می‌سازیم؛ اگر build شکست خورد، علتِ واقعی
+# (نه یک پیام مبهم) را نشان می‌دهیم.
+build_frontend() { # <نام> <دایرکتوری اپ>
+  local name="$1" dir="$2"
+  local pkg build_log="$RUN_DIR/$name-build.log"
+  # مسیرِ MSYS (/c/Users/...) را به فرم ویندوزی بده تا node آن را بخواند —
+  # وگرنه require() شکست می‌خورد و build بی‌صدا رد می‌شود.
+  local wdir wpkg
+  wdir=$(cygpath -w "$dir")
+  wpkg=$(cygpath -w "$dir/package.json")
+  pkg=$(node -p "require(process.argv[1]).name" "$wpkg" 2>/dev/null || echo "")
+  if [ -z "$pkg" ]; then
+    bad "نامِ پکیجِ $dir پیدا نشد — build انجام نشد"
+    return 1
+  fi
+  say "  build تازه برای $name ($pkg) — ممکن است چند دقیقه طول بکشد…"
+  # turbo با dependsOn ^build اول پکیج‌های وابسته (contracts/blocks) را می‌سازد
+  if (cd "$wdir" && pnpm exec turbo run build --filter="$pkg" >"$build_log" 2>&1); then
+    ok "build تمام شد (لاگ: $build_log)"
+    return 0
+  fi
+  bad "build ناموفق بود — علت واقعی در لاگ:"
+  tail -n 25 "$build_log" 2>/dev/null | sed 's/^/    /'
+  say "    (لاگ کامل: $build_log)"
+  return 1
+}
+
 start_frontend() { # <نام> <پورت> <دایرکتوری اپ>
   local name="$1" port="$2" dir="$3"
   say "— $name :$port"
@@ -183,14 +223,27 @@ start_frontend() { # <نام> <پورت> <دایرکتوری اپ>
   fi
   local js="$dir/node_modules/next/dist/bin/next"
   if [ ! -f "$js" ]; then
-    bad "بستهٔ next پیدا نشد: $js (اول pnpm install + build)"
+    bad "بستهٔ next پیدا نشد: $js (اول pnpm install)"
     return 1
   fi
+
+  # «start» یعنی سرورِ تولیدی (همان build‌ای که ساختیم)، «dev» یعنی کامپایلِ زنده.
+  local mode="start" wait_s=45
+  if [ "${GHASEDAK_DEV:-}" = "1" ]; then
+    # حالت توسعه: next dev خودش را کامپایل می‌کند و build لازم ندارد —
+    # برای کسی که هم‌زمان روی صفحه‌ساز کار می‌کند بهترین انتخاب است.
+    mode="dev"
+    wait_s=120
+    say "  حالت توسعه (GHASEDAK_DEV=1) — next dev، بدون build"
+  elif [ ! -f "$dir/.next/BUILD_ID" ]; then
+    build_frontend "$name" "$dir" || return 1
+  fi
+
   local pid code=000 i
   # اجرای مستقیم node.exe روی فایل JS — بدون shell و بدون batch (یونیکد/quote امن)
   pid=$(spawn_detached "$name" "$dir" "$RUN_DIR/$name.log" \
-    "$NODE_EXE" "node_modules/next/dist/bin/next" start -p "$port")
-  for i in $(seq 1 45); do
+    "$NODE_EXE" "node_modules/next/dist/bin/next" "$mode" -p "$port")
+  for i in $(seq 1 "$wait_s"); do
     sleep 1
     code=$(http_code "http://localhost:$port/")
     [ "$code" != "000" ] && break

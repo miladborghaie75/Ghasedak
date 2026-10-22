@@ -135,7 +135,7 @@ export default function ChartOfAccounts() {
     setError(null);
     const parent = accounts.find((a) => a.code === form.parentCode);
     if (!parent) {
-      setError("حساب والد را انتخاب کنید.");
+      setError("حساب والد را انتخاب کن.");
       return;
     }
     if (!/^\d{4}(-\d{2})?$/.test(form.code.trim())) {

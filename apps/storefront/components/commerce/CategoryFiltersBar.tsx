@@ -24,7 +24,8 @@ import {
   type FilterStateV2,
   type ProductV2,
 } from "@/lib/catalog-repo";
-import { SORT_LABELS, type SortKey } from "@/lib/sort";
+import type { SortKey } from "@/lib/sort";
+import { SortSelect } from "./SortSelect";
 
 const PARAMS: Record<string, string> = {
   size: "size",
@@ -183,7 +184,9 @@ export function CategoryFiltersBar({ category, filters, sort }: BarProps) {
                           "size-9 rounded-full border-2 transition-transform",
                           sel ? "border-primary-strong scale-110" : "border-line hover:scale-105",
                         )}
-                        style={{ backgroundColor: t.hex }}
+                        data-swatch
+                        /* رنگ از متغیر می‌آید تا در چاپ حفظ شود */
+                        style={{ "--swatch": t.hex } as React.CSSProperties}
                       />
                     );
                   })}
@@ -281,19 +284,8 @@ export function CategoryFiltersBar({ category, filters, sort }: BarProps) {
           )}
         </div>
 
-        {/* سورت — بدون گزینه جعلی (بند ۲۱) */}
-        <label className="ms-auto flex shrink-0 items-center gap-1.5 text-[12px] text-muted">
-          <span className="hidden sm:inline">مرتب‌سازی:</span>
-          <select
-            value={sort}
-            onChange={(e) => go({}, e.target.value as SortKey)}
-            className="h-10 rounded-full border border-line bg-surface px-3 text-[12px] font-bold text-ink"
-          >
-            {Object.entries(SORT_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
-        </label>
+        {/* سورت — بدون گزینه جعلی (بند ۲۱)؛ کامپوننت مشترک با صفحهٔ جستجو */}
+        <SortSelect sort={sort} className="ms-auto" />
       </div>
 
       {/* Drawer فیلتر — موبایل؛ در دسکتاپ هم قابل باز شدن */}

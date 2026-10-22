@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { COPY } from "@/lib/copy";
 
 /**
  * قالب مشترک صفحات محتوایی/قانونی فروشگاه.
@@ -7,12 +8,12 @@ import type { Metadata } from "next";
  */
 
 const NAV = [
-  { href: "/about", title: "درباره ما" },
-  { href: "/returns", title: "شرایط بازگشت کالا" },
-  { href: "/shipping", title: "روش‌های ارسال" },
-  { href: "/terms", title: "قوانین و مقررات" },
-  { href: "/privacy", title: "حریم خصوصی" },
-  { href: "/contact", title: "تماس با ما" },
+  { href: "/about", title: COPY.legal.about },
+  { href: "/returns", title: COPY.legal.returns },
+  { href: "/shipping", title: COPY.legal.shipping },
+  { href: "/terms", title: COPY.legal.terms },
+  { href: "/privacy", title: COPY.legal.privacy },
+  { href: "/contact", title: COPY.legal.contact },
 ];
 
 export function LegalShell({
@@ -28,9 +29,9 @@ export function LegalShell({
 }) {
   return (
     <div className="mx-auto max-w-4xl px-3 pb-16 pt-6 sm:px-4 sm:pt-10">
-      <nav aria-label="مسیر صفحه" className="mb-4">
+      <nav aria-label={COPY.breadcrumb} className="mb-4">
         <Link href="/" className="text-xs text-muted hover:text-primary-strong">
-          ← بازگشت به فروشگاه
+          ← {COPY.backToStore}
         </Link>
       </nav>
 

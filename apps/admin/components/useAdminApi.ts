@@ -62,19 +62,33 @@ export function fa(n: string | number | null | undefined): string {
 /**
  * آپلود فایل به کتابخانه رسانه — POST /admin/capabilities/media (بند ۳۵).
  * اعتبارسنجی mime/magic/حجم سمت سرور انجام می‌شود؛ اینجا فقط base64 می‌سازیم.
- * توسط میزکار فاکتور خرید و کتابخانه رسانه استفاده می‌شود — یک مسیر واحد.
+ *
+ * یک مسیرِ واحد برای هر آپلودِ پنل: میزکار فاکتور خرید، کتابخانهٔ رسانه و
+ * کادرِ برنامهٔ عکاسی همه از همین رد می‌شوند. `alt`/`title` اختیاری‌اند؛ وقتی
+ * داده نشوند، نامِ فایل می‌نشیند (خالی‌گذاشتنِ alt یعنی تصویرِ بی‌توضیح برای
+ * صفحه‌خوان — همان خطایی که کتابخانه هشدارش را نشان می‌دهد).
  */
 export async function uploadMedia(
   file: File,
   call: <T,>(path: string, init?: RequestInit) => Promise<{ ok: boolean; status: number; data?: T; error?: { message?: string } }>,
-): Promise<{ ok: boolean; id?: string; error?: string }> {
+  opts: { alt?: string | null; title?: string | null } = {},
+): Promise<{ ok: boolean; id?: string; url?: string; storageKey?: string; error?: string }> {
   const buf = await file.arrayBuffer();
   let binary = "";
   const bytes = new Uint8Array(buf);
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  const r = await call<{ id: string; url: string }>("/admin/capabilities/media", {
+  const r = await call<{ id: string; url: string; storageKey: string }>("/admin/capabilities/media", {
     method: "POST",
-    body: JSON.stringify({ filename: file.name, mime: file.type, dataBase64: btoa(binary), alt: file.name }),
+    body: JSON.stringify({
+      filename: file.name,
+      mime: file.type,
+      dataBase64: btoa(binary),
+      // `null` عمداً یعنی «بدون alt»؛ فقط `undefined` به نام فایل برمی‌گردد
+      alt: opts.alt === undefined ? file.name : opts.alt,
+      title: opts.title ?? undefined,
+    }),
   });
-  return r.ok ? { ok: true, id: r.data?.id } : { ok: false, error: r.error?.message ?? "خطا در آپلود" };
+  return r.ok
+    ? { ok: true, id: r.data?.id, url: r.data?.url, storageKey: r.data?.storageKey }
+    : { ok: false, error: r.error?.message ?? "خطا در آپلود" };
 }

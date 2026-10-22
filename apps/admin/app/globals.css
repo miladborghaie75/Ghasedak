@@ -38,6 +38,35 @@
 }
 
 /*
+ * پالت برند — همان توکن‌های فروشگاه (بند ۱۰۶).
+ *
+ * پنل صفحه‌ساز رنگ قاب‌های آرت را نشان می‌دهد؛ اگر این سه توکن نبود،
+ * انتخابگر رنگ در پنل چیزی جز سایهٔ خالی نشان نمی‌داد و سایت رنگی دیگر
+ * می‌ساخت. مقادیر عیناً از فروشگاه کپی شده‌اند.
+ *
+ * چرا `static`؟ توکن‌های `@theme` معمولی که در هیچ کلاسی مصرف نشوند
+ * درخت‌کَنی می‌شوند و اصلاً به CSS نمی‌رسند. این سه رنگ فقط داخل `var(--…)`
+ * (سواچ انتخاب رنگ و پیش‌نمایش آرت) مصرف می‌شوند — پس باید صریحاً منتشر شوند.
+ */
+@theme static {
+  --color-plum: #3b2948;
+  --color-sage: #8fa89b;
+  --color-dusty-rose: #c9829d;
+  /*
+   * پالتِ قاب‌های آرت — عیناً همان مقادیر فروشگاه (بند ۱۰۶).
+   *
+   * چرا توکن‌های جدا از متن؟ «بنفش تیره» هم رنگِ تیترهاست و هم رنگِ قابِ
+   * آرت؛ اگر یکی باشند، در تم شب «بنفش برند» و «بنفش تیره» یک‌رنگ می‌شوند
+   * و مدیر در پنل دو سواچِ تقریباً یکسان می‌بیند. پس پالتِ آرت توکنِ خودش
+   * را دارد و پنل دقیقاً همان رنگی را نشان می‌دهد که سایت رندر می‌کند.
+   */
+  --color-art-brand: var(--color-primary);
+  --color-art-plum: #3b2948;
+  --color-art-sage: #8fa89b;
+  --color-art-rose: #c9829d;
+}
+
+/*
  * توکن‌های معنایی — تم-آگاه (بند ۴۹): کامپوننت‌ها به این‌ها وصل‌اند.
  * حالت روشن = همان مقادیر @theme؛ حالت شب بازتعریف می‌شود (پایین).
  */
@@ -99,6 +128,8 @@
   --color-app-primary: var(--app-primary);
   --color-app-primary-strong: var(--app-primary-strong);
   --color-app-primary-soft: var(--app-primary-soft);
+  /* صفحهٔ رنگیِ قاب آرت — همان چیزی که فروشگاه رندر می‌کند */
+  --color-app-primary-tint: var(--app-primary-tint);
   --color-app-deep: var(--app-deep);
   --color-app-ok: var(--app-ok);
   --color-app-err: var(--app-err);
@@ -108,6 +139,9 @@
   --color-app-overlay: var(--app-overlay);
   --color-app-focus-ring: var(--app-focus-ring);
   --color-on-accent: var(--app-on-accent);
+  /* سایه‌های معنایی — برای بلوک‌های مشترک صفحه‌ساز (قالب `shadow-app-shadow-1/2`) */
+  --shadow-app-shadow-1: var(--app-shadow-1);
+  --shadow-app-shadow-2: var(--app-shadow-2);
 }
 
 /* سوییچ تم در بدنه <html> — کلاس‌های پایه (@theme) هم در شب بازنگری می‌شوند
@@ -121,9 +155,18 @@ html[data-theme="dark"] {
   --color-primary: #c3a4f2;
   --color-primary-strong: #d0b7f5;
   --color-primary-soft: #3a2f4a;
+  --color-primary-tint: #38304a;
   --color-deep: #d9c8f2;
   --color-ok: #6fbf96;
   --color-err: #e58494;
+  /* پالت برند در تم شب — همان بازنگاشت فروشگاه */
+  --color-plum: #d9c8f2;
+  --color-sage: #a3bfae;
+  --color-dusty-rose: #dfa3b8;
+  /* پالتِ آرت در تم شب — چهار رنگِ متمایز (عین فروشگاه) */
+  --color-art-plum: #8b5cf6;
+  --color-art-sage: #a3bfae;
+  --color-art-rose: #dfa3b8;
 }
 
 body {
@@ -211,6 +254,11 @@ body {
     --color-deep: #000000;
     --color-ok: #1a6b46;
     --color-err: #a02033;
+    /* پالتِ آرت هم در چاپ خنثی می‌شود (سند سیاه‌وسفید) */
+    --color-art-brand: #333333;
+    --color-art-plum: #333333;
+    --color-art-sage: #333333;
+    --color-art-rose: #333333;
     --app-bg: #ffffff;
     --app-surface: #ffffff;
     --app-ink: #000000;

@@ -13,6 +13,7 @@ import type { PaymentProviderAdapter, PaymentRequestContext } from "./provider";
 import { ZarinpalProvider } from "./zarinpal.provider";
 import { MockPaymentProvider } from "./mock.provider";
 import { resolveCallbackUrl } from "./callback-url";
+import { MeasurementService } from "../analytics/measurement.service";
 import { GL, GL_COGS, GL_EXPENSE, GL_REVENUE, gatewayFeeAmount } from "@ghasedak/contracts";
 import { warehouseGlCode } from "../inventory/inventory.service";
 
@@ -44,6 +45,7 @@ export class PaymentsService implements OnModuleInit {
     private readonly treasury: TreasuryService,
     private readonly zarinpal: ZarinpalProvider,
     private readonly mock: MockPaymentProvider,
+    private readonly measurement: MeasurementService,
   ) {}
 
   onModuleInit(): void {
@@ -52,6 +54,8 @@ export class PaymentsService implements OnModuleInit {
     if (!this.zarinpal.isConfigured()) {
       this.logger.warn("ZarinPal NOT CONFIGURED at boot — با ذخیرهٔ Merchant ID از کارت ادمین، بدون ری‌استارت فعال می‌شود.");
     }
+    // وضعیت GA4 سروری — فقط لاگ بوت، نه خطا (بند ۱۱۱: خاموشی صادقانه)
+    this.measurement.logBootStatus();
     if (process.env.NODE_ENV !== "production") {
       this.providers.set("mock", this.mock);
     }
@@ -349,6 +353,14 @@ export class PaymentsService implements OnModuleInit {
         } as object,
       },
     });
+    // GA4 purchase سمت سرور (تصمیم D-3 گام ۱۵) — fire-and-forget؛ شکستش هرگز
+    // پرداخت تاییدشده را نمی‌شکند. اینجا تنها نقطهٔ شلیک است چون finalizePaid
+    // دقیقاً یک‌بار برای هر attempt اجرا می‌شود (verify روی PAID زود برمی‌گردد).
+    if (attempt.orderId) {
+      void this.measurement
+        .sendPurchaseForOrder(attempt.orderId, Number(attempt.amount))
+        .catch((e) => this.logger.warn(`GA4 purchase fire-and-forget ناموفق: ${e instanceof Error ? e.message : String(e)}`));
+    }
     return { state: "PAID", refId };
   }
 

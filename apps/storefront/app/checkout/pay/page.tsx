@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { COPY } from "@/lib/copy";
 import { PayForm } from "./PayForm";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ export default async function PayPage({
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
         <p className="text-sm font-bold text-ink">سفارشی برای پرداخت یافت نشد.</p>
         <Link href="/" className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent">
-          بازگشت به فروشگاه
+          {COPY.backToStore}
         </Link>
       </div>
     );
@@ -37,7 +38,7 @@ export default async function PayPage({
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
         <p className="text-sm font-bold text-ink">سفارش یافت نشد یا در دسترس نیست.</p>
         <Link href="/" className="mt-4 inline-flex h-11 items-center rounded-full border border-line px-6 text-sm font-bold text-ink">
-          بازگشت به فروشگاه
+          {COPY.backToStore}
         </Link>
       </div>
     );

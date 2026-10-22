@@ -176,7 +176,7 @@ export default function StatementChecks({ bankAccountId }: { bankAccountId: stri
                       ) : c.canClear && c.direction === "RECEIVED" ? (
                         <button
                           disabled={loading || busyStmt === r.statementId || !canClear}
-                          title={canClear ? undefined : "دسترسی وصول چک را ندارید"}
+                          title={canClear ? undefined : "دسترسی وصول چک را نداری"}
                           onClick={() => void clearFromStatement(r)}
                           className="rounded border border-emerald-500/60 text-emerald-700 px-1.5 py-0.5 hover:bg-emerald-500/10 disabled:opacity-50"
                         >

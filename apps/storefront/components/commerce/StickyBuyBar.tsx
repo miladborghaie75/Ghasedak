@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { useCart } from "@/components/providers/CartProvider";
 import { cn } from "@/lib/cn";
+import { COPY } from "@/lib/copy";
 import { faNum } from "@/lib/format";
 import { minPrice, salePriceOf } from "@/lib/catalog-repo";
 import type { ProductV2 } from "@/lib/catalog";
@@ -44,7 +45,7 @@ export function StickyBuyBar({ product }: { product: ProductV2 }) {
   return (
     <div
       className={cn(
-        "fixed inset-x-0 bottom-0 z-40 lg:hidden",
+        "fixed inset-x-0 bottom-0 z-40 lg:hidden print:hidden",
         "border-t border-line bg-surface/95 px-3 py-2.5 shadow-clay-3 backdrop-blur",
       )}
     >
@@ -73,11 +74,11 @@ export function StickyBuyBar({ product }: { product: ProductV2 }) {
           )}
         >
           {!anyStock
-            ? "ناموجود"
+            ? COPY.outOfStock
             : added
-              ? "به سبدت اضافه شد 💜"
+              ? COPY.addedToCart
               : inStock.length === 1
-                ? "افزودن به سبد"
+                ? COPY.addToCart
                 : "انتخاب و افزودن"}
         </button>
       </div>

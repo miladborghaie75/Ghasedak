@@ -18,7 +18,6 @@
   --color-ink: #29232f;
   --color-muted: #756a7b;
   --color-line: #e3dce8;
-  --color-plum: #3b2948;
   --color-primary: #8a5bc9;
   --color-primary-hover: #7a4ab8;
   --color-primary-strong: #6e46b8;
@@ -26,8 +25,6 @@
   --color-primary-tint: #f6f1fc;
   --color-primary-soft: #d9c8f2;
   --color-primary-press: #5a379c;
-  --color-sage: #8fa89b;
-  --color-dusty-rose: #c9829d;
   --color-success: #3f8a68;
   --color-error: #c94a5a;
 
@@ -44,6 +41,33 @@
 }
 
 /*
+ * پالت برند — همیشه منتشر می‌شود (بند «نمونه‌کار آرت»).
+ *
+ * چرا `static`؟ توکن‌های `@theme` معمولی که در هیچ کلاسی استفاده نشوند
+ * درخت‌کَنی می‌شوند و اصلاً به CSS نمی‌رسند. این سه رنگ فقط داخل `var(--…)`
+ * (پالت قاب‌های آرت و سواچ پنل) مصرف می‌شوند، نه در کلاس‌های Tailwind — پس
+ * بدون `static` ناپدید می‌شدند و قاب‌ها بی‌رنگ/سیاه می‌شدند.
+ */
+@theme static {
+  --color-plum: #3b2948;
+  --color-sage: #8fa89b;
+  --color-dusty-rose: #c9829d;
+  /*
+   * پالتِ قاب‌های آرت — جدا از توکن‌های متن.
+   *
+   * چرا جدا؟ «بنفش تیره» دو نقش دارد: رنگِ متنِ تیترها (که در تم شب باید
+   * روشن باشد تا خوانده شود) و رنگِ قابِ آرت (که باید در هر دو تم *متمایز*
+   * بماند). با یک توکنِ مشترک، در تم شب «بنفش برند» (#c3a4f2) و «بنفش تیره»
+   * (#d9c8f2) هر دو یک یاسِ کم‌رنگ می‌شدند و دو قابِ جدا یک‌رنگ می‌شدند.
+   * این توکن‌ها را هر تم جدا بازنگاشت می‌کند (پایین).
+   */
+  --color-art-brand: var(--color-primary);
+  --color-art-plum: #3b2948;
+  --color-art-sage: #8fa89b;
+  --color-art-rose: #c9829d;
+}
+
+/*
  * توکن‌های معنایی — تم-آگاه (بند ۴۹): کامپوننت‌ها به این‌ها وصل‌اند.
  * حالت روشن = همان مقادیر @theme؛ حالت شب بازتعریف می‌شود (پایین).
  */
@@ -57,6 +81,7 @@
   --app-primary: var(--color-primary);
   --app-primary-hover: var(--color-primary-hover);
   --app-primary-active: var(--color-primary-press);
+  --app-primary-strong: var(--color-primary-strong);
   --app-primary-tint: var(--color-primary-tint);
   --app-primary-soft: var(--color-primary-soft);
   --app-on-accent: #ffffff;
@@ -108,6 +133,7 @@
   --color-app-primary: var(--app-primary);
   --color-app-primary-hover: var(--app-primary-hover);
   --color-app-primary-active: var(--app-primary-active);
+  --color-app-primary-strong: var(--app-primary-strong);
   --color-app-primary-tint: var(--app-primary-tint);
   --color-app-primary-soft: var(--app-primary-soft);
   --color-app-on-accent: var(--app-on-accent);
@@ -118,11 +144,29 @@
   --color-app-overlay: var(--app-overlay);
   --color-app-focus-ring: var(--app-focus-ring);
   --color-on-accent: var(--app-on-accent);
+  /*
+   * سایه‌های معنایی — پکیج بلوک‌ها از `shadow-app-shadow-1/2` استفاده می‌کند
+   * (کارت محصول، قاب هیرو، نمونه‌کار). بدون این نگاشت، آن کلاس‌ها در
+   * Tailwind تولید نمی‌شدند و همهٔ بلوک‌های مشترک بدون عمق می‌ماندند.
+   */
+  --shadow-app-shadow-1: var(--app-shadow-1);
+  --shadow-app-shadow-2: var(--app-shadow-2);
+  --shadow-app-shadow-3: var(--app-shadow-3);
 }
 
 /* اعداد فارسی جدولی برای قیمت‌ها */
 .tnum {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * سواچ رنگ (واریانت محصول/فیلتر) — رنگ از متغیر می‌آید، نه مستقیم.
+ * دلیل: در چاپ قاعدهٔ «پس‌زمینه‌ها شفاف شوند» همه‌چیز را می‌بلعد، ولی رنگِ
+ * سواچ **محتواست** (کدام رنگ موجود است)؛ با متغیر می‌توان همان مقدار را
+ * در بلوک چاپ دوباره اعمال کرد.
+ */
+[data-swatch] {
+  background-color: var(--swatch, transparent);
 }
 
 /* ورود Bottom Sheet */
@@ -235,6 +279,15 @@ html[data-theme="dark"] {
   --color-primary-press: #b592ec;
   --color-sage: #a3bfae;
   --color-dusty-rose: #dfa3b8;
+  /*
+   * پالتِ آرت در تم شب — چهار رنگِ متمایز روی سطحِ تیره.
+   * «بنفش تیره» اینجا بنفشِ اشباعِ گرد است (نه یاسِ روشنِ تیترها) تا از
+   * «بنفش برند» جدا بماند؛ سبز و صورتی هم روشن‌تر می‌شوند تا روی سطحِ
+   * تیره خوانا بمانند.
+   */
+  --color-art-plum: #8b5cf6;
+  --color-art-sage: #a3bfae;
+  --color-art-rose: #dfa3b8;
   --color-success: #6fbf96;
   --color-error: #e58494;
   --shadow-clay-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 24px -8px rgba(0, 0, 0, 0.45);
@@ -255,4 +308,186 @@ body {
   outline: 3px solid var(--color-primary-strong);
   outline-offset: 2px;
   border-radius: 6px;
+}
+
+/* ============================================================
+   سبک چاپ (گام ۹ — F1-13): برگهٔ مشخصات محصول و فاکتور سفارش باید
+   روی کاغذ A4 خوانا باشند. قاعده‌ها دو بخش‌اند:
+   ۱) این بلوک — نرمال‌سازی سراسری (کاغذ سفید، بی‌تزئین، بی‌پرش).
+   ۲) در کامپوننت‌ها — کروم سایت و کنترل‌های تعاملی با `print:hidden`
+      علامت خورده‌اند (هدر/فوتر/شیت/چسبنده/قلب/دکمهٔ افزودن).
+   تم شب روی کاغذ بی‌معناست؛ همیشه سفید/سیاه چاپ می‌شود.
+   ============================================================ */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm 12mm 14mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /*
+   * توکن‌ها در چاپ خنثی می‌شوند — مهم‌ترین قاعدهٔ این بلوک.
+   * ریشهٔ باگی که با تست واقعی چاپ پیدا شد: در تم شب `--color-ink`
+   * برابر #f0eaf6 است؛ روی کاغذ سفید، هر متنی با `text-ink` تقریباً
+   * نامرئی چاپ می‌شد (فاکتور کاربر دارک‌مود ناخوانا). اینجا هر دو
+   * خانوادهٔ توکن (Tailwind + معنایی) به مقادیر چاپی بازنویسی می‌شوند
+   * و چون این بلوک آخرِ فایل است، تساوی specificity را می‌برد.
+   */
+  /*
+   * چرا `html:root` و `!important`: تنظیمات تم (Setting ادمین) در `<body>`
+   * یک <style> تزریق می‌کند که توکن‌ها را با همان `:root` تعریف می‌کند و
+   * چون بعد از این فایل می‌آید، در تساوی specificity برنده می‌شد — یعنی
+   * اگر تمِ پیش‌فرض سایت تیره باشد، متن روی کاغذ سفید سفید چاپ می‌شد.
+   * پس این بلوک عمداً با specificity بالاتر و !important نوشته شده:
+   * روی کاغذ، خوانایی از تم وب مهم‌تر است.
+   */
+  html:root,
+  html[data-theme="dark"] {
+    --color-bg: #ffffff !important;
+    --color-surface: #ffffff !important;
+    --color-ink: #000000 !important;
+    --color-muted: #333333 !important;
+    --color-line: #bfbfbf !important;
+    --color-plum: #000000 !important;
+    --color-primary: #333333 !important;
+    --color-primary-hover: #333333 !important;
+    --color-primary-strong: #000000 !important;
+    --color-primary-light: #f2f2f2 !important;
+    --color-primary-tint: #f7f7f7 !important;
+    --color-primary-soft: #ececec !important;
+    --color-primary-press: #000000 !important;
+    --color-sage: #333333 !important;
+    --color-dusty-rose: #333333 !important;
+    /* پالتِ آرت هم مثل بقیهٔ رنگ‌ها در چاپ خنثی می‌شود (art-brand از --color-primary می‌آید) */
+    --color-art-plum: #333333 !important;
+    --color-art-sage: #333333 !important;
+    --color-art-rose: #333333 !important;
+    --color-success: #000000 !important;
+    --color-error: #000000 !important;
+    --color-on-accent: #ffffff !important;
+    --app-bg: #ffffff !important;
+    --app-surface: #ffffff !important;
+    --app-elevated: #ffffff !important;
+    --app-ink: #000000 !important;
+    --app-muted: #333333 !important;
+    --app-line: #bfbfbf !important;
+    --app-primary: #333333 !important;
+    --app-primary-hover: #333333 !important;
+    --app-primary-active: #000000 !important;
+    --app-primary-tint: #f7f7f7 !important;
+    --app-primary-soft: #ececec !important;
+    --app-on-accent: #ffffff !important;
+    --app-success: #000000 !important;
+    --app-error: #000000 !important;
+    --app-warning: #000000 !important;
+    --app-info: #000000 !important;
+    --app-focus-ring: #000000 !important;
+  }
+
+  /*
+   * موشن روی کاغذ معنا ندارد. بلوک‌های `data-motion=reveal` تا وقتی JS
+   * کلاس `.motion-in` را ندهد `opacity: 0` می‌مانند؛ در چاپ نتیجه‌اش
+   * صفحهٔ **سفیدِ نامرئی** است (جا اشغال می‌شود، محتوا دیده نمی‌شود).
+   * این باگ در PDF واقعی دیده شد: صفحهٔ اول برگهٔ محصول خالی چاپ می‌شد.
+   */
+  [data-motion="reveal"] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+
+  /* پس‌زمینه‌های رنگی → کاغذ سفید؛ تفکیک با حاشیه، نه رنگ */
+  * {
+    background-color: transparent !important;
+  }
+
+  /* تزئین حذف، محتوا می‌ماند (جوهر کمتر، کنتراست بیشتر) */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    backdrop-filter: none !important;
+    background-image: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* سواچ رنگی محتواست، نه تزئین — از قاعدهٔ «پس‌زمینه شفاف» مستثناست */
+  [data-swatch] {
+    background-color: var(--swatch, transparent) !important;
+    border-color: #7a7a7a !important;
+  }
+
+  /* کارت‌ها: حاشیهٔ نازک خاکستری + بی‌پرش در وسط */
+  .rounded-card,
+  .rounded-blob {
+    border: 1px solid #bfbfbf !important;
+    break-inside: avoid;
+  }
+
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+
+  img,
+  svg {
+    max-width: 100% !important;
+  }
+
+  /* فاکتور: سرخط جدول در هر صفحه تکرار شود، سطرها نصفه نشوند */
+  thead {
+    display: table-header-group;
+  }
+
+  tr,
+  li {
+    break-inside: avoid;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   حالت پیش‌نمایش صفحه‌ساز (بند ۱۷)
+   ─────────────────────────────────────────────────────────────
+   این کلاس فقط داخل iframe پنل صفحه‌ساز فعال است
+   (`?cmsPreview=1`). در سایت منتشرشده هیچ اثری ندارد.
+   ═══════════════════════════════════════════════════════════════ */
+[data-cms-preview] [data-cms-field] {
+  outline: 1px dashed color-mix(in srgb, var(--app-primary) 55%, transparent);
+  outline-offset: 3px;
+  border-radius: 4px;
+  cursor: text;
+  transition: outline-color 120ms ease;
+}
+
+[data-cms-preview] [data-cms-field]:hover {
+  outline-color: var(--app-primary);
+}
+
+[data-cms-preview] [data-cms-field]:focus {
+  outline: 2px solid var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary-tint) 70%, transparent);
+}
+
+/*
+ * راهنمای قابِ عکس بدون عکس — فقط داخل پنل دیده می‌شود.
+ * در سایت منتشرشده این متن هیچ‌وقت نمایش داده نمی‌شود؛ بازدیدکننده فقط قاب
+ * طراحی‌شده با نشان برند را می‌بیند، نه پیام «عکس بگذار».
+ */
+[data-cms-preview] [data-cms-empty-hint] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* بلوک انتخاب‌شده — همان چیزی که پنل روی آن کار می‌کند */
+[data-cms-preview] [data-block-id].cms-selected {
+  box-shadow: 0 0 0 2px var(--app-primary) inset;
+  border-radius: 8px;
 }

@@ -5,9 +5,9 @@ export default function NotFound() {
   return (
     <div className="mx-auto max-w-xl px-3 py-16 text-center sm:px-4">
       <p className="font-display text-7xl text-primary">۴۰۴</p>
-      <h1 className="mt-3 font-display text-2xl text-plum">صفحه‌ای که دنبالش بودید پیدا نشد</h1>
+      <h1 className="mt-3 font-display text-2xl text-plum">صفحه‌ای که دنبالش بودی پیدا نشد</h1>
       <p className="mx-auto mt-2 max-w-sm text-[13px] leading-7 text-muted">
-        ممکن است محصول حذف شده یا آدرس اشتباه باشد. از این‌جا ادامه دهید:
+        ممکن است محصول حذف شده یا آدرس اشتباه باشد. از این‌جا ادامه بده:
       </p>
       <div className="mt-5 flex flex-wrap justify-center gap-2">
         {CATEGORIES.map((c) => (
@@ -17,7 +17,7 @@ export default function NotFound() {
         ))}
       </div>
       <Link href="/" className="mt-5 inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent shadow-clay-1 hover:bg-primary-press">
-        صفحه اصلی
+        بازگشت به صفحه اصلی
       </Link>
     </div>
   );

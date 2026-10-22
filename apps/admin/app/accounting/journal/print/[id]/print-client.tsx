@@ -206,7 +206,7 @@ export default function JournalPrintClient({ id }: { id: string }) {
                   <button
                     onClick={() => void detach(a.id)}
                     disabled={entry.state === "FINAL"}
-                    title={entry.state === "FINAL" ? "سند قطعی است — اول به پیش‌نویس برگردانید" : "حذف پیوست"}
+                    title={entry.state === "FINAL" ? "سند قطعی است — اول به پیش‌نویس برگردان" : "حذف پیوست"}
                     className="no-print ms-auto rounded-full border border-line px-2.5 py-0.5 text-[10px] font-bold text-app-err disabled:opacity-30"
                   >
                     حذف

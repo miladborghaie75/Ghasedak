@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/Button";
 import { Price } from "@/components/ui/Price";
 import { cn } from "@/lib/cn";
 import { faNum } from "@/lib/format";
+import { COPY } from "@/lib/copy";
 import { ensureCatalogClient, type ProductV2 } from "@/lib/catalog-repo";
+import { getStoredUtm, track } from "@/lib/analytics";
 import type { VariantV2 } from "@/lib/catalog";
 
 /** خواندن توکن CSRF از کوکی (double-submit) و ساخت هدر */
@@ -103,9 +105,9 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
   if (ready && lines.length === 0) {
     return (
       <div className="rounded-card border border-dashed border-line bg-surface px-6 py-14 text-center">
-        <p className="text-sm font-bold text-ink">سبد شما خالی است</p>
+        <p className="text-sm font-bold text-ink">سبد خریدت خالی است</p>
         <Link href="/" className="mt-3 inline-flex h-11 items-center rounded-full bg-primary px-6 text-sm font-bold text-on-accent">
-          رفتن به فروشگاه
+          مشاهده محصولات
         </Link>
       </div>
     );
@@ -114,22 +116,22 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
   const validate = (data: FormData): Record<string, string> => {
     const errs: Record<string, string> = {};
     const name = String(data.get("name") ?? "").trim();
-    if (name.length < 3) errs.name = "نام و نام خانوادگی را کامل وارد کنید.";
+    if (name.length < 3) errs.name = "نام و نام خانوادگی را کامل وارد کن.";
 
     const phone = String(data.get("phone") ?? "").replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
     if (!/^09\d{9}$/.test(phone)) errs.phone = "شماره موبایل باید با ۰۹ شروع شود و ۱۱ رقم باشد.";
 
     const province = String(data.get("province") ?? "");
-    if (!province) errs.province = "استان را انتخاب کنید.";
+    if (!province) errs.province = "استان را انتخاب کن.";
 
     const city = String(data.get("city") ?? "").trim();
-    if (city.length < 2) errs.city = "نام شهر را وارد کنید.";
+    if (city.length < 2) errs.city = "نام شهر را وارد کن.";
 
     const address = String(data.get("address") ?? "").trim();
-    if (address.length < 8) errs.address = "خیابان را کامل بنویسید.";
+    if (address.length < 8) errs.address = "خیابان را کامل بنویس.";
 
     const plaque = String(data.get("plaque") ?? "").trim();
-    if (!plaque) errs.plaque = "پلاک را وارد کنید.";
+    if (!plaque) errs.plaque = "پلاک را وارد کن.";
 
     const postal = String(data.get("postal") ?? "").replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
     if (!/^\d{10}$/.test(postal)) errs.postal = "کد پستی باید ۱۰ رقم باشد.";
@@ -149,7 +151,12 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
     }
 
     setSubmitting(true);
-    // فلو واقعی: ثبت سفارش سرور-محور (قیمت/موجودی/کد تخفیف همگی سمت سرور — بند ۵۱)
+    // گام ۱۵ — begin_checkout: تنگای واحد ارسال فرم تسویه (گارد رضایت داخل track)
+    track("begin_checkout", {
+      value: total,
+      currency: "IRR",
+      items: lines.map((l) => ({ item_id: l.variantId, quantity: l.qty })),
+    });
     // کلید فقط یک‌بار برای این سبد ساخته می‌شود؛ کلیک دوباره همان کلید را می‌فرستد (ضد سفارش تکراری)
     if (!idemRef.current) {
       idemRef.current =
@@ -175,6 +182,8 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
           couponCode: coupon?.code ?? null,
           lines: lines.map((l) => ({ sku: l.variantId, qty: l.qty })),
           idempotencyKey: idem,
+          // گام ۱۵ (D-4) — UTM first-touch ذخیره‌شده در ورود اول به فروشگاه
+          utm: getStoredUtm(),
         }),
       });
       const body = (await res.json().catch(() => null)) as
@@ -185,7 +194,7 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
         setErrors({
           form:
             body?.error?.message ??
-            "ثبت سفارش ناموفق بود؛ لطفاً دوباره تلاش کنید یا با پشتیبانی تماس بگیرید.",
+            "ثبت سفارش ناموفق بود؛ دوباره تلاش کن یا با پشتیبانی تماس بگیر.",
         });
         setSubmitting(false);
         return;
@@ -201,7 +210,7 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
       idemRef.current = null; // سبدِ بعدی کلید تازه بگیرد
       window.location.href = body.redirectUrl;
     } catch {
-      setErrors({ form: "خطای شبکه؛ اتصال اینترنت را بررسی کنید." });
+      setErrors({ form: COPY.networkError });
       setSubmitting(false);
     }
   };
@@ -227,12 +236,12 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
         setCouponError(null);
       } else {
         setCoupon(null);
-        setCouponError("کد تخفیف معتبر نیست.");
+        setCouponError("کد تخفیف معتبر نیست؛ املای کد را بررسی کن.");
       }
     } catch {
       // سرویس در دسترس نیست — صادقانه: بدون تخفیف نمایش بده، نه تخفیف ساختگی
       setCoupon(null);
-      setCouponError("بررسی کد تخفیف ممکن نشد. بدون کد تخفیف ادامه دهید یا دوباره تلاش کنید.");
+      setCouponError("بررسی کد تخفیف ممکن نشد؛ بدون کد تخفیف ادامه بده یا دوباره تلاش کن.");
     } finally {
       setCouponChecking(false);
     }
@@ -297,7 +306,7 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
                 errors.city ? "border-error" : "border-line focus:border-primary-strong",
               )}
             >
-              <option value="" disabled>{selectedProvince ? "انتخاب شهر…" : "اول استان را انتخاب کنید…"}</option>
+              <option value="" disabled>{selectedProvince ? "انتخاب شهر…" : "اول استان را انتخاب کن…"}</option>
               {(provinces.find((p) => p.name === selectedProvince)?.cities ?? []).map((c) => (
                 <option key={c.name} value={c.name}>{c.name}</option>
               ))}
@@ -337,7 +346,7 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
         <p className="mb-2.5 text-sm font-extrabold text-ink">روش ارسال</p>
         <div className="grid gap-2 sm:grid-cols-2">
           {methods.length === 0 ? (
-            <p className="text-xs text-muted sm:col-span-2">روش‌های ارسال بارگذاری نشده؛ صفحه را دوباره بارگذاری کنید.</p>
+            <p className="text-xs text-muted sm:col-span-2">روش‌های ارسال بارگذاری نشده؛ صفحه را دوباره بارگذاری کن.</p>
           ) : (
             methods.map((m) => (
               <ShippingOption
@@ -362,7 +371,7 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
           aria-expanded={couponOpen}
           className="flex w-full items-center justify-between px-4 py-3.5 text-[13px] font-bold text-ink"
         >
-          کد تخفیف دارید؟
+          کد تخفیف داری؟
           <span aria-hidden className={cn("transition-transform", couponOpen && "rotate-180")}>⌄</span>
         </button>
         {couponOpen && (
@@ -406,7 +415,7 @@ export function CheckoutClient({ methods: methodsProp }: { methods?: ShippingMet
         <div className="mt-2 flex items-center justify-between text-[13px]">
           <span className="text-muted">هزینه ارسال</span>
           <span className={cn("font-bold tnum", shippingCost === 0 ? "text-success" : "text-ink")}>
-            {shippingCost === 0 ? "رایگان" : `${faNum(shippingCost)} تومان`}
+            {shippingCost === 0 ? COPY.free : `${faNum(shippingCost)} تومان`}
           </span>
         </div>
         {discount > 0 && (
@@ -467,7 +476,7 @@ function ShippingOption({
         <span className="mt-0.5 block text-[11px] text-muted">{desc}</span>
       </span>
       <span className="text-[13px] font-bold text-ink tnum">
-        {price === 0 ? "رایگان" : faNum(price)}
+        {price === 0 ? COPY.free : faNum(price)}
       </span>
     </label>
   );

@@ -1,64 +1,28 @@
-import { LegalShell, Section, meta } from "@/components/layout/LegalShell";
+import { meta } from "@/components/layout/LegalShell";
+import { SiteContentView } from "@/components/layout/SiteContentView";
+import CmsSlot from "@/components/cms/CmsSlot";
 import { site } from "@/lib/site";
+import { COPY } from "@/lib/copy";
+import { PRIVACY_CONTENT } from "@ghasedak/contracts";
 
 export const metadata = meta(
-  "حریم خصوصی — لباس زیر قاصدک",
+  `${COPY.legal.privacy} — ${site.fullName}`,
   "نحوه جمع‌آوری، استفاده و نگهداری اطلاعات شخصی مشتریان لباس زیر قاصدک.",
 );
 
-export default function PrivacyPage() {
+/** مسیر زنده است تا صفحه‌ساز بتواند محتوایش را جایگزین کند */
+export const dynamic = "force-dynamic";
+
+export default function PrivacyPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   return (
-    <LegalShell
-      title="حریم خصوصی"
-      intro="ما تنها اطلاعاتی را جمع‌آوری می‌کنیم که برای ارسال سفارش و پاسخ به شما لازم است."
-      updated="مهر ۱۴۰۵"
-    >
-      <Section title="چه اطلاعاتی جمع‌آوری می‌کنیم">
-        <ul>
-          <li>شماره تماس و نام شما، برای هماهنگی ارسال.</li>
-          <li>نشانی تحویل، برای ارسال سفارش.</li>
-          <li>سفارش‌ها و بازگشت‌های شما، برای پیگیری و پشتیبانی.</li>
-        </ul>
-      </Section>
-
-      <Section title="پرداخت">
-        <p>
-          اطلاعات کارت بانکی شما هرگز در سرورهای ما ذخیره نمی‌شود. پرداخت مستقیماً در درگاه
-          بانکی انجام می‌شود و ما فقط نتیجه پرداخت و شماره پیگیری آن را دریافت می‌کنیم.
-        </p>
-      </Section>
-
-      <Section title="اشتراک‌گذاری با دیگران">
-        <p>
-          اطلاعات شما در اختیار هیچ شخص یا شرکت ثالثی قرار نمی‌گیرد، مگر در حدی که برای ارسال
-          مرسوله به شرکت پستی لازم باشد (نام، نشانی و شماره تماس).
-        </p>
-      </Section>
-
-      <Section title="پیامک">
-        <p>
-          برای اطلاع‌رسانی وضعیت سفارش، پیامک ارسال می‌شود. اگر پیامک تبلیغاتی نمی‌خواهید،
-          می‌توانید لغو عضویت را از طریق شماره{" "}
-          <a href={site.phoneHref} dir="ltr" className="text-primary-strong hover:underline">
-            {site.phoneDisplay}
-          </a>{" "}
-          اعلام کنید.
-        </p>
-      </Section>
-
-      <Section title="حق شما">
-        <p>
-          می‌توانید اطلاعات ثبت‌شده خود را ببینید، اصلاح بخواهید یا حذف آن را درخواست کنید. برای
-          این کار با شماره تماس فروشگاه تماس بگیرید؛ رسیدگی حداکثر تا ۷۲ ساعت کاری انجام می‌شود.
-        </p>
-      </Section>
-
-      <Section title="کوکی‌ها">
-        <p>
-          سایت برای نگهداری وضعیت سبد خرید و انتخاب تم در مرورگر شما داده کوچکی ذخیره می‌کند.
-          این داده‌ها برای کار کردن سایت ضروری‌اند و برای هدف تبلیغاتی شخص ثالث استفاده نمی‌شوند.
-        </p>
-      </Section>
-    </LegalShell>
+    <CmsSlot
+      slug="privacy"
+      searchParams={searchParams}
+      fallback={<SiteContentView content={PRIVACY_CONTENT} title={COPY.legal.privacy} />}
+    />
   );
 }

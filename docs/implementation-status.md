@@ -1,6 +1,8 @@
 # وضعیت پیاده‌سازی — Ghasedak (بند ۲/۱۱۸ سند Master)
 
-> آخرین به‌روزرسانی: ۲۰۲۶-۱۰-۱۴ — ایستگاه ۲/`F2-1`: CI پایهٔ GitHub Actions سبز (job کیفیت: typecheck+build؛ job تست: migrate+seed روی پستگرس تازهٔ هر اجرا + کل سوئیت؛ گزارش تشخیصی شکست بدون لاگین). سوئیت محلی ۳۸/۳۸ · ۲۱۲/۲۱۲.
+> آخرین به‌روزرسانی: ۲۰۲۶-۱۰-۲۰ — ایستگاه ۳/`F1-13` + گام ۱۰/`F1-14` + گام ۱۱ + گام ۱۲ (`F1-2` — گزارش‌های مالی) + گام ۱۳ (`F1-3` — ورود گروهی CSV: پیش‌نمایش/اعمال/بازگردانی) + گام ۱۴ (`F1-15` — بازیابی رمز با کانال) + گام ۱۵ (`F1-16` — آنالیتیکس) + **گام ۱۶ (`F1-4` — ویزارد «چی لازم داری؟») بسته شد**؛ جزئیات در جدول ایستگاه ۴/گام‌های ۱۲ و ۱۶ پایین‌تر (گام‌های ۱۴ و ۱۵ فقط در [نقشهٔ راه](../plans/completion-launch-plan.md) بسته شده‌اند).
+>
+> (پیش‌تر: **گام ۱۱ (بند ۴۱ — نظرات و امتیاز) بسته شد**: چرخهٔ کامل OTP → توکن یک‌بارمصرف → ثبت PENDING → بج «خرید واقعی» از سفارش PAID → صف ادمین (تأیید/رد/پاسخ + AuditLog) → انتشار عمومی بدون PII؛ UI ادمین `/reviews` + بخش نظرات PDP فروشگاه (خلاصهٔ امتیاز + لیست + فرم OTP) + `aggregateRating` در JSON-LD. سوئیت محلی روی DB تازه‌کار (migrate+seed طبق رویهٔ CI): **۴۱/۴۱ سوئیت · ۲۳۵/۲۳۵ تست**؛ typecheck+build سه اپ سبز؛ ممیزی لحن دو اپ ۰ تخلف.
 > تعریف «پیاده‌سازی‌شده»: مسیر runtime کامل کار کند (بند ۱۱۴/۱۱۸). Schema و سند به‌تنهایی «پیاده‌شده» نیست.
 
 ## استقرار پیش از لانچ — ایستگاه ۱ (۲۰۲۶-۱۰-۱۴) — runtime-tested
@@ -19,6 +21,94 @@
 | CI پایه GitHub Actions: job کیفیت (install frozen → Prisma generate → typecheck → build سه اپ) + job تست API روی postgres:16 کاملاً تازه (migrate deploy → seed دمو → کل سوئیت) | ✅ IMPLEMENTED | ران سبز [38551035038](https://github.com/miladborghaie75/Ghasedak/actions/runs/38551035038) روی `b352fa5` — تست API ۷۰s · typecheck+build ۷۷s |
 | گزارش تشخیصی شکست تست بدون لاگین (annotation عمومی `::error::` + Summary ران) | ✅ IMPLEMENTED | ران‌های قرمز ۱ و ۲: همین مسیر ریشه را نشان داد (ادعاهای ماشین عملیات بکاپ روی رانر Linux) |
 | سوئیت تست portable — ادعاهای ماشین عملیات (بکاپ واقعی + Scheduled Task) با `OPS_MACHINE` گیت شده و پوشش fixture معادل دارد | ✅ IMPLEMENTED | `phase14-backup-status`/`phase14-diagnostics`؛ شبیه‌سازی CI: ۳ تست ops صریحاً skip + ۱۱ تست portable سبز |
+
+## ایستگاه ۳ (F1-13 — طراحی بصری نهایی) — ۲۰۲۶-۱۰-۱۵ · 🟡 در جریان
+| قابلیت | وضعیت | مدرک |
+|---|---|---|
+| سند مرجع طراحی: پالت خاک‌رس، سه سطح سایهٔ clay، توکن‌های معنایی + بازتعریف شب، وزیرمتن/لاله‌زار، قاعدهٔ «فقط توکن، بدون رنگ هاردکد تم-آگاه» | ✅ IMPLEMENTED | [design-system.md](design-system.md) — منطبق با `globals.css` فعلی (همان مقادیر) |
+| حالت بارگذاری (اسکلتون) با زبان clay: نبض ملایم، گردی کارت، فقط توکن؛ `role=status` + `aria-label` | ✅ IMPLEMENTED | [Skeleton.tsx](../apps/storefront/components/ui/Skeleton.tsx)؛ `/wishlist` و `/cart` بدون پرش چیدمان روی build تولیدی |
+| حالت خطای داده: «سبد/علاقه‌مندی الان قابل نمایش نیست — محفوظ است» + تلاش دوباره (نه ادعای خالی‌بودن، نه اسکلتون ابدی) | ✅ IMPLEMENTED | [DataUnavailable.tsx](../apps/storefront/components/ui/DataUnavailable.tsx)؛ تست زنده: دِو با `API_ORIGIN` مرده (پروکسی `{"items":[]}`) → هر دو صفحه پیام صادقانه را نشان دادند |
+| رفع رگرسیون fallback سبد: خطوط سبد در قطع API از localStorage برمی‌گردند (تعهد سرصفحهٔ CartProvider که اجرا نمی‌شد) | ✅ IMPLEMENTED | [CartProvider.tsx](../apps/storefront/components/providers/CartProvider.tsx)؛ با API مرده سبد برمی‌گردد؛ روی سرور سالم سبد واقعی بی‌تغییر درست رندر می‌شود |
+| OG/سوشال-کارت ۱۲۰۰×۶۳۰ با هویت برند (نشان قاصدک، لاله‌زار/وزیرمتن، پیل دامنه) — بدون فونت شبکه‌ای | ✅ IMPLEMENTED | `GET /opengraph-image` → `200 image/png`، `PNG 1200x630`؛ در build استاتیک prerender شد (`○ /opengraph-image`)؛ TTFهای استاتیک در `apps/storefront/app/og-fonts` (قید: satori فقط sfnt/TTF می‌فهمد، woff2 رد می‌شود) |
+| آیکون اپ ادمین (همان نشان روی زمینهٔ آلو) — تمایز ابزار داخلی با هویت مشترک | ✅ IMPLEMENTED | [apps/admin/app/icon.svg](../apps/admin/app/icon.svg)؛ فروشگاه از قبل آیکون داشت |
+| بازبینی دو تم با اسکرین‌شات + چک RTL/LTR مختلط | ✅ IMPLEMENTED | `/`، `/p/tst-Lmv7z66pr`، `/wishlist`، `/cart` در روشن/شب؛ نام لاتین محصول + اعداد فارسی + breadcrumb + هندل اینستاگرام بدون شکست bidi؛ صفر خطای کنسول |
+| شات‌لیست عکاسی واقعی (کادرها، نسبت، نور، نام فایل تحویل) | ✅ IMPLEMENTED | [photography-shotlist.md](photography-shotlist.md) |
+| عکاسی واقعی + حذف تصویرسازی جانشین از صفحات لانچ | ⬜ NOT YET | وابسته به تحویل عکس؛ تا آن زمان جانشین **عمداً** می‌ماند (رکورد در نقشه) |
+| سبک چاپ: کاغذ سفید/مرکب سیاه، بی‌سایه/بی‌انیمیشن، کارت با حاشیهٔ نازک + `break-inside: avoid`، `@page A4`؛ کروم سایت و کنترل‌های تعاملی با `print:hidden` | ✅ IMPLEMENTED | [globals.css](../apps/storefront/app/globals.css)؛ در `media=print` سنجیده شد: هدر/فوتر/لینک پرش/نوار چسبنده/قلب/افزودن‌به‌سبد همه `display:none` (۰ استثنا)، بدنه سفید و متن سیاه |
+| فاکتور قابل چاپ سفارش: جدول اقلام (نام/SKU/تعداد/قیمت/جمع) + جمع‌ها + کد/تاریخ شمسی/وضعیت — از مسیر عمومی **بدون PII** | ✅ IMPLEMENTED | [order/[code]/page.tsx](../apps/storefront/app/order/[code]/page.tsx)؛ PDF واقعی Chrome: **فاکتور ۱ صفحهٔ A4**؛ جمع‌ها با API می‌خوانند (۷۴۹٬۰۰۰ + ۴۹٬۰۰۰ = ۷۹۸٬۰۰۰) |
+| برگهٔ مشخصات محصول: گالری جمع‌شده، هویت فروشگاه فقط-چاپ، بدون CTA/کنترل تعاملی | ✅ IMPLEMENTED | [p/[slug]/page.tsx](../apps/storefront/app/p/[slug]/page.tsx)؛ PDF واقعی: **۱ صفحه** (قبل از رفع باگ: ۳ صفحه با صفحهٔ اول خالی) |
+| سه باگ که تست واقعی چاپ پیدا کرد: نامرئی‌شدن متن تم شب روی کاغذ (توکن + تزریق `<style>` تم در `<body>`) · سفیدچاپ‌شدن بلوک‌های موشن‌ریویل · سه‌صفحه‌ای‌شدن PDP با پدینگ نوار چسبنده | ✅ IMPLEMENTED | سنجش رنگ در هر دو تم (متن سیاه در `light` و `dark`)، `[data-motion=reveal] → opacity:1` در چاپ، `print:pb-0` (۳ → ۱ صفحه) |
+| ممیزی کپی‌رایتینگ همهٔ CTA/حالت‌های خالی و خطا | ✅ IMPLEMENTED | پکیج مشترک [copy-rules](../packages/copy-rules) (قواعد R1–R7) + صفحهٔ ادمین «تنظیمات → ممیزی لحن» با اسکن دو اپ و انتشار اصلاح؛ اسکن کامل → ۰ تخلف؛ حلقهٔ سرتاسری تزریق→شناسایی→اصلاح→پاک؛ گیت سبز: تست گارد لحن + typecheck + build ادمین + API ۳۸/۳۸ · ۲۱۲/۲۱۲ |
+| بازبینی نهایی موشن (گام ۹) | ✅ IMPLEMENTED | [MotionReveal.tsx](../apps/storefront/components/MotionReveal.tsx) + [globals.css](../apps/storefront/app/globals.css): reveal با IntersectionObserver + fallback تایمری + پوشش بلوک‌های رندر-شدهٔ بعد از ناوبری (باگ «صفحهٔ خالی تا رفرش» رفع شد) + احترام reduced-motion در JS و CSS. شاهد زنده روی سرور تولیدی 3111: بلوک‌های زیر فولد فوراً `motion-in`، بلوک‌های پایین با اسکرول `opacity=1` شدند؛ شدت/خاموش از تنظیمات ادمین (`Setting: motion`) |
+
+## ایستگاه ۳/گام ۱۰ (F1-14 — صفحات سیستمی + حالت تعمیر) — ۲۰۲۶-۱۰-۱۵ — runtime-tested
+| قابلیت | وضعیت | مدرک |
+|---|---|---|
+| صفحات سیستمی هر دو اپ: `error.tsx` + `global-error.tsx` + `loading.tsx` + `not-found.tsx` ادمین | ✅ IMPLEMENTED | هر دو اپ build تولیدی سبز؛ ۴۰۴ فارسی فروشگاه روی سرور زنده رندر شد (شاهد HTTP) |
+| حالت تعمیر فروشگاه: endpoint عمومی `GET /api/v1/admin/public/maintenance` + TTL ۱۵s + fail-open در قطع API | ✅ IMPLEMENTED | [maintenance.ts](../apps/storefront/lib/maintenance.ts)؛ layout ریشه کل فروشگاه را می‌بندد و [MaintenanceNotice](../apps/storefront/components/MaintenanceNotice.tsx) می‌گذارد |
+| حالت تعمیر — سوئیچ ادمین + رد سفارش | ✅ IMPLEMENTED | تنظیمات ادمین → کلید «حالت تعمیر» (POST /admin/settings)؛ checkout با کد `MAINTENANCE` رد می‌شود؛ تست `phase16-maintenance` |
+| e2e کامل حالت تعمیر روی سرورهای زنده | ✅ IMPLEMENTED | روشن از DB: `/`، `/c/…`، `/cart`، `/about` همه صفحهٔ اطلاع + `data-motion-enabled="off"`؛ POST checkout → `MAINTENANCE`؛ خاموش → فروشگاه طی TTL ۱۵s به حالت عادی برگشت |
+
+## ایستگاه ۳/گام ۱۱ (بند ۴۱ — نظرات و امتیاز) — ۲۰۲۶-۱۰-۱۵ — runtime-tested
+| قابلیت | وضعیت | مدرک |
+|---|---|---|
+| مدل داده: `Review` (productId×mobile یکتا، rating ۱–۵، status PENDING/APPROVED/REJECTED، isVerifiedPurchase، adminReply) + `OtpCode` با purpose=`review` | ✅ IMPLEMENTED | migration `20261015100000_step11_reviews_otp` اعمال شد؛ شِما generate پاس |
+| چرخهٔ OTP: کد واقعی DB (بدون وابستگی به اپراتور SMS — بند ۱۱۱)، کد غلط رد، کد درست توکن یک‌بارمصرف می‌دهد | ✅ IMPLEMENTED | تست `reviews.spec` — «چرخهٔ OTP» + «توکن یک‌بارمصرف» |
+| ثبت نظر: فقط با توکن سالم؛ PENDING پیش از تأیید؛ ضدتکرار موبایل×محصول با خطای صریح | ✅ IMPLEMENTED | تست «ثبت نظر → PENDING» + «ضدتکرار» |
+| بج «خرید واقعی»: سفارش PAID با همان موبایل و همان محصول → تأیید خودکار؛ بدون خرید بج نمی‌گیرد (ادعای جعلی ممنوع) | ✅ IMPLEMENTED | تست «بج خریدار واقعی» (هر دو حالت) |
+| اداری ادمین: صف با شمارنده‌های وضعیت + موبایل برای تماس، تأیید/رد/پاسخ + AuditLog کامل (actorId واقعی، old/new values) | ✅ IMPLEMENTED | تست «تأیید ادمین → AuditLog» + «پاسخ/رد» + «صف ادمین»؛ FK `AuditLog.actorId → User` با کاربر واقعی رعایت شد |
+| نمایش عمومی: فقط APPROVED، بدون هیچ PII (موبایل در پاسخ نیست)، خلاصهٔ count/avg/tags | ✅ IMPLEMENTED | تست JSON عمومی شامل هیچ موبایلی نیست؛ `found=false` برای محصول ناموجود |
+| پنل ادمین `/reviews`: فیلتر وضعیت، تأیید/رد/پاسخ درجا، لحن «تو» مطابق R1 | ✅ IMPLEMENTED | copy.test ادمین سبز؛ لحن R1 اول «پاسخ شما» گرفت و به «پاسخ تو» اصلاح شد |
+| UI فروشگاه در PDP: خلاصهٔ امتیاز + لیست + فرم ثبت (موبایل→OTP→متن)، پراکسی سرور `/api/reviews` | ✅ IMPLEMENTED | build فروشگاه سبز؛ پراکسی همان الگوی `/api/checkout` |
+| SEO: `aggregateRating` در JSON-LD محصول (فقط با نظر منتشرشده — بدون داده جعلی) | ✅ IMPLEMENTED | [p/[slug]/page.tsx](../apps/storefront/app/p/[slug]/page.tsx) |
+| تست چرخهٔ کامل (۱۲ تست) روی DB ایزوله `ghasedak_reviews_test` (migrate+seed طبق CI) | ✅ IMPLEMENTED | سوئیت کامل ۴۱/۴۱ · ۲۳۵/۲۳۵ سبز؛ نکتهٔ فنی: تست از کاربر واقعی برای AuditLog.actorId استفاده می‌کند (FK به User) |
+
+## ایستگاه ۴/گام ۱۲ (`F1-2` — گزارش‌های مالی) — ۲۰۲۶-۱۰-۱۷ — runtime-tested
+| قابلیت | وضعیت | مدرک |
+|---|---|---|
+| صورت جریان نقدی طبقه‌بندی‌شده (عملیاتی/سرمایه‌ای/تأمین مالی + سطل صریح «طبقه‌بندی‌نشده») از دفتر کل، فقط اسناد FINAL | ✅ IMPLEMENTED | `phase16-financial-reports`؛ گزارش زنده: خالص ۸۸٬۲۱۷٬۴۶۲ = جمع طبقه‌ها؛ INVESTING/FINANCING/UNCLASSIFIED در دادهٔ واقعی صفر و صریح |
+| حساب‌های نقدی = گروه + همهٔ زیرحساب‌ها، از کدینگ مرجع (نه رشتهٔ محلی) | ✅ IMPLEMENTED | نقص قبل: سند ۴٬۳۲۱٬۰۰۰ روی `1100-01` صفر اثر داشت؛ بعد از رفع در گزارش دیده شد (تست «نقص ۱») |
+| فیلتر `state=FINAL` در جریان نقدی | ✅ IMPLEMENTED | سند پیش‌نویس ۶٬۷۸۹٬۰۰۰ قبلاً ورودی را باد می‌کرد؛ حالا در گزارش نیست (تست «نقص ۲») |
+| طبقه‌بندی بدون تخصیص نسبتی: سهم هر حساب طرفِ سند = `credit − debit`؛ جمع طبقه‌ها = خالص | ✅ IMPLEMENTED | تست چندطرفه + تطبیق مستقل با `JournalLine` همان بازه |
+| انتقال داخلی بین دو حساب نقد: جدا گزارش می‌شود، بی‌اثر در خالص | ✅ IMPLEMENTED | تست: `count=1`، `gross=700,000`، خالص بدون تغییر |
+| تراز آزمایشی دوره‌ای: بازه + جمع Dr/Cr + فلگ توازن (سازگاری کامل با `/integrity`) | ✅ IMPLEMENTED | تست: بازهٔ کامل = `integrity`؛ جمع ردیف‌ها = جمع گزارش؛ تاریخ نامعتبر → ۴۰۰ |
+| خروجی CSV سه گزارش با BOM/RFC4180/گارد تزریق فرمول و نام فایل با تاریخ محلی | ✅ IMPLEMENTED | curl: `text/csv; charset=utf-8` + بایت اول `efbbbf`؛ تست خالص `csvCell`/`toCsv`/`csvFilename` |
+| UI ادمین: بازه + «اعمال» + «خروجی CSV» در دو تب، جدول طبقات، جمع تراز، هشدار طبقه‌بندی‌نشده | ✅ IMPLEMENTED | بازرسی مرورگر: ۲ ورودی تاریخ؛ جمع تراز ۲۴۱٬۴۷۱٬۷۸۸ = ۲۴۱٬۴۷۱٬۷۸۸؛ دانلود CSV از UI → ۲۰۰ روی `/api/admin/accounting/export/cash-flow` |
+| کشف جانبی ۱: حساب `2101` (حقوق پرداختنی، مهاجرت فاز ۲) در کدینگ مرجع نبود و «طبقه‌بندی‌نشده» می‌شد | ✅ IMPLEMENTED | `GL_LIABILITIES.PAYABLE_SALARY` + وصل‌شدن سرویس حقوق؛ حالا OPERATING |
+| کشف جانبی ۲: کارت «نقد (بانک + صندوق)» داشبورد عدد ۰ نشان می‌داد | ✅ IMPLEMENTED | `DashboardService.cashBalance()` از دفتر کل (گروه + زیرحساب)؛ داشبورد ۹۰٬۴۲۷٬۷۴۲ = خالص جریان نقدی؛ تست regression |
+| سوئیت کامل API روی DB تمرین | ✅ IMPLEMENTED | **۴۳/۴۳ سوئیت · ۲۵۹/۲۵۹ تست**؛ typecheck سه اپ + build API/ادمین سبز؛ ممیزی لحن ادمین ۰ تخلف |
+| دنبالهٔ باز (خارج از این گام) | ❌ NOT IMPLEMENTED | گردش فروش روی **گروه** `1100` می‌نشیند نه یک حساب بانکی مشخص؛ مغایرت‌گیری به‌تفکیک بانک تا وقتی پرداخت مقصد را صریح ندهد کامل نیست |
+
+## ایستگاه ۴/گام ۱۶ (`F1-4` — ویزارد «چی لازم داری؟») — ۲۰۲۶-۱۰-۲۰ — runtime-tested
+| قابلیت | وضعیت | مدرک |
+|---|---|---|
+| تک‌منبع ویزارد: DTO مشترک + دادهٔ fallback سه‌گامی (موقعیت → اولویت → بودجه) در `packages/contracts` — هم API، هم seed، هم «بازگردانی پیش‌فرض‌ها» | ✅ IMPLEMENTED | [need-finder.ts](../packages/contracts/src/need-finder.ts) — `NEED_FINDER_FALLBACK` |
+| مدل داده: `NeedFinderStep`/`NeedFinderOption` (قاعدهٔ انطباق JSON) — از قبل در شِما بود؛ این گام runtime را ساخت، **بدون مهاجرت جدید** | ✅ IMPLEMENTED | [schema.prisma](../packages/database/prisma/schema.prisma) (مدل‌ها از مهاجرت baseline) |
+| API عمومی: `GET /api/v1/need-finder/steps` — بدون احراز هویت، فقط گام/گزینهٔ `active` به‌ترتیب `sortOrder`؛ DB خالی → fallback تک‌منبع | ✅ IMPLEMENTED | [need-finder.controller.ts](../apps/api/src/catalog/need-finder.controller.ts)؛ تست «DB خالی → fallback» |
+| API ادمین: CRUD گام/گزینه + واژگان (دسته/ترم واقعی کاتالوگ) + ترتیب‌دهی (فهرست کامل در یک تراکنش) + بازگردانی پیش‌فرض‌ها؛ `marketing.view` برای خواندن، `marketing.manage` برای نوشتن + `AuditLog` روی هر نوشتن | ✅ IMPLEMENTED | [admin-need-finder.controller.ts](../apps/api/src/catalog/admin-need-finder.controller.ts) |
+| دروازهٔ «گزینهٔ مرده»: دسته/جنس ناشناخته در قاعده با خطای روشن رد می‌شود (نه ذخیرهٔ بی‌صدا) | ✅ IMPLEMENTED | `assertRuleMatchesCatalog`؛ تست «دستهٔ جعلی و جنسِ جعلی رد شد» |
+| نرمال‌سازی قاعده: کلید ناشناخته/نوع غلط **رد** می‌شود (نه sanitize)، `priceMax` عدد صحیح مثبت، `why` با گارد متن (U+FFFD)، قاعدهٔ خالی = «بدون محدودیت» | ✅ IMPLEMENTED | `normalizeNeedRule` — تست `phase16-need-finder-admin` (۱۱ تست) |
+| فروشگاه — ویزارد `/need`: بدون دکمهٔ Next (هر انتخاب = پیشروی) + `?start=…` گام ۱ را از قبل انتخاب می‌کند | ✅ IMPLEMENTED | [NeedFinder.tsx](../apps/storefront/components/commerce/NeedFinder.tsx) — شاهد مرورگر: سه گام تا انتها |
+| فروشگاه — نتیجهٔ `/need/result?a0=…&a1=…&a2=…`: URL **اشتراک‌پذیر**، رندر سروری، خط «دلیل انطباق»، بخش «نزدیک‌ترین‌ها» وقتی انطباق کم است، پیام صریح وقتی صفر است | ✅ IMPLEMENTED | [need/result/page.tsx](../apps/storefront/app/need/result/page.tsx) — شاهد زنده: «پشتیبانی مناسب در حرکت · جنس پنبه یا میکروفایبر · بودجه تا ۳۰۰٬۰۰۰ تومان» |
+| منطق انطباق مستقل و قابل تست: AND بین گام‌ها · OR داخل هر بُعد · قاعدهٔ خالی = بی‌محدودیت · بودجه روی حداقل قیمت مؤثر (تخفیف فعال) · جنس با slug ترم (id برای دادهٔ قدیمی) | ✅ IMPLEMENTED | [lib/needs.ts](../apps/storefront/lib/needs.ts) + تست واحد **۸/۸** |
+| امنیت URL: شناسهٔ ناشناخته از پاسخ‌ها حذف می‌شود — ورودی URL هرگز به کوئری DB نمی‌رسد | ✅ IMPLEMENTED | `parseNeedAnswers`؛ تست `a0=DROP TABLE products;--` → پاسخ خالی |
+| پنل ادمین `/need-finder` + ورودی منو: ویرایش گام/گزینه، انتخاب دسته و جنس از فهرست کاتالوگ، فعال/غیرفعال، ترتیب، بازگردانی پیش‌فرض‌ها | ✅ IMPLEMENTED | [need-finder/page.tsx](../apps/admin/app/need-finder/page.tsx) + [NeedFinderClient](../apps/admin/app/need-finder/clients/NeedFinderClient.tsx) — build ادمین سبز، `/need-finder` در خروجی |
+| کشف جانبی (داده): جنس فقط روی **واریانت‌ها** بود و سطح محصول خالی — قاعدهٔ «جنس» ویزارد چیزی برای سنجیدن نداشت؛ seed این گام جنس سطح محصول را می‌نویسد | ✅ IMPLEMENTED | [seed.ts](../packages/database/scripts/seed.ts) — بخش «جنس سطح محصول» |
+| گیت سبز این گام | ✅ IMPLEMENTED | API **۲۱/۲۱** (سه سوئیت `phase16-need-finder*`) + فروشگاه **۸/۸** · typecheck **۱۰/۱۰** · build فروشگاه و ادمین · ممیزی لحن دو اپ **۰ تخلف** |
+| رفت‌وبرگشت ادمین → DB → فروشگاه | ✅ IMPLEMENTED | ویرایش گزینهٔ «ورزش» در پنل → API → DB → فروشگاه (کش ۶۰ ثانیه) → بازگردانی و تأیید پاک‌شدن اثر |
+
+## ایستگاه ۴/گام ۹-۱ (`F1-13-photo` — برنامهٔ عکاسی محصول) — ۲۰۲۶-۱۰-۲۱ — runtime-tested
+| قابلیت | وضعیت | مدرک |
+|---|---|---|
+| تک‌منبعِ مشخصاتِ عکس: کادرهای استاندارد با برچسب و مشخصاتِ فنی، راه‌اندازیِ ثابت، مشخصاتِ عکسِ **هر دسته** با اولویت و نکتهٔ خاص، واژگانِ وضعیت و انواعِ تابلو — بی‌React و بی‌وابستگی | ✅ IMPLEMENTED | [photography.ts](../packages/contracts/src/photography.ts) — `PHOTO_SHOTS` · `PHOTO_SETUP` · `PHOTO_CATEGORY_SPECS` · `PHOTO_STATUS_LABELS` |
+| مدلِ داده: `PhotoTask` (محصول × کادر با یکتایی در DB) + مهاجرتِ افزایشی | ✅ IMPLEMENTED | [schema.prisma](../packages/database/prisma/schema.prisma) · [migration](../packages/database/prisma/migrations/20261021090000_step20_photography_program/migration.sql) — `prisma migrate deploy` روی کلستر تمرین سبز |
+| API ادمین: تابلو (`GET /admin/photography/board`) · پیوستِ عکس · تأیید · عکسِ دوباره — `products.view` برای خواندن و `products.update` برای نوشتن | ✅ IMPLEMENTED | [photography.controller.ts](../apps/api/src/photography/photography.controller.ts) + [photography.service.ts](../apps/api/src/photography/photography.service.ts) · [app.module.ts](../apps/api/src/app.module.ts) |
+| **جایگزینی خودکار آرت با عکسِ واقعی:** تأییدِ «نمای صافِ جلو» ← `ProductImage.isPrimary` ← فروشگاه عکسِ واقعی را می‌کشد؛ «عکسِ دوباره» ← حذفِ عکس و بازگشت به آرت | ✅ IMPLEMENTED | [public-catalog.controller.ts](../apps/api/src/catalog/public-catalog.controller.ts) — قاعده: `image` فقط از تصویرِ `isPrimary` |
+| پنل ادمین `/photography` + ورودی منو: نوارِ پیشرفت، کارتِ مشخصاتِ کادرهای هر دسته، قابِ هر کادر با وضعیت و کنش‌های «پیوست/تأیید/عکسِ دوباره» و نشانِ «زنده» | ✅ IMPLEMENTED | [photography/page.tsx](../apps/admin/app/photography/page.tsx) + [PhotographyClient](../apps/admin/app/photography/clients/PhotographyClient.tsx) + [menu.ts](../apps/admin/lib/menu.ts) — `/photography` در خروجیِ build ادمین |
+| سندِ اپراتور: شات‌لیست از «فهرستِ آرزو» به راهنمای همین برنامه تبدیل شد (قانون برند · راه‌اندازی · کادرها · مشخصاتِ هر دسته · چرخهٔ وضعیت · قاعدهٔ جایگزینی · چک‌لیست) | ✅ IMPLEMENTED | [docs/photography-shotlist.md](photography-shotlist.md) |
+| گیت سبز این گام | ✅ IMPLEMENTED | API **۳۲/۳۲** (دو سوئیت `phase20-photography*` — منطقِ خالص + DB واقعیِ تمرین) · typecheck **۱۰/۱۰** · build **۶/۶** |
+| چرخهٔ کامل روی DB واقعی: پیوست → هنوز آرت → تأییدِ `FLAT_FRONT` → عکسِ اصلی عوض شد → «عکسِ دوباره» → عکس حذف و آرت برگشت؛ کادرِ غیراصلی فقط گالری را پر می‌کند | ✅ IMPLEMENTED | [phase20-photography-db.spec.ts](../apps/api/test/phase20-photography-db.spec.ts) |
+| باقی‌مانده (ورودی کاربر) | ⬜ NOT-DONE | خودِ عکاسیِ واقعی — تا آن زمان آرتِ جانشینِ موقت سرِ جایش می‌ماند و با اولین تأیید خودبه‌خود برداشته می‌شود |
 
 ## فاز ۱۳ (۲۰۲۶-۰۹-۳۰) — runtime-tested
 | قابلیت | وضعیت | مدرک |

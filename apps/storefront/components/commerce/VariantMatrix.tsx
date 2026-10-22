@@ -10,6 +10,7 @@ import { useCart } from "@/components/providers/CartProvider";
 import { StockStatus } from "@/components/ui/StockStatus";
 import { Price } from "@/components/ui/Price";
 import { cn } from "@/lib/cn";
+import { COPY } from "@/lib/copy";
 import { getTerm, type AttributeKey } from "@/lib/attributes";
 import {
   availableOptionIds,
@@ -123,7 +124,9 @@ export function VariantMatrix({ product, axes, showHeader = false, preselect }: 
                                 : "cursor-not-allowed border-line bg-primary-tint/50 text-muted line-through",
                           )
                     }
-                    style={isColor ? { backgroundColor: t.hex } : undefined}
+                    data-swatch={isColor ? "" : undefined}
+                    /* رنگ از متغیر می‌آید تا در چاپ حفظ شود (به‌جای backgroundColor مستقیم) */
+                    style={isColor ? ({ "--swatch": t.hex } as React.CSSProperties) : undefined}
                   >
                     {!isColor && t.label}
                   </button>
@@ -144,7 +147,7 @@ export function VariantMatrix({ product, axes, showHeader = false, preselect }: 
             </>
           ) : (
             <p className="text-[13px] text-muted">
-              ترکیب رنگ و سایز را انتخاب کنید.
+              ترکیب رنگ و سایز را انتخاب کن.
             </p>
           )}
         </div>
@@ -153,7 +156,8 @@ export function VariantMatrix({ product, axes, showHeader = false, preselect }: 
           onClick={handleAdd}
           disabled={!variant || !ready}
           className={cn(
-            "inline-flex h-12 min-w-44 items-center justify-center rounded-full text-sm font-bold transition-all active:scale-[0.98]",
+            // برگهٔ چاپی نمی‌تواند چیزی به سبد اضافه کند — دکمه روی کاغذ می‌آید و می‌رود
+            "inline-flex h-12 min-w-44 items-center justify-center rounded-full text-sm font-bold transition-all active:scale-[0.98] print:hidden",
             variant
               ? added
                 ? "bg-success text-on-accent"
@@ -162,7 +166,7 @@ export function VariantMatrix({ product, axes, showHeader = false, preselect }: 
           )}
           aria-live="polite"
         >
-          {added ? "به سبدت اضافه شد 💜" : "افزودن به سبد"}
+          {added ? COPY.addedToCart : COPY.addToCart}
         </button>
       </div>
     </div>

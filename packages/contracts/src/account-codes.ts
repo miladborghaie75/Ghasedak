@@ -52,6 +52,15 @@ export const GL_LIABILITIES = {
   CHECK_PAYABLE_OUTSTANDING: "2110",
   /** کالای دریافتی صورت‌حساب‌نشده */
   GOODS_RECEIVED_NOT_INVOICED: "2150",
+  /**
+   * حقوق و مزایای پرداختنی کارکنان (فاز ۲ — حقوق و دستمزد).
+   *
+   * چرا جدا از `PAYABLE` (تأمین‌کننده): بدهی به کارمند با بدهی به فروشنده
+   * قاطی نمی‌شود. این حساب از مهاجرت `20261005110000_phase2_payroll` وجود
+   * دارد؛ کد در همین جدول مرجع می‌نشیند تا سرویس حقوق و صورت جریان نقدی
+   * یک عدد را از دو جا نخوانند (گام ۱۲).
+   */
+  PAYABLE_SALARY: "2101",
 } as const;
 
 /** سرمایه */
@@ -126,6 +135,11 @@ export const CHART_OF_ACCOUNTS: Array<{ code: string; name: string; type: string
   { code: GL.GOODS_IN_TRANSIT, name: "کالای در راه انتقال", type: "ASSET" },
   { code: GL.GATEWAY_RECEIVABLE, name: "طلب از درگاه پرداخت (تسویه‌نشده)", type: "ASSET" },
   { code: GL_LIABILITIES.PAYABLE, name: "حساب‌های پرداختنی", type: "LIABILITY" },
+  {
+    code: GL_LIABILITIES.PAYABLE_SALARY,
+    name: "حقوق و مزایای پرداختنی کارکنان",
+    type: "LIABILITY",
+  },
   {
     code: GL_LIABILITIES.CHECK_PAYABLE_OUTSTANDING,
     name: "چک‌های پرداختنی در جریان وصول",
@@ -260,6 +274,75 @@ export function isTemporaryAccount(code: string): boolean {
  */
 export function temporaryGroupCodes(): string[] {
   return CHART_OF_ACCOUNTS.filter((a) => isTemporaryAccount(a.code)).map((a) => a.code);
+}
+
+/* ═══════════ طبقه‌بندی صورت جریان نقدی (گام ۱۲ · `[F1-2]`) ═══════════
+ *
+ * چرا طبقه‌بندی این‌جاست و نه در سرویس گزارش: کدینگ «منبع یکتای حقیقت» است
+ * (بالای همین فایل). اگر طبقهٔ «هزینهٔ کارمزد درگاه» داخل کنترلر گزارش
+ * سخت‌کد شود، افزودن یک حساب تازه یعنی ویرایش دو جای متفاوت و بی‌صدا شدن
+ * ناسازگاری. پس فقط یک جدول وجود دارد و همه از آن می‌خوانند.
+ *
+ * روش: هر سند متوازن است (ΣDr = ΣCr)، پس مجموع تغییر نقدی هر سند با مجموع
+ * اثر حساب‌های غیرنقدی همان سند برابر و **مخالف** است. نتیجهٔ مهم: سهم هر
+ * حساب طرفِ سند در جریان نقدی = `credit − debit` همان خط — بدون تخصیص
+ * نسبتی و بدون محاسبهٔ موازی. همین رابطه در `CashFlowService` پیاده شده و
+ * در تست `phase16` با سند چندطرفه سنجیده می‌شود.
+ */
+
+/** سه طبقهٔ استاندارد + سطل صریح برای هر چیزی که در کدینگ شناخته نشده */
+export type CashFlowClass = "OPERATING" | "INVESTING" | "FINANCING" | "UNCLASSIFIED";
+
+/** ریشهٔ کد حساب: `6000-03` → `6000` (زیرحساب‌ها یک سطح‌اند) */
+export function accountRoot(code: string): string {
+  return parentCodeOf(code) ?? code;
+}
+
+/**
+ * طبقهٔ هر ریشهٔ حساب — **تنها جدول طبقه‌بندی در پروژه**.
+ *
+ * «سرمایه‌ای» عمداً خالی است: در کدینگ فعلی هیچ حساب دارایی ثابتی وجود ندارد،
+ * پس این طبقه با دادهٔ واقعی صفر می‌ماند — عدد صادقانه، نه ردیف ساختگی.
+ * به‌محض افزودن کد ۱۶xx (دارایی ثابت/استهلاک) فقط یک سطر به همین جدول اضافه
+ * می‌شود و همهٔ گزارش‌ها و تست‌ها با هم جلو می‌روند.
+ */
+export const CASH_FLOW_CLASS_BY_ROOT: Record<string, Exclude<CashFlowClass, "UNCLASSIFIED">> = {
+  // ── عملیاتی: جریان نقدی روزمرهٔ کسب‌وکار ──
+  [GL.INVENTORY]: "OPERATING",
+  [GL.RECEIVABLE_TRADE]: "OPERATING",
+  [GL.CHECK_RECEIVABLE]: "OPERATING",
+  [GL.GOODS_IN_TRANSIT]: "OPERATING",
+  [GL.GATEWAY_RECEIVABLE]: "OPERATING",
+  [GL_LIABILITIES.PAYABLE]: "OPERATING",
+  [GL_LIABILITIES.CHECK_PAYABLE_OUTSTANDING]: "OPERATING",
+  [GL_LIABILITIES.GOODS_RECEIVED_NOT_INVOICED]: "OPERATING",
+  // پرداخت حقوق به کارمند، جریان عملیاتی است (نه تأمین مالی و نه سرمایه‌ای)
+  [GL_LIABILITIES.PAYABLE_SALARY]: "OPERATING",
+  [GL_REVENUE.SALES]: "OPERATING",
+  [GL_COGS.COGS]: "OPERATING",
+  [GL_EXPENSE.OPERATING]: "OPERATING",
+  // ── تأمین مالی: آورده/برداشت مالک و سند اختتامیه ──
+  [GL_EQUITY.CAPITAL]: "FINANCING",
+  [GL_EQUITY.RETAINED_EARNINGS]: "FINANCING",
+};
+
+/** طبقهٔ یک کد حساب؛ کد ناشناخته → `UNCLASSIFIED` (نه سکوت، نه فرض عملیاتی) */
+export function cashFlowClass(code: string): CashFlowClass {
+  return CASH_FLOW_CLASS_BY_ROOT[accountRoot(code)] ?? "UNCLASSIFIED";
+}
+
+/**
+ * ریشهٔ حساب‌های نقدی (صندوق و بانک) — گروه و همهٔ زیرحساب‌ها.
+ *
+ * چرا تابع لازم است: گزارش قبلی فقط کد دقیق `1000`/`1100` را می‌دید و هر
+ * زیرحساب تازه‌ای که خزانه می‌سازد (`1100-01`، `1100-02`، …) بی‌صدا از
+ * گزارش بیرون می‌افتاد.
+ */
+export const CASH_ACCOUNT_ROOTS: readonly string[] = [GL.CASH, GL.BANK];
+
+/** آیا این کد حساب، صندوق یا بانک است (خودِ گروه یا هر زیرحسابش)؟ */
+export function isCashAccount(code: string): boolean {
+  return CASH_ACCOUNT_ROOTS.includes(accountRoot(code));
 }
 
 /** درصد کارمزد درگاه → مبلغ، بر پایهٔ واحد (basis point: ۱۰۰ = ۱٪) */

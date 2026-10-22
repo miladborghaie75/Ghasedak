@@ -693,27 +693,56 @@ let prepared: ReturnType<JournalService["prepareLines"]> = entry.lines.map((l) =
    *  می‌کردند، (۲) «برگشت سند به پیش‌نویس» هیچ اثری در تراز نمی‌گذاشت،
    *  پس اصلاح سند اشتباه عملاً غیرممکن بود.
    */
-  async trialBalance(): Promise<Array<{ code: string; name: string; debit: string; credit: string }>> {
+  async trialBalance(
+    from?: Date,
+    to?: Date,
+  ): Promise<{
+    from: string | null;
+    to: string | null;
+    items: Array<{ code: string; name: string; type: string; debit: string; credit: string }>;
+    totals: { debit: string; credit: string };
+    balanced: boolean;
+  }> {
+    const dateFilter = {
+      ...(from ? { gte: from } : {}),
+      ...(to ? { lte: to } : {}),
+    };
     const rows = await this.prisma.journalLine.groupBy({
       by: ["accountId"],
-      where: { entry: { state: "FINAL" } },
+      where: { entry: { state: "FINAL", ...(from || to ? { date: dateFilter } : {}) } },
       _sum: { debit: true, credit: true },
     });
     const accounts = await this.prisma.account.findMany({
       where: { id: { in: rows.map((r) => r.accountId) } },
     });
     const byId = new Map(accounts.map((a) => [a.id, a]));
-    return rows
+    const items = rows
       .map((r) => {
         const a = byId.get(r.accountId)!;
         return {
           code: a.code,
           name: a.name,
+          type: a.type as string,
           debit: (r._sum.debit ?? 0n).toString(),
           credit: (r._sum.credit ?? 0n).toString(),
         };
       })
       .sort((x, y) => x.code.localeCompare(y.code));
+
+    // جمع‌ها از همان ردیف‌ها محاسبه می‌شوند (نه کوئری دوم و نه جمع سمت UI) —
+    // «بدون محاسبهٔ موازی» (بند ۱۰۶) در سطح همین گزارش هم رعایت می‌شود.
+    const totals = items.reduce(
+      (acc, r) => ({ debit: acc.debit + BigInt(r.debit), credit: acc.credit + BigInt(r.credit) }),
+      { debit: 0n, credit: 0n },
+    );
+
+    return {
+      from: from ? from.toISOString() : null,
+      to: to ? to.toISOString() : null,
+      items,
+      totals: { debit: totals.debit.toString(), credit: totals.credit.toString() },
+      balanced: totals.debit === totals.credit,
+    };
   }
 
   /** کنترل سازگاری مالی — بند ۶۶: ΣDr = ΣCr روی کل Ledger */

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { COPY } from "@/lib/copy";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export default async function PaidPage({
           پیگیری سفارش
         </Link>
         <Link href="/" className="inline-flex h-11 items-center rounded-full border border-line px-6 text-sm font-bold text-ink">
-          بازگشت به فروشگاه
+          {COPY.backToStore}
         </Link>
       </div>
     </div>

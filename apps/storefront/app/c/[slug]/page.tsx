@@ -12,6 +12,7 @@ import {
 import { CATEGORIES, getCategoryBySlug } from "@/lib/categories";
 import { sortV2 } from "@/lib/catalog-repo";
 import { parseSortParam } from "@/lib/sort";
+import { COPY } from "@/lib/copy";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -54,7 +55,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
 
   return (
     <div className="mx-auto max-w-7xl px-3 sm:px-4">
-      <nav aria-label="مسیر صفحه" className="py-3 text-[12px] text-muted">
+      <nav aria-label={COPY.breadcrumb} className="py-3 text-[12px] text-muted">
         <ol className="flex items-center gap-1.5">
           <li><Link href="/" className="hover:text-primary-strong">خانه</Link></li>
           <li aria-hidden>/</li>

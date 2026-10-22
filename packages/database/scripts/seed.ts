@@ -4,7 +4,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { randomBytes, scryptSync } from "node:crypto";
-import { FULL_CHART_OF_ACCOUNTS, SUB_ACCOUNTS } from "@ghasedak/contracts";
+import { FULL_CHART_OF_ACCOUNTS, SUB_ACCOUNTS, NEED_FINDER_FALLBACK } from "@ghasedak/contracts";
 
 /**
  * کپی کمینه از منطق رسمی InventoryService.moveInTx (apps/api/src/inventory/inventory.service.ts)
@@ -111,6 +111,7 @@ const PERMISSIONS = [
   "orders.view", "orders.update",
   "pricing.view", "pricing.manage",
   "customers.view", "customers.manage",
+  "reviews.moderate", // گام ۱۱: صف تأیید/رد/پاسخ ادمین
   "payments.view", "payments.verify", "payments.manage",
   "payments.reconcile", // بند ۱۸ Audit فاز ۹: عدم‌تقارن قبل — در ROLE_SETS بود ولی در PERMISSIONS نبود
   "checks.view", "checks.manage", "checks.clear", "checks.cancel", "checks.reconcile", // فاز ۹
@@ -485,6 +486,51 @@ if (fy) {
         },
       });
     }
+
+  // ---- جنس سطح محصول (گام ۱۶): هر محصول منتشرشده یک جنس دارد.
+  // بدون این، قاعدهٔ «جنس» ویزارد و فیلتر جنس فروشگاه هیچ محصولی پیدا نمی‌کردند
+  // (اتریبیوت فقط روی واریانت‌ها بود و آن‌ها سطح محصول نیستند).
+  // انتخاب نمایشی و تکرارپذیر است (تناوبی روی ترتیب اسلاگ) — داده DEMO.
+  {
+    const materialIds = [termIds["material:پنبه"], termIds["material:میکروفایبر"]].filter(Boolean);
+    const products = await prisma.product.findMany({
+      where: { deletedAt: null, status: "PUBLISHED" },
+      orderBy: { slug: "asc" },
+      select: { id: true, attributes: { select: { attributeTermId: true } } },
+    });
+    for (const [i, p] of products.entries()) {
+      if (p.attributes.length > 0) continue; // جنس دارد — دست نزن
+      const termId = materialIds[i % materialIds.length];
+      if (!termId) continue;
+      await prisma.productAttributeTerm.create({ data: { productId: p.id, attributeTermId: termId } });
+    }
+  }
+
+  // ---- ویزارد «چی لازم داری؟» (گام ۱۶ / بند ۹+۲۰): سه گام + گزینه‌ها با rule.
+  // تک‌منبع: داده از NEED_FINDER_FALLBACK می‌آید (packages/contracts) — همان چیزی که
+  // فروشگاه به‌عنوان fallback نشان می‌دهد؛ idها پایدارند و upsert اجرای دوم را بی‌اثر می‌کند.
+  for (const [si, step] of NEED_FINDER_FALLBACK.entries()) {
+    await prisma.needFinderStep.upsert({
+      where: { id: step.id },
+      update: { question: step.question, sortOrder: si },
+      create: { id: step.id, question: step.question, sortOrder: si, active: true },
+    });
+    for (const [oi, opt] of step.options.entries()) {
+      await prisma.needFinderOption.upsert({
+        where: { id: opt.id },
+        update: { label: opt.label, icon: opt.icon, sortOrder: oi, rule: (opt.rule ?? undefined) as never },
+        create: {
+          id: opt.id,
+          stepId: step.id,
+          label: opt.label,
+          icon: opt.icon,
+          sortOrder: oi,
+          active: true,
+          rule: (opt.rule ?? undefined) as never,
+        },
+      });
+    }
+  }
 
   // ---- Feature Flags (بند ۸۱) — همه خاموش؛ فعال‌سازی از ادمین
   for (const f of [

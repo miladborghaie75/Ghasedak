@@ -26,6 +26,9 @@ importers:
       '@ghasedak/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@ghasedak/copy-rules':
+        specifier: workspace:*
+        version: link:../../packages/copy-rules
       next:
         specifier: ^15.5.6
         version: 15.5.26(@types/node@22.20.4)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -127,6 +130,9 @@ importers:
       '@ghasedak/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@ghasedak/copy-rules':
+        specifier: workspace:*
+        version: link:../../packages/copy-rules
       '@ghasedak/utils':
         specifier: workspace:*
         version: link:../../packages/utils
@@ -205,6 +211,8 @@ importers:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
+
+  packages/copy-rules: {}
 
   packages/database:
     dependencies:

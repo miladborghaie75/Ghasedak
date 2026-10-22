@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ProductArt, type ArtKind } from "@/components/commerce/ProductArt";
+import { ArtFrame, type ArtKind } from "@/components/commerce/ProductArt";
 import { WishlistButton } from "@/components/commerce/WishlistButton";
 import { StickyBuyBar } from "@/components/commerce/StickyBuyBar";
 import { RelatedShelf } from "@/components/commerce/RelatedShelf";
@@ -12,6 +12,7 @@ import { buildAxes } from "@/lib/variant-axes";
 import { Price } from "@/components/ui/Price";
 import { faNum } from "@/lib/format";
 import { getTerm } from "@/lib/attributes";
+import { COPY } from "@/lib/copy";
 import {
   getBrandV2,
   getProductV2BySlug,
@@ -22,6 +23,10 @@ import {
   salePriceOf,
 } from "@/lib/catalog-repo";
 import { CATEGORIES } from "@/lib/categories";
+import { ReviewsSection } from "@/components/commerce/ReviewsSection";
+import { loadReviews } from "@/lib/reviews";
+import { SITE_URL, site } from "@/lib/site";
+import { TrackOnMount } from "@/components/analytics/TrackOnMount";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -55,6 +60,8 @@ export default async function ProductPage({ params }: PageProps) {
   const colors = [...new Set(product.variants.map((v) => v.colorId))];
   const materials = product.attributeIds;
   const inStock = hasAnyStock(product);
+  // نظرات (گام ۱۱) — fetch سمت سرور؛ خطا → null → بخش پیام صادقانه می‌دهد نه اسکلتون ابدی
+  const reviews = await loadReviews(product.slug);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -74,11 +81,30 @@ export default async function ProductPage({ params }: PageProps) {
         ? "https://schema.org/InStock"
         : "https://schema.org/OutOfStock",
     },
+    // نظرات تأییدشده — فقط وقتی واقعاً وجود دارد (بند ۸۸: ادعای ساختگی ممنوع)
+    ...(reviews?.summary && reviews.summary.count > 0 && reviews.summary.avg != null
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: reviews.summary.avg,
+            reviewCount: reviews.summary.count,
+            bestRating: 5,
+            worstRating: 1,
+          },
+        }
+      : {}),
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-3 pb-28 sm:px-4 lg:pb-0">
-      <nav aria-label="مسیر صفحه" className="py-3 text-[12px] text-muted">
+    // در چاپ پدینگِ نوار چسبندهٔ موبایل لازم نیست — همان ۷rem باعث می‌شد
+    // کارت‌ها با break-inside:avoid به صفحهٔ بعد بروند (تست واقعی PDF: ۳ → ۱)
+    <div className="mx-auto max-w-7xl px-3 pb-28 sm:px-4 lg:pb-0 print:pb-0">
+      {/* گام ۱۵ — رویداد view_item (گارد رضایت داخل track؛ بدون رضایت no-op) */}
+      <TrackOnMount
+        event="view_item"
+        params={{ item_id: product.slug, item_name: product.name, value: sale ?? base, currency: "IRR" }}
+      />
+      <nav aria-label={COPY.breadcrumb} className="py-3 text-[12px] text-muted">
         <ol className="flex flex-wrap items-center gap-1.5">
           <li><Link href="/" className="hover:text-primary-strong">خانه</Link></li>
           <li aria-hidden>/</li>
@@ -91,7 +117,8 @@ export default async function ProductPage({ params }: PageProps) {
       <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
         {/* ۱) گالری */}
         <section aria-label="تصویر محصول" className="self-start lg:sticky lg:top-24">
-          <div className="relative rounded-blob border border-line bg-gradient-to-b from-primary-tint to-surface shadow-clay-1">
+          {/* در چاپ گالری جمع می‌شود تا برگهٔ مشخصات، صفحهٔ کامل را نگیرد */}
+          <div className="relative rounded-blob border border-line bg-surface shadow-clay-1 print:mx-auto print:max-w-[72mm]">
             <div className="absolute start-4 top-4 z-10">
               <WishlistButton productId={product.id} name={product.name} />
             </div>
@@ -107,8 +134,13 @@ export default async function ProductPage({ params }: PageProps) {
                 />
               </div>
             ) : (
-              <div className="p-6 sm:p-10">
-                <ProductArt kind={product.category as ArtKind} colorId={product.variants[0].colorId} />
+              /* بدون عکس: همان قاب پاسپارتو + نشان برند (نه آرت شناور روی زمینهٔ خالی) */
+              <div className="p-2 sm:p-2.5">
+                <ArtFrame
+                  kind={product.category as ArtKind}
+                  colorId={product.variants[0].colorId}
+                  className="aspect-square"
+                />
               </div>
             )}
           </div>
@@ -150,7 +182,7 @@ export default async function ProductPage({ params }: PageProps) {
           <div className="mt-5 rounded-card border border-line bg-surface p-4 shadow-clay-1">
             <ProductOptions product={product} brandId={product.brandId} />
             <p className="mt-3 text-[12px] leading-6 text-muted">
-              <strong className="font-extrabold text-ink">راهنمای سایز:</strong> برای انتخاب دقیق، دور سینه و زیر سینه را با متر اندازه بگیرید —{" "}
+              <strong className="font-extrabold text-ink">{COPY.sizeGuide}:</strong> برای انتخاب دقیق، دور سینه و زیر سینه را با متر اندازه بگیر —{" "}
               <SizeGuideButton />
             </p>
           </div>
@@ -174,12 +206,26 @@ export default async function ProductPage({ params }: PageProps) {
             <div className="rounded-card border border-line bg-primary-tint/60 p-4">
               <p className="text-[13px] font-extrabold text-ink">بازگشت کالا</p>
               <p className="mt-1 text-[12px] leading-6 text-muted">
-                به دلایل بهداشتی، لباس زیر فقط با پلمب بازنشده قابل بازگشت است.
+                به دلایل بهداشتی، کالای پوشیده‌نشده با مارک کنده‌نشده تا ۷ روز قابل بازگشت است.
               </p>
             </div>
           </div>
+
+          {/* فقط-چاپ: برگهٔ کاغذی باید بگوید از کجا آمده و چطور تماس بگیریم */}
+          <div className="hidden print:mt-4 print:block">
+            <p className="text-[12px] font-extrabold text-ink">{site.fullName}</p>
+            <p className="mt-1 text-[11px] leading-5 text-muted">
+              {site.phoneDisplay} · @{site.instagramHandle} · {site.workingHours}
+            </p>
+            <p className="mt-1 text-[11px] leading-5 text-muted" dir="ltr">
+              {SITE_URL}
+            </p>
+          </div>
         </section>
       </div>
+
+      {/* ۱۸) نظرات مشتریان (گام ۱۱) — قبل از مرتبط‌ها */}
+      <ReviewsSection slug={product.slug} data={reviews} />
 
       {/* ۱۹) مرتبط‌ها */}
       <RelatedShelf product={product} />

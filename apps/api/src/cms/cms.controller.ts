@@ -18,31 +18,84 @@ import type { AdminIdentity } from "../auth/auth.service";
 import {
   emptyCmsPage,
   normalizeCmsPage,
+  siteContentBySlug,
+  siteContentToCmsPage,
+  SITE_PAGES,
+  sitePathForSlug,
   type CmsPageData,
   type CmsPageSummary,
+  type SitePageKind,
 } from "@ghasedak/contracts";
 
+/** وضعیت CMS یک مسیر — همان چیزی که پنل برای نشان-badge لازم دارد */
+export interface SitePageCmsStatus {
+  status: CmsPageSummary["status"];
+  blockCount: number;
+  updatedAt: string;
+  publishedAt: string | null;
+  /** پیش‌نویس با نسخهٔ منتشرشده تفاوت دارد → سایت هنوز نسخهٔ قبلی را نشان می‌دهد */
+  hasUnpublishedChanges: boolean;
+}
+
 /**
- * ط³ط±ظˆغŒط³ طµظپط­ظ‡â€Œط³ط§ط² â€” ظ…ظ†ط·ظ‚ ط¯ط§ظ…ظ†ظ‡ظ” CMS.
+ * اثر انگشت محتوایی یک صفحه — برای «پیش‌نویس با منتشرشده فرق دارد؟».
  *
- * ظ‚ظˆط§ظ†غŒظ† ط§غŒظ† ط³ط±ظˆغŒط³:
- *  غ±) ظ‡ط± payload ط§ط² ظ…ط³غŒط± `normalizeCmsPage` ط±ط¯ ظ…غŒâ€Œط´ظˆط¯ â†’ ظ†ط§ط´ظ†ط§ط®طھظ‡â€Œظ‡ط§
- *     ط­ط°ظپطŒ ظ†ظˆط¹â€Œظ‡ط§ ظ…ط­ط¯ظˆط¯طŒ ظˆ ظ‡غŒع† HTML/ط§ط³ع©ط±غŒظ¾طھ ط®ط§ظ…غŒ ط±ط§ظ‡ ظ†ظ…غŒâ€Œط§ظپطھط¯.
- *  غ²) ظ‡ط± ط°ط®غŒط±ظ‡ غŒع© `ContentRevision` ظ…غŒâ€Œط³ط§ط²ط¯ â†’ ط§ظ…ع©ط§ظ† ط¨ط§ط²ع¯ط´طھ ط¨ظ‡ ظ†ط³ط®ظ‡ظ” ظ‚ط¨ظ„.
- *  غ³) ط§ظ†طھط´ط§ط± ظˆ ظ¾غŒط´â€Œظ†ظˆغŒط³ ط¬ط¯ط§ â†’ ظپط±ظˆط´ع¯ط§ظ‡ ظپظ‚ط· `PUBLISHED` ط±ط§ ظ…غŒâ€Œط¨غŒظ†ط¯.
- *  غ´) slug ظ‚ظپظ„ ط§ط³طھط› طھط؛غŒغŒط± غŒط¹ظ†غŒ طµظپط­ظ‡ظ” طھط§ط²ظ‡ (طھط§ ظ„غŒظ†ع©â€Œظ‡ط§غŒ ط«ط§ط¨طھ ط³ط§غŒطھ ظ†ط´ع©ظ†ط¯).
+ * چرا شناسهٔ بلوک در اثر انگشت نیست: `normalizeCmsPage` برای بلوکِ بی‌شناسه
+ * شناسهٔ تصادفی می‌سازد، پس مقایسهٔ خامِ JSON همیشه «تغییر کرده» می‌داد و
+ * نشانگر «تغییرات منتشرنشده» همیشه روشن می‌ماند. شناسه هویت ویرایشی است،
+ * نه محتوا: جابه‌جایی/تغییر متن چیزی است که مشتری می‌بیند.
+ */
+function contentFingerprint(page: CmsPageData): string {
+  return JSON.stringify({
+    title: page.title,
+    seo: page.seo ?? {},
+    blocks: page.blocks.map((b) => ({ type: b.type, props: b.props, hidden: b.hidden === true })),
+  });
+}
+
+/**
+ * آیا پیش‌نویس با اسنپ‌شات منتشرشده فرق دارد؟
+ *
+ * `published === null` یعنی صفحه هنوز هرگز از این مسیر منتشر نشده؛ آن‌جا
+ * چیزی برای مقایسه نیست (وضعیت خودش «پیش‌نویس» است).
+ */
+function hasPendingChanges(draft: CmsPageData, published: unknown): boolean {
+  if (published === null || published === undefined) return false;
+  return contentFingerprint(normalizeCmsPage(published)) !== contentFingerprint(draft);
+}
+
+/** یک ردیف از «صفحات سایت» — مسیر واقعی + وضعیت صفحه‌سازش */
+export interface SitePageItem {
+  path: string;
+  slug: string | null;
+  title: string;
+  kind: SitePageKind;
+  editable: boolean;
+  note?: string;
+  cms: SitePageCmsStatus | null;
+}
+
+/**
+ * سرویس صفحه‌ساز — منطق دامنهٔ CMS.
+ *
+ * قوانین این سرویس:
+ *  ۱) هر payload از مسیر `normalizeCmsPage` رد می‌شود → ناشناخته‌ها
+ *     حذف، نوع‌ها محدود، و هیچ HTML/اسکریپت خامی راه نمی‌افتد.
+ *  ۲) هر ذخیره یک `ContentRevision` می‌سازد → امکان بازگشت به نسخهٔ قبل.
+ *  ۳) انتشار و پیش‌نویس جدا → فروشگاه فقط `PUBLISHED` را می‌بیند.
+ *  ۴) slug قفل است؛ تغییر یعنی صفحهٔ تازه (تا لینک‌های ثابت سایت نشکند).
  */
 @Injectable()
 export class CmsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** slug ظ…ط¹طھط¨ط±: ط­ط±ظˆظپ ع©ظˆع†ع©طŒ ط¹ط¯ط¯طŒ ط®ط· طھغŒط±ظ‡ â€” ط¨ط¯ظˆظ† ظپط§طµظ„ظ‡ ظˆ طھط²ط±غŒظ‚ ظ…ط³غŒط± */
+  /** slug معتبر: حروف کوچک، عدد، خط تیره — بدون فاصله و تزریق مسیر */
   private assertSlug(slug: string): string {
     const s = String(slug ?? "").trim().toLowerCase();
     if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(s)) {
       throw new BadRequestException({
         code: "VALIDATION_ERROR",
-        message: "ط´ظ†ط§ط³ظ‡ظ” طµظپط­ظ‡ ظ…ط¹طھط¨ط± ظ†غŒط³طھ â€” ظپظ‚ط· ط­ط±ظˆظپ ع©ظˆع†ع© ط§ظ†ع¯ظ„غŒط³غŒطŒ ط¹ط¯ط¯ ظˆ ط®ط· طھغŒط±ظ‡.",
+        message: "شناسهٔ صفحه معتبر نیست — فقط حروف کوچک انگلیسی، عدد و خط تیره.",
       });
     }
     return s;
@@ -65,17 +118,18 @@ export class CmsService {
         },
       });
     } catch {
-      // audit ظ†ط¨ط§غŒط¯ ط°ط®غŒط±ظ‡ظ” ظ…ط­طھظˆط§ ط±ط§ ط§ط² ع©ط§ط± ط¨غŒظ†ط¯ط§ط²ط¯
+      // audit نباید ذخیرهٔ محتوا را از کار بیندازد
     }
   }
 
   private toSummary(row: {
     slug: string;
     payload: unknown;
+    publishedPayload?: unknown;
     status: string;
     updatedAt: Date;
     publishedAt: Date | null;
-  }): CmsPageSummary {
+  }): CmsPageSummary & { hasUnpublishedChanges: boolean } {
     const page = normalizeCmsPage(row.payload);
     return {
       slug: row.slug,
@@ -84,6 +138,7 @@ export class CmsService {
       blockCount: page.blocks.length,
       updatedAt: row.updatedAt.toISOString(),
       publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
+      hasUnpublishedChanges: row.status === "PUBLISHED" && hasPendingChanges(page, row.publishedPayload),
     };
   }
 
@@ -92,26 +147,93 @@ export class CmsService {
     return { items: rows.map((r) => this.toSummary(r)) };
   }
 
-  async get(slug: string): Promise<{ slug: string; status: string; data: CmsPageData; publishedAt: Date | null; updatedAt: string }> {
+  /**
+   * «صفحات سایت» — همهٔ مسیرهای واقعی فروشگاه با وضعیت صفحه‌سازشان.
+   *
+   * تا پیش از این، پنل فقط صفحه‌های ساخته‌شده در `CmsPage` را نشان می‌داد؛
+   * مدیر نمی‌دید `/about` اصلاً در سایت هست یا `/p/*` داده‌ای است.
+   * این متد دو چیز را کنار هم می‌گذارد:
+   *  ۱) مسیرهای مرجع (`SITE_PAGES`) — هر مسیری که واقعاً در سایت وجود دارد؛
+   *  ۲) صفحه‌های ساخته‌شده در CMS — شامل لندینگ‌های سفارشی که در فهرست
+   *     مرجع نبودند.
+   */
+  async sitePages(): Promise<{ items: SitePageItem[] }> {
+    const rows = await this.prisma.cmsPage.findMany({ orderBy: { slug: "asc" } });
+    const bySlug = new Map(rows.map((r) => [r.slug, this.toSummary(r)]));
+
+    const items: SitePageItem[] = SITE_PAGES.map((def) => {
+      const summary = def.slug ? bySlug.get(def.slug) : undefined;
+      return {
+        path: def.path,
+        slug: def.slug,
+        title: def.title,
+        kind: def.kind,
+        editable: def.editable,
+        note: def.note,
+        cms: summary
+          ? {
+              status: summary.status,
+              blockCount: summary.blockCount,
+              updatedAt: summary.updatedAt,
+              publishedAt: summary.publishedAt,
+              hasUnpublishedChanges: summary.hasUnpublishedChanges,
+            }
+          : null,
+      };
+    });
+
+    // صفحه‌های CMS که در فهرست مرجع نیستند → لندینگ سفارشی
+    for (const [slug, summary] of bySlug) {
+      if (SITE_PAGES.some((d) => d.slug === slug)) continue;
+      items.push({
+        path: sitePathForSlug(slug),
+        slug,
+        title: summary.title,
+        kind: "CMS",
+        editable: true,
+        note: "صفحهٔ ساخته‌شده در صفحه‌ساز.",
+        cms: {
+          status: summary.status,
+          blockCount: summary.blockCount,
+          updatedAt: summary.updatedAt,
+          publishedAt: summary.publishedAt,
+          hasUnpublishedChanges: summary.hasUnpublishedChanges,
+        },
+      });
+    }
+
+    return { items };
+  }
+
+  async get(slug: string): Promise<{
+    slug: string;
+    status: string;
+    data: CmsPageData;
+    publishedAt: Date | null;
+    updatedAt: string;
+    hasUnpublishedChanges: boolean;
+  }> {
     const s = this.assertSlug(slug);
     const row = await this.prisma.cmsPage.findUnique({ where: { slug: s } });
     if (!row) {
-      throw new NotFoundException({ code: "PAGE_NOT_FOUND", message: "طµظپط­ظ‡ غŒط§ظپطھ ظ†ط´ط¯." });
+      throw new NotFoundException({ code: "PAGE_NOT_FOUND", message: "صفحه یافت نشد." });
     }
+    const data = normalizeCmsPage(row.payload);
     return {
       slug: row.slug,
       status: row.status,
-      data: normalizeCmsPage(row.payload),
+      data,
       publishedAt: row.publishedAt,
       updatedAt: row.updatedAt.toISOString(),
+      hasUnpublishedChanges: row.status === "PUBLISHED" && hasPendingChanges(data, row.publishedPayload),
     };
   }
 
-  /** ط³ط§ط®طھ طµظپط­ظ‡ظ” طھط§ط²ظ‡ ط¨ط§ ط§ط³ع©ظ„طھ ط§ظˆظ„غŒظ‡ (ط®ط§ظ„غŒ غŒط§ ط§ط² غŒع© ط§ظ„ع¯ظˆغŒ ظ¾غŒط´ظ†ظ‡ط§ط¯غŒ) */
+  /** ساخت صفحهٔ تازه با اسکلت اولیه (خالی، از یک الگوی پیشنهادی، یا از محتوای فعلی سایت) */
   async create(
     slug: string,
     title: string,
-    starter: "empty" | "landing",
+    starter: "empty" | "landing" | "simple" | "site",
     actor: string | undefined,
   ): Promise<{ slug: string; data: CmsPageData }> {
     const s = this.assertSlug(slug);
@@ -119,18 +241,43 @@ export class CmsService {
     if (exists) {
       throw new BadRequestException({
         code: "PAGE_EXISTS",
-        message: "طµظپط­ظ‡â€Œط§غŒ ط¨ط§ ط§غŒظ† ط´ظ†ط§ط³ظ‡ ط§ط² ظ‚ط¨ظ„ ظˆط¬ظˆط¯ ط¯ط§ط±ط¯.",
+        message: "صفحه‌ای با این شناسه از قبل وجود دارد.",
       });
     }
-    const data = starter === "landing" ? landingTemplate(title) : emptyCmsPage(title);
+    const data = this.buildStarter(s, title, starter);
     await this.prisma.cmsPage.create({
       data: { slug: s, payload: data as object, status: "DRAFT", updatedBy: actor ?? null },
     });
-    await this.audit(actor, "cms.page.create", s, { title });
+    await this.audit(actor, "cms.page.create", s, { title, starter });
     return { slug: s, data };
   }
 
-  /** ط°ط®غŒط±ظ‡ظ” ظ¾غŒط´â€Œظ†ظˆغŒط³ â€” payload ظ‡ظ…غŒط´ظ‡ ظ†ط±ظ…ط§ظ„â€Œط³ط§ط²غŒ ظ…غŒâ€Œط´ظˆط¯ */
+  /**
+   * اسکلتِ اولیهٔ صفحه.
+   *
+   * `site` یعنی «همان محتوایی که همین الان در سایت هست» — نه یک الگوی
+   * عمومی. چرا مهم است؟ چون الگوی عمومی (`simple`) فقط یک هیرو و یک متنِ
+   * خالی است: اگر مدیر آن را روی ‎/about می‌ساخت و منتشرش می‌کرد، متنِ
+   * حقوقیِ دست‌نویسِ همان صفحه پاک می‌شد. با `site`، صفحه از همان متنِ
+   * مشترکی ساخته می‌شود که سایت رندر می‌کند — پس تبدیل **وفادارانه** است.
+   */
+  private buildStarter(
+    slug: string,
+    title: string,
+    starter: "empty" | "landing" | "simple" | "site",
+  ): CmsPageData {
+    if (starter === "landing") return landingTemplate(title);
+    if (starter === "simple") return simpleTemplate(title);
+    if (starter === "site") {
+      const content = siteContentBySlug(slug);
+      if (content) return siteContentToCmsPage(content, title);
+      // مسیری که محتوایِ مشترک ندارد (خانه) → الگوی متناسب
+      return slug === "home" ? landingTemplate(title) : simpleTemplate(title);
+    }
+    return emptyCmsPage(title);
+  }
+
+  /** ذخیرهٔ پیش‌نویس — payload همیشه نرمال‌سازی می‌شود */
   async save(slug: string, payload: unknown, actor: string | undefined): Promise<{ data: CmsPageData; status: string }> {
     const s = this.assertSlug(slug);
     const data = normalizeCmsPage(payload);
@@ -146,7 +293,7 @@ export class CmsService {
       where: { slug: s },
       data: { payload: data as object, updatedBy: actor ?? null },
     });
-    // ظ†ط³ط®ظ‡ظ” ظ‚ط¨ظ„غŒ ظ†ع¯ظ‡ ط¯ط§ط´طھظ‡ ظ…غŒâ€Œط´ظˆط¯ طھط§ ط¨ط´ظˆط¯ ط¨ط±ع¯ط´طھ
+    // نسخهٔ قبلی نگه داشته می‌شود تا بشود برگشت
     await this.prisma.contentRevision.create({
       data: {
         entity: "CmsPage",
@@ -162,11 +309,28 @@ export class CmsService {
   async publish(slug: string, actor: string | undefined): Promise<{ slug: string; publishedAt: string }> {
     const s = this.assertSlug(slug);
     const row = await this.prisma.cmsPage.findUnique({ where: { slug: s } });
-    if (!row) throw new NotFoundException({ code: "PAGE_NOT_FOUND", message: "طµظپط­ظ‡ غŒط§ظپطھ ظ†ط´ط¯." });
+    if (!row) throw new NotFoundException({ code: "PAGE_NOT_FOUND", message: "صفحه یافت نشد." });
+    // ── محافظ: صفحهٔ خالی منتشر نمی‌شود.
+    //    اگر صفحهٔ اصلی یا یک مسیر حقوقی خالی منتشر شود، سایت عملاً
+    //    سفید می‌شود و راه برگشت هم سخت است. یک بلوک کافی است.
+    const page = normalizeCmsPage(row.payload);
+    if (page.blocks.length === 0) {
+      throw new BadRequestException({
+        code: "EMPTY_PAGE",
+        message: "صفحهٔ خالی منتشر نمی‌شود — اول دست‌کم یک بلوک به آن اضافه کن.",
+      });
+    }
     const now = new Date();
+    // اسنپ‌شات منتشرشده از همین پیش‌نویس ساخته می‌شود — تنها این اسنپ‌شات
+    // است که بازدیدکننده می‌بیند (بند «پیش‌نویس ≠ منتشرشده»).
     await this.prisma.cmsPage.update({
       where: { slug: s },
-      data: { status: "PUBLISHED", publishedAt: now, updatedBy: actor ?? null },
+      data: {
+        status: "PUBLISHED",
+        publishedAt: now,
+        publishedPayload: page as unknown as object,
+        updatedBy: actor ?? null,
+      },
     });
     await this.audit(actor, "cms.page.publish", s);
     return { slug: s, publishedAt: now.toISOString() };
@@ -175,7 +339,7 @@ export class CmsService {
   async unpublish(slug: string, actor: string | undefined): Promise<{ slug: string }> {
     const s = this.assertSlug(slug);
     const row = await this.prisma.cmsPage.findUnique({ where: { slug: s } });
-    if (!row) throw new NotFoundException({ code: "PAGE_NOT_FOUND", message: "طµظپط­ظ‡ غŒط§ظپطھ ظ†ط´ط¯." });
+    if (!row) throw new NotFoundException({ code: "PAGE_NOT_FOUND", message: "صفحه یافت نشد." });
     await this.prisma.cmsPage.update({
       where: { slug: s },
       data: { status: "DRAFT", updatedBy: actor ?? null },
@@ -202,7 +366,7 @@ export class CmsService {
     return { items: rows.map((r) => ({ id: r.id, createdAt: r.createdAt.toISOString(), actorId: r.actorId })) };
   }
 
-  /** ط¨ط§ط²ع¯ط±ط¯ط§ظ†ط¯ظ† غŒع© ظ†ط³ط®ظ‡ظ” ظ‚ط¨ظ„غŒ â€” ط¨ظ‡â€Œطµظˆط±طھ ظ¾غŒط´â€Œظ†ظˆغŒط³ (ظ†ظ‡ ط§ظ†طھط´ط§ط± ظپظˆط±غŒ) */
+  /** بازگرداندن یک نسخهٔ قبلی — به‌صورت پیش‌نویس (نه انتشار فوری) */
   async restore(
     slug: string,
     revisionId: string,
@@ -213,7 +377,7 @@ export class CmsService {
       where: { id: revisionId, entity: "CmsPage", entityId: s },
     });
     if (!rev) {
-      throw new NotFoundException({ code: "REVISION_NOT_FOUND", message: "ظ†ط³ط®ظ‡ غŒط§ظپطھ ظ†ط´ط¯." });
+      throw new NotFoundException({ code: "REVISION_NOT_FOUND", message: "نسخه یافت نشد." });
     }
     const data = normalizeCmsPage(rev.payload);
     await this.prisma.cmsPage.update({
@@ -225,9 +389,15 @@ export class CmsService {
   }
 
   /**
-   * ط®ظˆط§ظ†ط¯ظ† ط¹ظ…ظˆظ…غŒ ط¨ط±ط§غŒ ظپط±ظˆط´ع¯ط§ظ‡.
-   * ظپظ‚ط· `PUBLISHED` ط¨ط±ظ…غŒâ€Œع¯ط±ط¯ط¯ â€” ظ…ع¯ط± ط¢ظ†ع©ظ‡ `preview=true` ظˆ ظ†ط´ط³طھ ط§ط¯ظ…غŒظ† ظ…ط¹طھط¨ط± ط¨ط§ط´ط¯
-   * (ظ¾غŒط´â€Œظ†ظ…ط§غŒط´ ط²ظ†ط¯ظ‡ظ” طµظپط­ظ‡â€Œط³ط§ط² ط¨ط§غŒط¯ ظ¾غŒط´â€Œظ†ظˆغŒط³ ط±ط§ ظ‡ظ… ط¨ط¨غŒظ†ط¯).
+   * خواندن عمومی برای فروشگاه.
+   *
+   * قانون تازه (گام ۱۷-۲): بازدیدکننده **همیشه** اسنپ‌شات منتشرشده را می‌بیند،
+   * حتی اگر مدیر بعد از انتشار پیش‌نویس را عوض کرده باشد. تا پیش از این،
+   * «ذخیره» روی صفحهٔ منتشرشده بی‌درنگ سایت را تغییر می‌داد و دکمهٔ انتشار
+   * تشریفاتی بود.
+   *
+   * استثنا: `preview=true` با نشست ادمین مجاز → پیش‌نویس، برای بومِ زندهٔ پنل.
+   * صفحهٔ `DRAFT` برای عموم چیزی برنمی‌گرداند (فروشگاه به چیدمان پیش‌فرض می‌رود).
    */
   async getPublic(
     slug: string,
@@ -242,16 +412,19 @@ export class CmsService {
       preview && !!identity && (identity.permissions.includes("*") || identity.permissions.includes("marketing.view"));
     if (row.status !== "PUBLISHED" && !canPreview) return null;
 
+    // پنل: پیش‌نویسِ در حال ویرایش. عموم: آخرین اسنپ‌شات منتشرشده.
+    const body = canPreview ? row.payload : (row.publishedPayload ?? row.payload);
+
     return {
       slug: row.slug,
-      data: normalizeCmsPage(row.payload),
+      data: normalizeCmsPage(body),
       status: row.status,
-      preview: row.status !== "PUBLISHED",
+      preview: canPreview,
     };
   }
 }
 
-/** ط§ظ„ع¯ظˆغŒ ط´ط±ظˆط¹ ط¢ظ…ط§ط¯ظ‡ â€” طھط§ طµظپط­ظ‡ظ” طھط§ط²ظ‡ ط®ط§ظ„غŒ ظ†ط¨ط§ط´ط¯ ظˆ ع©ط§ط±ط¨ط± ط¨ظ„ط§ظپط§طµظ„ظ‡ ع†غŒط²غŒ ط¨ط¨غŒظ†ط¯ */
+/** الگوی شروع آماده — تا صفحهٔ تازه خالی نباشد و کاربر بلافاصله چیزی ببیند */
 function landingTemplate(title: string): CmsPageData {
   const base = normalizeCmsPage({
     version: 1,
@@ -262,13 +435,19 @@ function landingTemplate(title: string): CmsPageData {
         type: "HERO",
         props: {
           title,
-          subtitle: "طھظˆط¶غŒط­ ع©ظˆطھط§ظ‡ ظپط±ظˆط´ع¯ط§ظ‡ ط±ط§ ط§غŒظ†ط¬ط§ ط¨ظ†ظˆغŒط³غŒط¯.",
-          ctaLabel: "ظ…ط´ط§ظ‡ط¯ظ‡ ظ…ط­طµظˆظ„ط§طھ",
+          subtitle: "توضیح کوتاه فروشگاه را اینجا بنویسید.",
+          ctaLabel: "مشاهده محصولات",
           ctaHref: "/c/bra",
         },
       },
-      { type: "CATEGORY_GRID", props: { title: "ط¯ط³طھظ‡â€Œط¨ظ†ط¯غŒâ€Œظ‡ط§", limit: 6 } },
-      { type: "PRODUCT_CAROUSEL", props: { title: "ط¬ط¯غŒط¯طھط±غŒظ†â€Œظ‡ط§", source: "newest", limit: 8 } },
+      /*
+       * نمونه‌کار آرت بلافاصله بعد از هیرو می‌نشیند: قاب بزرگ هیرو و قفسهٔ
+       * آرت یک نوار بصری می‌سازند و کارت‌های محصول همان زبان را ادامه می‌دهند.
+       * props خالی است تا متن‌های پیش‌فرضِ تعریف بلوک بنشینند.
+       */
+      { type: "ART_SHOWCASE", props: {} },
+      { type: "CATEGORY_GRID", props: { title: "دسته‌بندی‌ها", limit: 6 } },
+      { type: "PRODUCT_CAROUSEL", props: { title: "جدیدترین‌ها", source: "newest", limit: 8 } },
       { type: "FEATURE_TRIPLE", props: {} },
       { type: "TRUST_BAR", props: {} },
     ],
@@ -276,9 +455,42 @@ function landingTemplate(title: string): CmsPageData {
   return base;
 }
 
-/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ ع©ظ†طھط±ظ„ط±ظ‡ط§ â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */
+/**
+ * الگوی ساده — برای صفحه‌های متنیِ واقعی (دربارهٔ ما، شرایط، تماس).
+ *
+ * چرا لازم است: قبلاً ساختِ یک مسیر واقعی با «empty» انجام می‌شد؛ نتیجه
+ * بومِ سفید بود و محافظِ انتشار (EMPTY_PAGE) جلوی انتشار را می‌گرفت.
+ * حالا هر صفحه از همان اول یک هیرو و یک بلوک متن دارد — قابل ویرایش و
+ * قابل انتشار.
+ */
+function simpleTemplate(title: string): CmsPageData {
+  return normalizeCmsPage({
+    version: 1,
+    title,
+    seo: { title, description: "" },
+    blocks: [
+      {
+        type: "HERO",
+        props: {
+          title,
+          subtitle: "این متن را با توضیح واقعی این صفحه جایگزین کنید.",
+        },
+      },
+      {
+        type: "RICH_TEXT",
+        props: {
+          title: "متن صفحه",
+          text: "متن این صفحه را اینجا بنویسید.",
+          align: "start",
+        },
+      },
+    ],
+  });
+}
 
-/** ظ…ط¯غŒط±غŒطھ طµظپط­ظ‡â€Œظ‡ط§ â€” ظپظ‚ط· ط¨ط§ ظ…ط¬ظˆط² ظ…ط§ط±ع©طھغŒظ†ع¯ */
+/* ═══════════════════ کنترلرها ═══════════════════ */
+
+/** مدیریت صفحه‌ها — فقط با مجوز مارکتینگ */
 @Controller("admin/pages")
 export class CmsAdminController {
   constructor(private readonly cms: CmsService) {}
@@ -287,6 +499,16 @@ export class CmsAdminController {
   @RequirePermission("marketing.view")
   async list() {
     return this.cms.list();
+  }
+
+  /**
+   * فهرست «صفحات سایت» — باید **قبل** از `:slug` تعریف شود تا Nest آن را
+   * به‌عنوان پارامتر نگیرد.
+   */
+  @Get("site")
+  @RequirePermission("marketing.view")
+  async site() {
+    return this.cms.sitePages();
   }
 
   @Get(":slug")
@@ -298,13 +520,15 @@ export class CmsAdminController {
   @Post()
   @RequirePermission("marketing.manage")
   async create(
-    @Body() body: { slug?: string; title?: string; starter?: "empty" | "landing" },
+    @Body() body: { slug?: string; title?: string; starter?: "empty" | "landing" | "simple" | "site" },
     @Identity() me: AdminIdentity | null,
   ) {
     return this.cms.create(
       String(body.slug ?? ""),
-      String(body.title ?? "طµظپط­ظ‡ظ” طھط§ط²ظ‡"),
-      body.starter === "empty" ? "empty" : "landing",
+      String(body.title ?? "صفحهٔ تازه"),
+      body.starter === "empty" || body.starter === "simple" || body.starter === "site"
+        ? body.starter
+        : "landing",
       me?.userId,
     );
   }
@@ -355,9 +579,9 @@ export class CmsAdminController {
 }
 
 /**
- * ط®ظˆط§ظ†ط¯ظ† ط¹ظ…ظˆظ…غŒ طµظپط­ظ‡ ط¨ط±ط§غŒ ظپط±ظˆط´ع¯ط§ظ‡.
- * ط¨ط¯ظˆظ† `@RequirePermission` â€” ظ…ط³غŒط± ط¹ظ…ظˆظ…غŒ ط§ط³طھطŒ ظˆظ„غŒ ظ¾غŒط´â€Œظ†ظˆغŒط³ ط±ط§ ظپظ‚ط·
- * ظ†ط´ط³طھ ط§ط¯ظ…غŒظ† ظ…غŒâ€Œط¨غŒظ†ط¯ (ظ†ظ‡ ظ‡ط± ع©ط³غŒ).
+ * خواندن عمومی صفحه برای فروشگاه.
+ * بدون `@RequirePermission` — مسیر عمومی است، ولی پیش‌نویس را فقط
+ * نشست ادمین می‌بیند (نه هر کسی).
  */
 @Controller("cms/page")
 export class CmsPublicController {

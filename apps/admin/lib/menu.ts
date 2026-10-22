@@ -51,10 +51,12 @@ export const MENU: MenuGroup[] = [
     title: "فروشگاه",
     items: [
       { title: "محصولات", href: "/products", permission: "products.view" },
+      { title: "ورود گروهی محصولات", href: "/products/import", permission: "products.view" },
       { title: "دسته‌ها", href: "/categories", permission: "categories.view" },
       { title: "برندها", href: "/brands", permission: "brands.view" },
       { title: "ویژگی‌ها", href: "/attributes", permission: "attributes.view" },
       { title: "رسانه", href: "/media", permission: "media.view" },
+      { title: "برنامهٔ عکاسی", href: "/photography", permission: "products.view" },
       { title: "قیمت‌گذاری کانالی", href: "/pricing", permission: "pricing.view" },
     ],
   },
@@ -63,6 +65,7 @@ export const MENU: MenuGroup[] = [
     title: "فروش",
     items: [
       { title: "سفارش‌های سایت", href: "/orders", permission: "orders.view" },
+      { title: "نظرات مشتریان", href: "/reviews", permission: "reviews.moderate" },
       { title: "پرداخت‌ها", href: "/payments", permission: "payments.view" },
       { title: "مشتریان و سبد رهاشده", href: "/customers", permission: "customers.view" },
       { title: "ترمینال فروش (POS)", href: "/pos", permission: "pos.view" },
@@ -134,6 +137,7 @@ export const MENU: MenuGroup[] = [
     title: "بازاریابی",
     items: [
       { title: "کدهای تخفیف و گزارش فروش", href: "/marketing", permission: "marketing.view" },
+      { title: "ویزارد «چی لازم داری؟»", href: "/need-finder", permission: "marketing.view" },
       { title: "صفحه‌ساز زنده", href: "/builder", permission: "marketing.view" },
     ],
   },
@@ -148,6 +152,7 @@ export const MENU: MenuGroup[] = [
       { title: "وب‌سرویس", href: "/web-service", permission: "settings.view" },
       { title: "اعلان‌ها و صف ارسال", href: "/settings/notifications", permission: "settings.view" },
       { title: "پشتیبان‌گیری", href: "/settings/backup", permission: "settings.view" },
+      { title: "ممیزی لحن", href: "/settings/tone-audit", permission: "settings.view" },
       { title: "مرکز عیب‌یابی", href: "/settings/diagnostics", permission: "settings.view" },
     ],
   },

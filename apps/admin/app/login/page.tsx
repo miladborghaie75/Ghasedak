@@ -1,44 +1,43 @@
 import { redirect } from "next/navigation";
 import { getIdentity } from "@/lib/session.server";
+import { entryNotice, loginFailureCode, postUpstream } from "@/lib/upstream";
 
 export const dynamic = "force-dynamic";
 
 async function loginAction(formData: FormData): Promise<void> {
   "use server";
   const { cookies } = await import("next/headers");
-  const email = String(formData.get("email") ?? "");
+  const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  // کوکی session را از پاسخ API به مرورگر منتقل می‌کنیم (Server Action → fetch مطلق):
-  const jar = await cookies();
-  const auth = await fetch(`${process.env.API_ORIGIN ?? "http://localhost:4000"}/api/v1/auth/login`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  if (auth.ok) {
-    const raw = auth.headers.get("set-cookie") ?? "";
-    const token = /ghasedak_admin_session=([^;]+)/.exec(raw)?.[1];
-    if (token) {
-      jar.set("ghasedak_admin_session", token, {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 60 * 60 * 12,
-      });
-    }
-    redirect("/");
+  // کوکی session را از پاسخ API به مرورگر منتقل می‌کنیم (Server Action → fetch مطلق)
+  const result = await postUpstream("/api/v1/auth/login", { email, password });
+  if (!result.ok) {
+    // ۴۰۱ یعنی رمز/ایمیل غلط؛ هر خطای دیگر (API خاموش، ۵۰۰) پیام جدا دارد —
+    // قبلاً هر دو به «ایمیل یا رمز نادرست» یا مرز خطا تبدیل می‌شدند.
+    redirect(`/login?error=${loginFailureCode(result.reason)}`);
   }
-  redirect("/login?error=1");
+  const token = /ghasedak_admin_session=([^;]+)/.exec(result.setCookie ?? "")?.[1];
+  // پاسخ سالم ولی بدون کوکی: بی‌کوکی وارد شدن یعنی حلقهٔ «ورود → بازگشت به ورود»
+  if (!token) redirect("/login?error=server");
+  const jar = await cookies();
+  jar.set("ghasedak_admin_session", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 12,
+  });
+  redirect("/");
 }
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; reset?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string }>;
 }) {
   const me = await getIdentity();
   if (me) redirect("/");
-  const { error, reset } = await searchParams;
+  const { error, notice } = await searchParams;
+  const banner = entryNotice(error) ?? entryNotice(notice);
   return (
     <div className="flex min-h-dvh items-center justify-center p-6">
       <form action={loginAction} className="w-full max-w-sm rounded-3xl border border-line bg-surface p-8">
@@ -46,14 +45,22 @@ export default async function LoginPage({
           <div className="text-xl font-bold text-deep">پنل مدیریت قاصدک</div>
           <div className="mt-1 text-xs text-muted">ورود با ایمیل و رمز عبور</div>
         </div>
-        {error ? (
-          <div role="alert" className="mb-4 rounded-xl bg-err/10 px-3 py-2 text-sm text-err">
-            ایمیل یا رمز نادرست است.
-          </div>
-        ) : null}
-        {reset ? (
-          <div role="status" className="mb-4 rounded-xl bg-ok/10 px-3 py-2 text-sm text-ok">
-            رمز با موفقیت تغییر کرد — با رمز جدید وارد شوید.
+        {banner ? (
+          <div
+            role={banner.tone === "ok" ? "status" : "alert"}
+            className={
+              banner.tone === "ok"
+                ? "mb-4 rounded-xl bg-ok/10 px-3 py-2 text-sm text-ok"
+                : "mb-4 rounded-xl bg-err/10 px-3 py-2 text-sm text-err"
+            }
+          >
+            {banner.text}
+            {error === "down" && process.env.NODE_ENV !== "production" ? (
+              <p className="mt-1 text-[11px] text-muted">
+                محلی: <span dir="ltr">bash infrastructure/run-local.sh start</span> — و{" "}
+                <span dir="ltr">status</span> برای دیدن اینکه کدام سرویس خاموش است.
+              </p>
+            ) : null}
           </div>
         ) : null}
         <label className="mb-1 block text-sm text-ink" htmlFor="email">
@@ -85,7 +92,7 @@ export default async function LoginPage({
           ورود
         </button>
         <a href="/forgot-password" className="mt-3 block text-center text-xs text-muted hover:underline">
-          رمز عبور را فراموش کرده‌اید؟
+          رمز عبورت را فراموش کرده‌ای؟
         </a>
         {/* گام F0-7: راهنمای حساب DEMO فقط برای توسعه است — در تولید این بلوک در HTML هم رندر نمی‌شود */}
         {process.env.NODE_ENV !== "production" ? (

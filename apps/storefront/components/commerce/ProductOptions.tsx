@@ -61,7 +61,8 @@ export function ProductOptions({
   return (
     <div className="flex flex-col gap-3">
       <VariantMatrix product={product} axes={axes} preselect={preselect} />
-      <div className="flex flex-wrap items-center gap-2">
+      {/* توصیهٔ سایز یک جریان تعاملی است — سطر دکمه روی کاغذ نمی‌آید */}
+      <div className="flex flex-wrap items-center gap-2 print:hidden">
         <SizeFinderButton
           category={product.category}
           productId={product.id}
