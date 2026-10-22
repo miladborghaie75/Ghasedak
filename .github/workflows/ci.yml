@@ -150,6 +150,10 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: تولید Prisma Client
         run: pnpm db:generate
+      # seed از distِ قراردادها می‌خواند (@ghasedak/contracts) — بدون این
+      # ساخت، «Cannot find module .../contracts/dist/index.js» می‌گیریم.
+      - name: build قراردادها (seed از dist می‌خواند)
+        run: pnpm --filter @ghasedak/contracts build
       - name: اعمال migrationها روی DB تازه
         run: pnpm --filter @ghasedak/database db:deploy
       - name: seed دمو + فیکسچر تست بصری (کارت امتیازدار + بی‌امتیاز در یک دسته)
