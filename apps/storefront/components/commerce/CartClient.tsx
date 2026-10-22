@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useCart } from "@/components/providers/CartProvider";
-import { ProductArt, type ArtKind } from "./ProductArt";
+import { ArtFrame, type ArtKind } from "./ProductArt";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { DataUnavailable } from "@/components/ui/DataUnavailable";
 import { Price } from "@/components/ui/Price";
@@ -155,8 +156,29 @@ export function CartClient() {
             key={d.variant.id}
             className="flex gap-3 rounded-card border border-line bg-surface p-3 shadow-clay-1"
           >
-            <Link href={`/p/${d.product.slug}`} className="size-24 shrink-0 rounded-xl bg-primary-tint p-1.5">
-              <ProductArt kind={d.product.category as ArtKind} colorId={d.variant.colorId} />
+            <Link href={`/p/${d.product.slug}`} className="relative size-24 shrink-0 overflow-hidden rounded-xl bg-bg">
+              {/*
+                عکسِ واقعی اگر آپلود و تأیید شده باشد، وگرنه همان قابِ پاسپارتو.
+                این همان قاعدهٔ کارتِ محصول است: با تأییدِ «نمای صافِ جلو» در برنامهٔ
+                عکاسی، عکسِ اصلیِ محصول عوض می‌شود و سبد خودکار آرت را کنار می‌گذارد.
+              */}
+              {d.product.image ? (
+                <Image
+                  src={d.product.image}
+                  alt={d.product.name}
+                  fill
+                  sizes="96px"
+                  className="object-cover"
+                />
+              ) : (
+                /* نشانِ برند در این اندازه دیده نمی‌شود، پس خاموش است */
+                <ArtFrame
+                  kind={d.product.category as ArtKind}
+                  colorId={d.variant.colorId}
+                  className="h-full w-full"
+                  mark={false}
+                />
+              )}
             </Link>
             <div className="flex min-w-0 flex-1 flex-col">
               <Link href={`/p/${d.product.slug}`} className="clamp-2 text-[13px] font-bold text-ink hover:text-primary-strong">

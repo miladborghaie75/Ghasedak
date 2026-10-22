@@ -72,6 +72,7 @@ model User {
   payrollContracts   PayrollContract[]
   payrollItems       PayrollItem[]
   stocktakesApproved Stocktake[]            @relation("StocktakeApprovedBy")
+  photoTasks         PhotoTask[]
 }
 
 model AdminSession {
@@ -265,6 +266,7 @@ model Product {
   reviews    Review[]
   wishlist   WishlistItem[]
   bundle     ProductBundle?
+  photoTasks PhotoTask[]
 }
 
 model ProductImage {
@@ -278,6 +280,40 @@ model ProductImage {
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
+}
+
+/// یک کارِ عکاسی — «برای این محصول، این کادر گرفته شده یا نه».
+///
+/// چرا مدل جدا و نه یک فلگ روی محصول؟ چون برنامهٔ عکاسی چندکادری است:
+/// هر محصول چند کادر دارد و هر کادر چرخهٔ خودش را دارد (عکس گرفته شد → تأیید شد
+/// → یا نیاز به عکسِ دوباره). یک رکورد = یک «محصول × کادر»؛ یکتایی همین
+/// ترکیب در DB تضمین شده تا یک کادر دو بار ثبت نشود.
+enum PhotoTaskStatus {
+  PENDING
+  SHOT
+  NEEDS_RETAKE
+  APPROVED
+}
+
+model PhotoTask {
+  id        String          @id @default(cuid())
+  productId String
+  /// کادرِ استاندارد — PhotoShotKind در @ghasedak/contracts (single source of truth)
+  shotKind  String
+  status    PhotoTaskStatus @default(PENDING)
+  /// رسانهٔ پیوست‌شدهٔ این کادر (id رسانه — رابطهٔ صریح ندارد، مثل ProductImage)
+  mediaId   String?
+  /// یادداشتِ عکاس (مثلاً «نور کم بود — دوباره بگیر»)
+  note      String?
+  actorId   String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@unique([productId, shotKind])
+  @@index([status])
 }
 
 model ProductAttributeTerm {
@@ -964,13 +1000,20 @@ enum ContentStatus {
 }
 
 model CmsPage {
-  id          String        @id @default(cuid())
-  slug        String        @unique
-  payload     Json
-  status      ContentStatus @default(DRAFT)
-  publishedAt DateTime?
-  updatedBy   String?
-  updatedAt   DateTime      @updatedAt
+  id     String @id @default(cuid())
+  slug   String @unique
+  /// پیش‌نویس — همان چیزی که صفحه‌ساز ذخیره می‌کند (ممکن است منتشرنشده باشد)
+  payload Json
+  /// اسنپ‌شات منتشرشده — تنها چیزی که بازدیدکننده می‌بیند.
+  /// چرا جدا شد؟ قبلاً «ذخیره» روی صفحهٔ منتشرشده بی‌درنگ سایت را عوض می‌کرد
+  /// و دکمهٔ «انتشار» تشریفاتی بود؛ یعنی ویرایش نیمه‌کاره به چشم مشتری می‌رفت.
+  /// `null` = صفحه هرگز از این نسخه منتشر نشده؛ در این حالت برای سازگاری
+  /// با صفحه‌های قدیمی، همان `payload` سرو می‌شود.
+  publishedPayload Json?
+  status           ContentStatus @default(DRAFT)
+  publishedAt      DateTime?
+  updatedBy        String?
+  updatedAt        DateTime      @updatedAt
 }
 
 enum HomeSectionType {

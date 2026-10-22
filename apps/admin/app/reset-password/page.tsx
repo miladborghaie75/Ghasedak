@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { entryNotice, postUpstream } from "@/lib/upstream";
 
 export const dynamic = "force-dynamic";
 
@@ -7,15 +8,14 @@ async function resetAction(formData: FormData): Promise<void> {
   const token = String(formData.get("token") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm") ?? "");
-  if (password.length < 8 || password !== confirm) redirect("/reset-password?token=" + encodeURIComponent(token) + "&error=1");
-  const api = process.env.API_ORIGIN ?? "http://localhost:4000";
-  const res = await fetch(`${api}/api/v1/auth/password/reset`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ purpose: "admin", token, newPassword: password }),
-  });
-  if (res.ok) redirect("/login?reset=1");
-  redirect(`/reset-password?token=${encodeURIComponent(token)}&error=1`);
+  const back = (code: string) => `/reset-password?token=${encodeURIComponent(token)}&error=${code}`;
+  if (password.length < 8 || password !== confirm) redirect(back("invalid"));
+  const res = await postUpstream("/api/v1/auth/password/reset", { purpose: "admin", token, newPassword: password });
+  if (res.ok) redirect("/login?notice=reset");
+  // سرور در دسترس نیست یا ۵۰۰ داده: کد مصرف نشده — پیام نباید بگوید «کد نامعتبر است»
+  if (res.reason === "unreachable") redirect(back("down"));
+  if (res.status >= 500) redirect(back("server"));
+  redirect(back("invalid"));
 }
 
 export default async function ResetPasswordPage({
@@ -24,6 +24,7 @@ export default async function ResetPasswordPage({
   searchParams: Promise<{ token?: string; error?: string }>;
 }) {
   const { token, error } = await searchParams;
+  const banner = entryNotice(error);
   return (
     <div className="flex min-h-dvh items-center justify-center p-6">
       <form action={resetAction} className="w-full max-w-sm rounded-3xl border border-line bg-surface p-8">
@@ -31,9 +32,9 @@ export default async function ResetPasswordPage({
           <div className="text-xl font-bold text-deep">رمز جدید</div>
           <div className="mt-1 text-xs text-muted">کد یک‌بارمصرف پیام‌شده را وارد کن.</div>
         </div>
-        {error ? (
+        {banner ? (
           <div role="alert" className="mb-4 rounded-xl bg-err/10 px-3 py-2 text-sm text-err">
-            کد نامعتبر یا منقضی شده، یا رمزها یکسان‌اند یا کوتاه‌تر از ۸ کاراکترند — دوباره تلاش کن.
+            {banner.text}
           </div>
         ) : null}
         <label className="mb-1 block text-sm text-ink" htmlFor="token">کد بازیابی</label>

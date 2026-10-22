@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ProductArt, type ArtKind } from "@/components/commerce/ProductArt";
+import { ArtFrame, type ArtKind } from "@/components/commerce/ProductArt";
 import { WishlistButton } from "@/components/commerce/WishlistButton";
 import { StickyBuyBar } from "@/components/commerce/StickyBuyBar";
 import { RelatedShelf } from "@/components/commerce/RelatedShelf";
@@ -118,7 +118,7 @@ export default async function ProductPage({ params }: PageProps) {
         {/* ۱) گالری */}
         <section aria-label="تصویر محصول" className="self-start lg:sticky lg:top-24">
           {/* در چاپ گالری جمع می‌شود تا برگهٔ مشخصات، صفحهٔ کامل را نگیرد */}
-          <div className="relative rounded-blob border border-line bg-gradient-to-b from-primary-tint to-surface shadow-clay-1 print:mx-auto print:max-w-[72mm]">
+          <div className="relative rounded-blob border border-line bg-surface shadow-clay-1 print:mx-auto print:max-w-[72mm]">
             <div className="absolute start-4 top-4 z-10">
               <WishlistButton productId={product.id} name={product.name} />
             </div>
@@ -134,8 +134,13 @@ export default async function ProductPage({ params }: PageProps) {
                 />
               </div>
             ) : (
-              <div className="p-6 sm:p-10">
-                <ProductArt kind={product.category as ArtKind} colorId={product.variants[0].colorId} />
+              /* بدون عکس: همان قاب پاسپارتو + نشان برند (نه آرت شناور روی زمینهٔ خالی) */
+              <div className="p-2 sm:p-2.5">
+                <ArtFrame
+                  kind={product.category as ArtKind}
+                  colorId={product.variants[0].colorId}
+                  className="aspect-square"
+                />
               </div>
             )}
           </div>

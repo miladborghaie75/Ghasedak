@@ -24,12 +24,20 @@ export async function api<T>(
   if (init?.body && typeof init.body === "string") {
     headers.set("content-type", "application/json");
   }
-  const res = await fetch(resolve(path), {
-    ...init,
-    headers,
-    cache: "no-store",
-    redirect: "manual",
-  });
+  let res: Response;
+  try {
+    res = await fetch(resolve(path), {
+      ...init,
+      headers,
+      cache: "no-store",
+      redirect: "manual",
+    });
+  } catch {
+    // API خاموش/شبکه قطع: «پاسخی نرسید» با status ۰ — نه استثنا و نه نشست نامعتبر.
+    // قبلاً همین حالت در رندر صفحه‌های سروری به مرز خطا («این بخش باز نشد») می‌رسید
+    // در حالی که علت واقعی، بالا نبودن سرور بود.
+    return { ok: false, status: 0, error: { code: "UPSTREAM_UNREACHABLE", message: "سرور پنل پاسخ نداد." } };
+  }
   if (res.status === 204) return { ok: true, status: 204 };
   const body = (await res.json().catch(() => null)) as unknown;
   if (!res.ok) {

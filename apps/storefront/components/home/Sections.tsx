@@ -3,6 +3,7 @@ import { Chip } from "@/components/ui/Chip";
 import { faNum } from "@/lib/format";
 import { COPY } from "@/lib/copy";
 import { loadNeedFinderSteps } from "@/lib/needs";
+import { ArtSilhouette } from "@ghasedak/blocks";
 import type { ArtKind } from "@/components/commerce/ProductArt";
 
 /**
@@ -107,9 +108,12 @@ export function PromoBanners() {
             </div>
             <span
               aria-hidden
-              className="flex size-16 shrink-0 items-center justify-center rounded-full bg-surface/70 shadow-clay-1 transition-transform group-hover:scale-105"
+              className="flex size-16 shrink-0 items-center justify-center rounded-full bg-surface/70 p-3 shadow-clay-1 transition-transform group-hover:scale-105"
             >
-              <CategoryGlyph kind={b.icon} className="size-9" />
+              {/* همان آرتِ کارت محصول، نه یک گلیفِ دوم — بنر و کارت باید یک زبان داشته باشند */}
+              <span className="block size-full">
+                <ArtSilhouette kind={b.icon} color="var(--color-primary)" />
+              </span>
             </span>
           </Link>
         ))}
@@ -175,40 +179,6 @@ export function GuideTeasers() {
 }
 
 /* ── گلیف‌های خطی مشترک ───────────────────────────── */
-function CategoryGlyph({ kind, className }: { kind: ArtKind; className?: string }) {
-  const s = { fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-  switch (kind) {
-    case "sport":
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden>
-          <path d="M6 8h12v9a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z" {...s} />
-          <path d="M8 8c0-3 1.7-5 4-5s4 2 4 5" {...s} />
-        </svg>
-      );
-    case "set":
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden>
-          <path d="M6 9c-.5-3 .5-5.5 2-6.5C8.7 2 9.4 2 10 2s1.3 0 2 .5c1.5 1 2.5 3.5 2 6.5" {...s} />
-          <path d="M10 14h4c0 3-.6 5-2 6.5-1.4-1.5-2-3.5-2-6.5z" {...s} />
-        </svg>
-      );
-    case "bra":
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden>
-          <path d="M3 13c2-1 3.5-4 4-7 .2-1 1.8-1 2 0 .4 3.4 1.6 6 3 7.5" {...s} />
-          <path d="M12 13.5c1.4-1.5 2.6-4.1 3-7.5.2-1 1.8-1 2 0 .5 3 2 6 4 7" {...s} />
-          <path d="M3 13c2 2.5 5.5 4 9 4s7-1.5 9-4" {...s} />
-        </svg>
-      );
-    default:
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden>
-          <circle cx="12" cy="12" r="8" {...s} />
-        </svg>
-      );
-  }
-}
-
 function TrustIcon({ kind }: { kind: "truck" | "shield" | "ruler" | "chat" }) {
   const s = { fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   switch (kind) {

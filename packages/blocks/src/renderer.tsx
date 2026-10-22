@@ -1,6 +1,7 @@
 import type { CmsBlockType, CmsPageData } from "@ghasedak/contracts";
 import type { CmsBlockProps, CmsData } from "./types";
 import {
+  ArtShowcaseBlock,
   BannerBlock,
   BrandGridBlock,
   CategoryGridBlock,
@@ -30,6 +31,7 @@ export type CmsRendererFn = (args: CmsBlockProps) => React.ReactElement | null;
 
 export const CMS_RENDERERS: Record<CmsBlockType, CmsRendererFn> = {
   HERO: HeroBlock,
+  ART_SHOWCASE: ArtShowcaseBlock,
   BANNER: BannerBlock,
   BRAND_GRID: BrandGridBlock,
   CATEGORY_GRID: CategoryGridBlock,

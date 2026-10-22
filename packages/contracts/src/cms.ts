@@ -14,8 +14,8 @@
 /** انواع بلوک‌های قابل ساخت */
 export const CMS_BLOCK_TYPES = [
   "HERO",
-  "BANNER",
-"CATEGORY_GRID",
+  "BANNER",  "CATEGORY_GRID",
+  "ART_SHOWCASE",
   "BRAND_GRID",
   "PRODUCT_CAROUSEL",
   "PRODUCT_GRID",
@@ -43,9 +43,32 @@ export type CmsFieldType =
   | "image"
   | "list";
 
+/**
+ * نوع فیلدهای داخل یک سطر لیست.
+ *
+ * چرا جدا از `CmsFieldType`؟ چون «انتخابگر رنگ» و «پیش‌نمایش آرت» فقط
+ * داخل سطرهای لیست معنا دارند — در سطح بلوک چنین کنترلی وجود ندارد.
+ */
+export type CmsItemFieldType = "text" | "textarea" | "swatch" | "art";
+
 export interface CmsFieldOption {
   value: string;
   label: string;
+  /** متغیر CSS رنگ — برای نمایش نمونهٔ رنگ در پنل (مثل `var(--color-sage)`) */
+  cssVar?: string;
+}
+
+/** یک ستون از سطرهای لیست */
+export interface CmsItemField {
+  key: string;
+  label: string;
+  type: CmsItemFieldType;
+  placeholder?: string;
+  options?: CmsFieldOption[];
+  /** برای نوع `art`: کلید ستونی که رنگ قاب را نگه می‌دارد */
+  colorFrom?: string;
+  /** فقط برای متن: سقفِ طولِ مقدار — توضیح و نشانِ قاب جای جمله‌ی بلند نیستند */
+  maxLength?: number;
 }
 
 export interface CmsField {
@@ -62,10 +85,219 @@ export interface CmsField {
   step?: number;
   /** برای list: تعداد سطرهای قابل ویرایش */
   listRows?: number;
+  /**
+   * برای list: تعداد سطرها **ثابت** است — مدیر نمی‌تواند سطری اضافه یا حذف
+   * کند، فقط ترتیب و مقدارها را عوض می‌کند. برای قفسهٔ فرم‌های برند لازم است:
+   * شکلِ قفسه (شش فرمِ شناخته‌شده) از قرارداد برند می‌آید، نه از سلیقهٔ مدیر.
+   */
+  listFixed?: boolean;
   /** فقط برای یک نوع خاص بلوک نمایش داده شود (مثال: "HERO|BANNER") */
   onlyFor?: CmsBlockType[];
-  /** برای list: کلیدهای هر آیتم */
-  itemFields?: Array<Pick<CmsField, "key" | "label" | "type" | "placeholder" | "options">>;
+  /** برای list: ستون‌های هر آیتم */
+  itemFields?: CmsItemField[];
+}
+
+/* ─────────────────── قفسهٔ فرم‌ها: فرم‌ها و پالت برند ─────────────────── */
+
+/**
+ * فرم‌های محصولِ برند — همان شش قابِ ثابتِ «نمونه‌کار آرت».
+ *
+ * این فهرست *قرارداد برند* است، نه فهرست دلخواه: قیفِ فروشگاه دقیقاً همین
+ * شش دسته را دارد و آرتِ اختصاصی هر فرم (سوتین، شورت، ست، گن، ورزشی،
+ * لباس خواب) برای همین‌ها کشیده شده. مدیر می‌تواند **ترتیب** و **رنگ** را
+ * عوض کند، ولی فرمِ قاب‌ها و شماره‌شان عوض نمی‌شود — وگرنه زبان بصریِ
+ * برند می‌شکند.
+ */
+export type ArtFrameKind = "bra" | "panty" | "set" | "shapewear" | "sport" | "sleepwear";
+
+export interface ArtFrameKindDef {
+  value: ArtFrameKind;
+  /** نام فارسی فرم — همان نامی که در دستهٔ زندهٔ فروشگاه می‌بینی */
+  label: string;
+  /** اسلاگ دسته در فروشگاه (لینک قاب) */
+  slug: string;
+}
+
+export const ART_FRAME_KINDS: ArtFrameKindDef[] = [
+  { value: "set", label: "ست لباس زیر", slug: "set" },
+  { value: "bra", label: "سوتین", slug: "bra" },
+  { value: "panty", label: "شورت", slug: "panty" },
+  { value: "shapewear", label: "گن", slug: "shapewear" },
+  { value: "sport", label: "ورزشی", slug: "sport" },
+  { value: "sleepwear", label: "لباس خواب", slug: "sleepwear" },
+];
+
+/**
+ * پالت رنگِ قاب‌های آرت — فقط از توکن‌های برند، نه hex آزاد.
+ *
+ * چرا رنگ آزاد ممنوع است؟ رنگِ قاب‌ها بخشی از زبان بصری برند است: چهار
+ * رنگِ ثابت (بنفش برند، بنفش تیره، سبز خاکی، صورتی خاکی) که در هر دو تم
+ * روشن و شب خوانا می‌مانند. اگر مدیر hex دلخواه بگذارد، قفسه به یک جعبهٔ
+ * رنگِ تصادفی تبدیل می‌شود. پس انتخابگر پنل فقط همین چهار رنگ را نشان
+ * می‌دهد و سمت API هم هر مقدار بیرون از این پالت را دور می‌ریزد.
+ *
+ * چرا توکن‌های `art-*` و نه توکن‌های متن (`--color-plum` و…)؟
+ * «بنفش تیره» دو نقش جدا دارد: رنگِ متنِ تیترها (که در تم شب باید روشن
+ * باشد تا خوانده شود) و رنگِ قابِ آرت (که باید در هر دو تم *متمایز* بماند).
+ * با یک توکنِ مشترک، در تم شب «بنفش برند» و «بنفش تیره» هر دو به یک
+ * یاسِ کم‌رنگ می‌افتند و دو قابِ جدا یک‌رنگ می‌شوند — یعنی همان
+ * شکستنِ زبان بصری که این پالت برای جلوگیری از آن ساخته شده.
+ * پس پالتِ آرت توکن‌های خودش را دارد و هر تم آن‌ها را جدا بازنگاشت می‌کند.
+ */
+export interface ArtFrameColorDef {
+  value: string;
+  label: string;
+  /** متغیر CSS — تنها راه رنگ‌دادن به آرت */
+  cssVar: string;
+}
+
+export const ART_FRAME_COLORS: ArtFrameColorDef[] = [
+  { value: "primary", label: "بنفش برند", cssVar: "var(--color-art-brand)" },
+  { value: "plum", label: "بنفش تیره", cssVar: "var(--color-art-plum)" },
+  { value: "sage", label: "سبز خاکی", cssVar: "var(--color-art-sage)" },
+  { value: "dusty-rose", label: "صورتی خاکی", cssVar: "var(--color-art-rose)" },
+];
+
+/** رنگ پیش‌فرض هر فرم — مبنای قفسه وقتی مدیر چیزی را عوض نکرده */
+export const ART_FRAME_DEFAULT_COLORS: Record<ArtFrameKind, string> = {
+  set: "dusty-rose",
+  bra: "primary",
+  panty: "sage",
+  shapewear: "plum",
+  sport: "primary",
+  sleepwear: "dusty-rose",
+};
+
+/** ترتیب و رنگِ پیش‌فرض قفسه — همان چیزی که امروز روی سایت می‌بینی */
+export const ART_FRAME_DEFAULTS: Array<{ kind: ArtFrameKind; color: string }> =
+  ART_FRAME_KINDS.map((k) => ({ kind: k.value, color: ART_FRAME_DEFAULT_COLORS[k.value] }));
+
+/** آیا این مقدار یکی از فرم‌های برند است؟ */
+export function isArtFrameKind(v: unknown): v is ArtFrameKind {
+  return typeof v === "string" && ART_FRAME_KINDS.some((k) => k.value === v);
+}
+
+/** آیا این مقدار یکی از رنگ‌های مجاز برند است؟ */
+export function isArtFrameColor(v: unknown): boolean {
+  return typeof v === "string" && ART_FRAME_COLORS.some((c) => c.value === v);
+}
+
+/** متغیر CSS رنگ — برای مقدار نامعتبر، رنگ پیش‌فرض همان فرم */
+export function artFrameColorVar(value: unknown, kind: ArtFrameKind): string {
+  const found = ART_FRAME_COLORS.find((c) => c.value === value);
+  if (found) return found.cssVar;
+  const fallback = ART_FRAME_COLORS.find((c) => c.value === ART_FRAME_DEFAULT_COLORS[kind]);
+  return fallback?.cssVar ?? "var(--color-art-brand)";
+}
+
+/**
+ * متنِ کوتاهِ فروشِ هر فرم — توضیحِ یک‌خطی زیرِ نامِ قاب.
+ *
+ * چرا در قرارداد و نه فقط در پنل؟ چون قفسه باید حتی وقتی مدیر چیزی ننوشته
+ * «حرف» داشته باشد؛ همان شش خطِ ثابتِ برند مبنای پیش‌فرض‌اند و مدیر می‌تواند
+ * هرکدام را عوض کند. طولشان عمداً یک نفس است: در ستونی به پهنای یک کارت،
+ * جملهٔ بلند به دو خط می‌شکند و ردیفِ قاب‌ها را ناتراز می‌کند.
+ */
+export const ART_FRAME_NOTES: Record<ArtFrameKind, string> = {
+  set: "هماهنگ از بالا تا پایین",
+  bra: "سبک، برای روزهای بلند",
+  panty: "برشِ بی‌خط زیرِ لباس",
+  shapewear: "فرم می‌دهد، فشار نمی‌آورد",
+  sport: "کششِ آزاد برای تمرین",
+  sleepwear: "نرمیِ شب تا صبح",
+};
+
+/**
+ * نشانِ گوشهٔ قاب — خالی یعنی این فرم نشان ندارد.
+ *
+ * نشان یک ادعای فروش است (پیشنهاد، تازه، محدود…)، پس فقط جایی می‌نشیند که
+ * مدیر صریحاً خواسته باشد؛ به همین دلیل هم «کلیدِ نمایش» جدا از متن دارد و
+ * می‌توان نشان را موقتاً خاموش کرد بی‌آنکه متنش پاک شود.
+ */
+export const ART_FRAME_BADGES: Record<ArtFrameKind, string> = {
+  set: "پیشنهاد ما",
+  bra: "",
+  panty: "",
+  shapewear: "",
+  sport: "",
+  sleepwear: "",
+};
+
+/** یک قابِ آمادهٔ رندر — همه‌چیزش از قرارداد برند می‌آید */
+export interface ResolvedArtFrame {
+  kind: ArtFrameKind;
+  /** اسلاگ دسته — لینک قاب */
+  slug: string;
+  /** نام برندِ فرم (وقتی مدیر برچسب دلخواه نداده) */
+  brandLabel: string;
+  /** برچسبی که مدیر نوشته (خالی = برچسب برند) */
+  customLabel: string;
+  /** متغیر CSS رنگ — همیشه از پالت برند */
+  color: string;
+  /** توضیحِ کوتاهِ فروش — خالی = بی‌توضیح */
+  note: string;
+  /** متنِ نشانِ گوشه — خالی = نشان ندارد (نشان یک ادعای فروش است، نه پیش‌فرض) */
+  badge: string;
+}
+
+/**
+ * تبدیل props مدیر به شش قابِ قطعی.
+ *
+ * این تابع *قلبِ* قاعدهٔ «زبان بصری برند» در بلوک نمونه‌کار است:
+ *  ۱) **ترتیب** مدیر می‌ماند — تنها چیزی که او کنترل می‌کند؛
+ *  ۲) فرمِ ناشناخته یا تکراری حذف می‌شود — هر فرم یک‌بار، مثل خودِ برند؛
+ *  ۳) رنگِ بیرون از پالت به رنگ پیش‌فرض همان فرم برمی‌گردد؛
+ *  ۴) جای خالی با فرم‌های برند پر می‌شود تا قفسه همیشه شش قاب باشد.
+ *
+ * چرا در قرارداد و نه در کامپوننت؟ چون باید **قابل تست** باشد (API و سایت
+ * یک نتیجه می‌گیرند) و چون API هم باید بتواند همین قاعده را روی payload
+ * ناخوانا اجرا کند.
+ */
+export function resolveArtFrames(rows: unknown): ResolvedArtFrame[] {
+  const list = Array.isArray(rows) ? rows : [];
+  const out: ResolvedArtFrame[] = [];
+  const used = new Set<string>();
+
+  for (const row of list.slice(0, ART_FRAME_KINDS.length)) {
+    if (!isPlainObject(row)) continue;
+    const kind = row.kind;
+    if (!isArtFrameKind(kind) || used.has(kind)) continue;
+    used.add(kind);
+    const def = ART_FRAME_KINDS.find((k) => k.value === kind);
+    if (!def) continue;
+    out.push({
+      kind,
+      slug: def.slug,
+      brandLabel: def.label,
+      customLabel: typeof row.label === "string" ? row.label.trim() : "",
+      color: artFrameColorVar(row.color, kind),
+      // توضیحِ خالی به متنِ پیش‌فرضِ همان فرم برمی‌گردد؛ این هم مهاجرتِ صفحه‌های
+      // قدیمی (که هنوز این ستون را ندارند) را سالم نگه می‌دارد و هم یعنی مدیر
+      // برای «نوشتن» فقط باید تایپ کند، نه نسخه‌برداری از متنِ برند.
+      note: (typeof row.note === "string" ? row.note.trim().slice(0, 80) : "") || ART_FRAME_NOTES[kind],
+      badge: typeof row.badge === "string" ? row.badge.trim().slice(0, 24) : "",
+    });
+  }
+
+  for (const def of ART_FRAME_DEFAULTS) {
+    if (out.length >= ART_FRAME_KINDS.length) break;
+    if (used.has(def.kind)) continue;
+    used.add(def.kind);
+    const k = ART_FRAME_KINDS.find((x) => x.value === def.kind);
+    if (!k) continue;
+    out.push({
+      kind: def.kind,
+      slug: k.slug,
+      brandLabel: k.label,
+      customLabel: "",
+      color: artFrameColorVar(def.color, def.kind),
+      // جای خالی هم «حرف» دارد: متنِ پیش‌فرضِ همان فرمِ برند
+      note: ART_FRAME_NOTES[def.kind],
+      badge: ART_FRAME_BADGES[def.kind],
+    });
+  }
+
+  return out;
 }
 
 export type CmsBlockGroup = "header" | "commerce" | "content" | "social" | "layout";
@@ -150,7 +382,30 @@ export const CMS_BLOCK_DEFS: Record<CmsBlockType, CmsBlockDef> = {
       { key: "eyebrow", label: "عنوان کوچک بالا", type: "text", placeholder: "ارسال سریع به سراسر ایران" },
       { key: "title", label: "عنوان اصلی", type: "text", placeholder: "زیرپوش، ساده و مطمئن" },
       { key: "subtitle", label: "زیرعنوان", type: "textarea" },
-      { key: "imageUrl", label: "تصویر پس‌زمینه", type: "image" },
+      {
+        key: "imageUrl",
+        label: "عکس قاب هیرو",
+        type: "image",
+        help: "از «انتخاب از رسانه» عکس را بگذار. خالی بماند؟ قاب با نشان برند پر می‌شود — نه با جای خالی.",
+      },
+      {
+        key: "imageAlt",
+        label: "متن جایگزین عکس",
+        type: "text",
+        placeholder: "مثلاً: ست سوتین و شورت نخی — رنگ صورتی",
+        help: "برای خوانندهٔ صفحه و موتور جست‌وجو؛ اگر عکس فقط تزئینی است خالی بگذارید.",
+      },
+      {
+        key: "imageFocus",
+        label: "کادر عکس",
+        type: "select",
+        options: [
+          { value: "center", label: "وسط" },
+          { value: "top", label: "بالا" },
+          { value: "bottom", label: "پایین" },
+        ],
+        help: "برای عکس عمودی که در قاب بریده می‌شود، بخش مهم تصویر را انتخاب کنید.",
+      },
       { key: "height", label: "ارتفاع", type: "select", options: [
         { value: "sm", label: "کوتاه" },
         { value: "md", label: "متوسط" },
@@ -171,6 +426,7 @@ export const CMS_BLOCK_DEFS: Record<CmsBlockType, CmsBlockDef> = {
       secondaryLabel: "راهنمای سایز",
       secondaryHref: "/guides/size",
       align: "start",
+      imageFocus: "center",
     },
   },
 
@@ -210,6 +466,92 @@ export const CMS_BLOCK_DEFS: Record<CmsBlockType, CmsBlockDef> = {
       { key: "limit", label: "تعداد دسته", type: "number", min: 2, max: 12, step: 1 },
     ],
     defaults: { title: "دسته‌بندی‌ها", limit: 6 },
+  },
+
+  ART_SHOWCASE: {
+    type: "ART_SHOWCASE",
+    label: "نمونه‌کار آرت (قفسهٔ فرم‌ها)",
+    description:
+      "شش فرم محصول با آرت اختصاصی — پل بین قاب هیرو و کارت محصول تا پیش از رسیدن عکس‌ها.",
+    group: "commerce",
+    glyph: "◫",
+    fields: [
+      { key: "eyebrow", label: "عنوان کوچک بالا", type: "text", placeholder: "نمونه‌کار" },
+      { key: "title", label: "عنوان", type: "text" },
+      { key: "subtitle", label: "زیرعنوان", type: "textarea" },
+      { key: "caption", label: "پانویس", type: "text", help: "یک خط کوچک زیر قفسه — مثلاً منبع آرت‌ها." },
+      {
+        key: "frames",
+        label: "قاب‌ها (ترتیب و رنگ)",
+        type: "list",
+        listRows: 6,
+        listFixed: true,
+        help:
+          "ترتیب را با کشیدن نقطه‌های کنارِ شمارهٔ هر ردیف عوض کن؛ دکمه‌های ↑ و ↓ همان کار را با صفحه‌کلید هم انجام می‌دهند. رنگ هر قاب را از پالت برند انتخاب کن — فرم و شمارهٔ قاب‌ها ثابت برند است.",
+        itemFields: [
+          {
+            key: "kind",
+            label: "فرم",
+            type: "art",
+            colorFrom: "color",
+            options: ART_FRAME_KINDS.map((k) => ({ value: k.value, label: k.label })),
+          },
+          {
+            key: "color",
+            label: "رنگ",
+            type: "swatch",
+            options: ART_FRAME_COLORS.map((c) => ({
+              value: c.value,
+              label: c.label,
+              cssVar: c.cssVar,
+            })),
+          },
+          {
+            key: "label",
+            label: "برچسب",
+            type: "text",
+            placeholder: "خالی = نام دستهٔ زنده",
+          },
+          {
+            key: "note",
+            label: "توضیح کوتاه",
+            type: "text",
+            maxLength: 80,
+            placeholder: ART_FRAME_NOTES.set + " (خالی = متن پیش‌فرض برند)",
+          },
+          {
+            key: "badge",
+            label: "نشان گوشه",
+            type: "text",
+            maxLength: 24,
+            placeholder: "خالی = بدون نشان",
+          },
+        ],
+      },
+      {
+        key: "showBadges",
+        label: "نمایش نشان‌های گوشه",
+        type: "boolean",
+        help:
+          "خاموش کردن این کلید نشان‌ها را از همهٔ قاب‌ها برمی‌دارد، ولی متنشان می‌ماند — برای وقتی می‌خواهی قفسه آرام‌تر شود.",
+      },
+      ...ctaFields,
+    ],
+    defaults: {
+      eyebrow: "نمونه‌کار",
+      title: "شش فرم، یک زبان بصری",
+      subtitle:
+        "از ست روزانه تا گن و لباس خواب؛ هر دسته آرت اختصاصی خودش را دارد تا فرم و کاربردش را پیش از عکس ببینی.",
+      caption: "آرت اختصاصی قاصدک · تا رسیدن عکس‌های واقعی",
+      frames: ART_FRAME_DEFAULTS.map((f) => ({
+        ...f,
+        note: ART_FRAME_NOTES[f.kind],
+        badge: ART_FRAME_BADGES[f.kind],
+      })),
+      showBadges: true,
+      ctaLabel: "مشاهده همه محصولات",
+      ctaHref: "/search",
+    },
   },
 
   BRAND_GRID: {
@@ -539,6 +881,11 @@ function safeList(v: unknown, maxRows = 12): unknown[] {
   return v.slice(0, maxRows);
 }
 
+/** کپی تازه از مقدار پیش‌فرضِ یک لیست — تا دو بلوک یک آرایه را share نکنند */
+function cloneList(v: unknown): unknown[] {
+  return Array.isArray(v) ? v.map((row) => (isPlainObject(row) ? { ...row } : row)) : [];
+}
+
 /**
  * نرمال‌سازی props یک بلوک — فقط کلیدهای مجازِ همان تعریف عبور می‌کنند.
  * این لایهٔ امنیتی است: HTML/اسکریپت خام هرگز از این مسیر عبور نمی‌کند
@@ -551,7 +898,7 @@ export function sanitizeBlockProps(type: CmsBlockType, input: unknown): Record<s
   for (const field of def.fields) {
     const raw = input[field.key];
     if (raw === undefined) {
-      out[field.key] = field.type === "list" ? (def.defaults[field.key] ?? []) : def.defaults[field.key];
+      out[field.key] = field.type === "list" ? cloneList(def.defaults[field.key]) : def.defaults[field.key];
       continue;
     }
     switch (field.type) {
@@ -567,12 +914,20 @@ export function sanitizeBlockProps(type: CmsBlockType, input: unknown): Record<s
         break;
       case "list": {
         const rows = safeList(raw, field.listRows ?? 12).filter(isPlainObject);
-        const allowed = (field.itemFields ?? []).map((f) => f.key);
+        const itemFields = field.itemFields ?? [];
         out[field.key] = rows.map((row) => {
           const clean: Record<string, unknown> = {};
-          for (const k of allowed) {
-            const v = row[k];
-            clean[k] = typeof v === "number" ? v : safeStr(v, 800);
+          for (const f of itemFields) {
+            const v = row[f.key];
+            if (f.type === "swatch" || f.type === "art") {
+              // ستونِ انتخابی (رنگ قاب، فرم قاب) فقط مقدارِ مجاز را نگه می‌دارد —
+              // رنگ یا شکلِ دلخواه از این مسیر رد نمی‌شود.
+              const s = typeof v === "string" ? v : "";
+              clean[f.key] = (f.options ?? []).some((o) => o.value === s) ? s : "";
+            } else {
+              // سقفِ طول برای ستون‌هایی که معنایشان کوتاه است (توضیح/نشانِ قاب)
+              clean[f.key] = typeof v === "number" ? v : safeStr(v, f.maxLength ?? 800);
+            }
           }
           return clean;
         });

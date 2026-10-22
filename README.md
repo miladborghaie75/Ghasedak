@@ -30,6 +30,26 @@ bash infrastructure/run-local.sh stop    # خاموشی کامل
   جدید اجرا نشده باشند، ReminderService هنگام استارت با خطای `P2022` کرش می‌کند.
 - لاگ‌ها و pidها در `.run-local/` (gitignore شده).
 
+### اگر پنل ادمین با رمز باز نشد
+
+پنل ادمین رمز را خودش نمی‌سنجد؛ API این کار را می‌کند. پس اول ببینید کدام سرویس خاموش است:
+
+```bash
+bash infrastructure/run-local.sh status   # postgres / API / storefront / admin
+```
+
+سه حالت متفاوت (صفحهٔ ورود این‌ها را از هم جدا می‌گوید):
+
+| پیام | علت | کار |
+|---|---|---|
+| «سرور پنل پاسخ نمی‌دهد» | API یا Postgres خاموش | `bash infrastructure/run-local.sh start` |
+| «ایمیل یا رمز نادرست است» | واقعاً ۴۰۱ از API | ایمیل/رمز حساب دمو را چک کن |
+| «سرور پنل خطا داد» | API بالا ولی خطای داخلی | `.run-local/api.log` را بخوان |
+
+اگر `status` می‌گوید storefront خاموش است ولی build نداری: `next start` بدون
+`next build` بالا نمی‌آید — یا `pnpm --filter @ghasedak/storefront build` بزن، یا در حالت
+توسعه `pnpm --filter @ghasedak/storefront dev`.
+
 ## پیش‌نیازها
 
 - Node.js ≥ 20 + pnpm (`npx pnpm`)

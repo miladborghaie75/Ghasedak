@@ -28,6 +28,7 @@ import { WishlistModule } from "./wishlist/wishlist.module";
 import { ImportModule } from "./import/import.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
 import { GeoModule } from "./geo/geo.module";
+import { PhotographyModule } from "./photography/photography.module";
 import { PermissionsGuard } from "./auth/permissions.guard";
 import { RequestIdMiddleware } from "./common/request-id.middleware";
 import { BigIntJsonMiddleware } from "./common/bigint-serializer.middleware";
@@ -38,7 +39,7 @@ import { RateLimitMiddleware } from "./common/rate-limit.middleware";
  * PermissionsGuard سراسری: مجوز در همه مسیرهای @RequirePermission به‌صورت server-side چک می‌شود (بند ۷).
  */
 @Module({
-  imports: [PrismaModule, HealthModule, AuthModule, ProductsModule, AccountingModule, InventoryModule, OrdersModule, PaymentsModule, PosModule, ReturnsModule, ShippingModule, EventsModule, CatalogModule, AdminPanelModule, CustomersModule, PricingModule, TreasuryModule, ChecksModule, ReportsModule, CmsModule, ReviewsModule, PayrollModule, CartModule, WishlistModule, GeoModule, CogsModule, ImportModule, AnalyticsModule],
+  imports: [PrismaModule, HealthModule, AuthModule, ProductsModule, AccountingModule, InventoryModule, OrdersModule, PaymentsModule, PosModule, ReturnsModule, ShippingModule, EventsModule, CatalogModule, AdminPanelModule, CustomersModule, PricingModule, TreasuryModule, ChecksModule, ReportsModule, CmsModule, ReviewsModule, PayrollModule, CartModule, WishlistModule, GeoModule, CogsModule, ImportModule, AnalyticsModule, PhotographyModule],
   providers: [{ provide: APP_GUARD, useClass: PermissionsGuard }],
 })
 export class AppModule implements NestModule {

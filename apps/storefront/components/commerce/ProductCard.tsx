@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useCart } from "@/components/providers/CartProvider";
-import { ProductArt, type ArtKind } from "./ProductArt";
+import { ArtFrame, type ArtKind } from "./ProductArt";
 import { cn } from "@/lib/cn";
 import { COPY } from "@/lib/copy";
 import { faNum } from "@/lib/format";
@@ -95,12 +95,12 @@ export function ProductCard({ product }: CardProps) {
               className="object-cover"
             />
           ) : (
-            <span className="flex h-full w-full items-center justify-center p-3">
-              <ProductArt
-                kind={product.category as ArtKind}
-                colorId={activeColor ?? product.variants[0].colorId}
-              />
-            </span>
+            /* بدون عکس: پاسپارتو + نشان برند — همان زبان قاب هیرو (تنها آرت تزئینی دسته) */
+            <ArtFrame
+              kind={product.category as ArtKind}
+              colorId={activeColor ?? product.variants[0].colorId}
+              className="h-full w-full"
+            />
           )}
         </Link>
 

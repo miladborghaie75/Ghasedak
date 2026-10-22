@@ -57,11 +57,21 @@ export default async function RootLayout({
   try {
     const api = process.env.API_ORIGIN ?? "http://localhost:4000";
     const r = await fetch(`${api}/api/v1/admin/public/theme`, { next: { revalidate: 60 } });
-    if (r.ok) {
-      const t = (await r.json()) as { primary?: string; ink?: string; bg?: string; fontHeading?: string; fontBody?: string } | null;
+    if (r.ok) {      const t = (await r.json()) as { primary?: string; ink?: string; bg?: string; fontHeading?: string; fontBody?: string } | null;
       if (t?.primary) {
-        themeCss = `:root{--color-primary:${t.primary};--color-plum:${t.primary};--color-ink:${t.ink ?? ""};--color-bg:${t.bg ?? ""};}`
-          .replace(",--color-ink:;", "").replace(",--color-bg:;", "");
+        /*
+         * فقط توکن‌هایی که مدین واقعاً تعیین کرده تزریق می‌شوند.
+         *
+         * چرا `--color-plum` تزریق نمی‌شود؟ «بنفش تیره» یک توکنِ ثابتِ برند
+         * است (تیترها، بنفش تیرهٔ قاب‌ها). اگر آن را با رنگ اصلیِ مدیر یکی
+         * کنیم، دو رنگِ متفاوتِ پالت به یک رنگ می‌افتند: تیترهای سایت رنگ
+         * اصلی می‌گیرند و قاب «بنفش تیره» دیگر با «بنفش برند» فرقی ندارد —
+         * یعنی زبان بصری برند می‌شکند.
+         */
+        const decls: string[] = [`--color-primary:${t.primary}`];
+        if (t.ink) decls.push(`--color-ink:${t.ink}`);
+        if (t.bg) decls.push(`--color-bg:${t.bg}`);
+        themeCss = `:root{${decls.join(";")};}`;
       }
     }
     const rm = await fetch(`${api}/api/v1/admin/public/motion`, { next: { revalidate: 60 } });

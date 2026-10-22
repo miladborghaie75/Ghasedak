@@ -97,6 +97,19 @@
 | گیت سبز این گام | ✅ IMPLEMENTED | API **۲۱/۲۱** (سه سوئیت `phase16-need-finder*`) + فروشگاه **۸/۸** · typecheck **۱۰/۱۰** · build فروشگاه و ادمین · ممیزی لحن دو اپ **۰ تخلف** |
 | رفت‌وبرگشت ادمین → DB → فروشگاه | ✅ IMPLEMENTED | ویرایش گزینهٔ «ورزش» در پنل → API → DB → فروشگاه (کش ۶۰ ثانیه) → بازگردانی و تأیید پاک‌شدن اثر |
 
+## ایستگاه ۴/گام ۹-۱ (`F1-13-photo` — برنامهٔ عکاسی محصول) — ۲۰۲۶-۱۰-۲۱ — runtime-tested
+| قابلیت | وضعیت | مدرک |
+|---|---|---|
+| تک‌منبعِ مشخصاتِ عکس: کادرهای استاندارد با برچسب و مشخصاتِ فنی، راه‌اندازیِ ثابت، مشخصاتِ عکسِ **هر دسته** با اولویت و نکتهٔ خاص، واژگانِ وضعیت و انواعِ تابلو — بی‌React و بی‌وابستگی | ✅ IMPLEMENTED | [photography.ts](../packages/contracts/src/photography.ts) — `PHOTO_SHOTS` · `PHOTO_SETUP` · `PHOTO_CATEGORY_SPECS` · `PHOTO_STATUS_LABELS` |
+| مدلِ داده: `PhotoTask` (محصول × کادر با یکتایی در DB) + مهاجرتِ افزایشی | ✅ IMPLEMENTED | [schema.prisma](../packages/database/prisma/schema.prisma) · [migration](../packages/database/prisma/migrations/20261021090000_step20_photography_program/migration.sql) — `prisma migrate deploy` روی کلستر تمرین سبز |
+| API ادمین: تابلو (`GET /admin/photography/board`) · پیوستِ عکس · تأیید · عکسِ دوباره — `products.view` برای خواندن و `products.update` برای نوشتن | ✅ IMPLEMENTED | [photography.controller.ts](../apps/api/src/photography/photography.controller.ts) + [photography.service.ts](../apps/api/src/photography/photography.service.ts) · [app.module.ts](../apps/api/src/app.module.ts) |
+| **جایگزینی خودکار آرت با عکسِ واقعی:** تأییدِ «نمای صافِ جلو» ← `ProductImage.isPrimary` ← فروشگاه عکسِ واقعی را می‌کشد؛ «عکسِ دوباره» ← حذفِ عکس و بازگشت به آرت | ✅ IMPLEMENTED | [public-catalog.controller.ts](../apps/api/src/catalog/public-catalog.controller.ts) — قاعده: `image` فقط از تصویرِ `isPrimary` |
+| پنل ادمین `/photography` + ورودی منو: نوارِ پیشرفت، کارتِ مشخصاتِ کادرهای هر دسته، قابِ هر کادر با وضعیت و کنش‌های «پیوست/تأیید/عکسِ دوباره» و نشانِ «زنده» | ✅ IMPLEMENTED | [photography/page.tsx](../apps/admin/app/photography/page.tsx) + [PhotographyClient](../apps/admin/app/photography/clients/PhotographyClient.tsx) + [menu.ts](../apps/admin/lib/menu.ts) — `/photography` در خروجیِ build ادمین |
+| سندِ اپراتور: شات‌لیست از «فهرستِ آرزو» به راهنمای همین برنامه تبدیل شد (قانون برند · راه‌اندازی · کادرها · مشخصاتِ هر دسته · چرخهٔ وضعیت · قاعدهٔ جایگزینی · چک‌لیست) | ✅ IMPLEMENTED | [docs/photography-shotlist.md](photography-shotlist.md) |
+| گیت سبز این گام | ✅ IMPLEMENTED | API **۳۲/۳۲** (دو سوئیت `phase20-photography*` — منطقِ خالص + DB واقعیِ تمرین) · typecheck **۱۰/۱۰** · build **۶/۶** |
+| چرخهٔ کامل روی DB واقعی: پیوست → هنوز آرت → تأییدِ `FLAT_FRONT` → عکسِ اصلی عوض شد → «عکسِ دوباره» → عکس حذف و آرت برگشت؛ کادرِ غیراصلی فقط گالری را پر می‌کند | ✅ IMPLEMENTED | [phase20-photography-db.spec.ts](../apps/api/test/phase20-photography-db.spec.ts) |
+| باقی‌مانده (ورودی کاربر) | ⬜ NOT-DONE | خودِ عکاسیِ واقعی — تا آن زمان آرتِ جانشینِ موقت سرِ جایش می‌ماند و با اولین تأیید خودبه‌خود برداشته می‌شود |
+
 ## فاز ۱۳ (۲۰۲۶-۰۹-۳۰) — runtime-tested
 | قابلیت | وضعیت | مدرک |
 |---|---|---|

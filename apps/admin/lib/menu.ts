@@ -56,6 +56,7 @@ export const MENU: MenuGroup[] = [
       { title: "برندها", href: "/brands", permission: "brands.view" },
       { title: "ویژگی‌ها", href: "/attributes", permission: "attributes.view" },
       { title: "رسانه", href: "/media", permission: "media.view" },
+      { title: "برنامهٔ عکاسی", href: "/photography", permission: "products.view" },
       { title: "قیمت‌گذاری کانالی", href: "/pricing", permission: "pricing.view" },
     ],
   },

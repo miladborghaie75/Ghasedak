@@ -109,11 +109,20 @@ export function shapeCommon(p: ProductRow, priceMap: Map<string, { price: bigint
   const variants = shapeVariants(p.variants, priceMap);
   const imgs = [...p.images].sort((a, b) => (a.isPrimary === b.isPrimary ? a.sortOrder - b.sortOrder : a.isPrimary ? -1 : 1));
   const prices = variants.map((v) => v.salePrice ?? v.price);
+  /**
+   * «عکسِ اصلی» فقط از تصویرِ primary خوانده می‌شود.
+   *
+   * چرا این سخت‌گیری؟ برنامهٔ عکاسی (گام ۲۰) آرتِ جانشین را فقط با «نمای صافِ
+   * جلو»ِ تأییدشده عوض می‌کند. اگر عکسِ گالری (مثلاً جزئیاتِ پارچه) خودش را
+   * جای عکسِ اصلی می‌نشاند، مشتری یک عکسِ نیم‌کاره می‌بیند و برنامه با آن
+   * نمی‌خواند. پس: primary ندارد ⇒ عکسِ اصلی نیست ⇒ فروشگاه آرت می‌کشد.
+   */
+  const hero = imgs.find((i) => i.isPrimary) ?? null;
   return {
     id: p.id, slug: p.slug, name: p.name, short: p.shortDescription,
     category: p.category?.slug ?? null, brandId: p.brand?.slug ?? null,
     createdAt: p.createdAt.toISOString(),
-    image: imgs[0] ? `/api/media/${imgs[0].storageKey}` : null,
+    image: hero ? `/api/media/${hero.storageKey}` : null,
     images: imgs.map((i) => ({ url: `/api/media/${i.storageKey}`, alt: i.alt })),
     isNew: Date.now() - p.createdAt.getTime() <= NEW_WINDOW_DAYS * 86_400_000,
     inStock: variants.some((v) => v.stock > 0),
