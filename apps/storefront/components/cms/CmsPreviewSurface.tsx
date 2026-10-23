@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { CmsRenderer } from "@ghasedak/blocks";
 import type { CmsData } from "@ghasedak/blocks";
-import type { CmsPageData } from "@ghasedak/contracts";
+import type { CmsPageData, ContentNavItem } from "@ghasedak/contracts";
 
 /**
  * سطح پیش‌نمایش زنده — همان صفحهٔ واقعی، داخل iframe پنل صفحه‌ساز.
@@ -22,7 +22,9 @@ import type { CmsPageData } from "@ghasedak/contracts";
 type Incoming =
   | { type: "cms:set-page"; page: CmsPageData }
   | { type: "cms:select-block"; id: string }
-  | { type: "cms:scroll-to"; id: string };
+  | { type: "cms:scroll-to"; id: string }
+  /** ناوبریِ تازهٔ صفحه‌های محتوایی — بعد از ذخیره در پنل، بوم همان لحظه عوض می‌شود */
+  | { type: "cms:set-nav"; items: ContentNavItem[] };
 
 type Outgoing =
   | { type: "cms:ready" }
@@ -70,6 +72,12 @@ export default function CmsPreviewSurface({
   fallback?: ReactNode;
 }) {
   const [live, setLive] = useState<CmsPageData>(page);
+  /**
+   * ناوبریِ صفحه‌های محتوایی — اول از سرور (`data.nav`)، بعد از پیامِ پنل.
+   * چرا state و نه فقط prop؟ چون ذخیرهٔ ناوبری در پنل باید همان لحظه روی
+   * بوم دیده شود، بی‌آنکه صفحه (و ویرایشِ ذخیره‌نشدهٔ روی آن) از نو بار شود.
+   */
+  const [nav, setNav] = useState<ContentNavItem[] | undefined>(data.nav);
   /**
    * شمارهٔ رندر — وقتی پنل عیناً همان صفحه‌ای را می‌فرستد که داریم،
    * ری‌اکت متنی را که مرورگر مستقیم داخل `contenteditable` نوشته نمی‌بیند
@@ -120,6 +128,11 @@ export default function CmsPreviewSurface({
         }
         liveRef.current = msg.page;
         setLive(msg.page);
+        return;
+      }
+
+      if (msg.type === "cms:set-nav") {
+        setNav(Array.isArray(msg.items) ? msg.items : undefined);
         return;
       }
 
@@ -287,7 +300,7 @@ export default function CmsPreviewSurface({
       {live.blocks.length === 0 && fallback ? (
         fallback
       ) : (
-        <CmsRenderer key={epoch} page={live} data={data} />
+        <CmsRenderer key={epoch} page={live} data={{ ...data, nav }} />
       )}
     </div>
   );

@@ -11,6 +11,8 @@ import {
 } from "@ghasedak/blocks";
 import { useAdminApi } from "@/components/useAdminApi";
 import { editBodyLine } from "@/lib/content-sections";
+import { moveItem } from "@/lib/reorder";
+import { CONTENT_PAGE_NAV, type ContentNavRow } from "@ghasedak/contracts";
 import FieldEditor from "./FieldEditor";
 
 /**
@@ -97,12 +99,25 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
   const [mobilePane, setMobilePane] = useState<MobilePane>("canvas");
   const [revisions, setRevisions] = useState<Array<{ id: string; createdAt: string; actorId: string | null }>>([]);
   const [revisionsOpen, setRevisionsOpen] = useState(false);
+  /**
+   * ناوبریِ صفحه‌های محتوایی — **سراسری** است: همان فهرست در نوارِ زیرِ تیترِ هر
+   * صفحهٔ محتوایی در سایت و در بوم دیده می‌شود. پس ذخیره‌اش ربطی به پیش‌نویسِ
+   * صفحهٔ باز ندارد؛ به‌محض ذخیره، سایت (ظرف TTL کوتاه) و بوم (همان لحظه) عوض می‌شوند.
+   */
+  const [navItems, setNavItems] = useState<ContentNavRow[]>([]);
+  const [navDirty, setNavDirty] = useState(false);
+  const [navSaving, setNavSaving] = useState(false);
   const [frame, setFrame] = useState({ w: 1280, h: 800, scale: 1 });
   /**
    * وضعیت بوم: «در حال بالا آمدن» تا وقتی فروشگاه پیام «آماده» را نفرستاد،
    * «زنده» بعد از آن، و «stalled» اگر فروشگاه اصلاً بالا نیامد.
    */
   const [frameStatus, setFrameStatus] = useState<"waiting" | "ready" | "stalled">("waiting");
+  /**
+   * شمارهٔ بارگذاریِ دوبارهٔ سندِ بوم — وقتی ناوبریِ چیدمانِ ایستای مسیر عوض
+   * می‌شود (پیام نمی‌گیرد، سمت سرور رندر شده) باید سند از نو خوانده شود.
+   */
+  const [frameEpoch, setFrameEpoch] = useState(0);
 
   const frameRef = useRef<HTMLIFrameElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -419,7 +434,7 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
       setFrameStatus((s) => (s === "ready" ? s : "stalled"));
     }, 8000);
     return () => clearTimeout(t);
-  }, [viewPath]);
+  }, [viewPath, frameEpoch]);
 
   /* ── اندازهٔ بوم ── */
   useEffect(() => {
@@ -551,6 +566,78 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
       flash(r.error?.message ?? "بازسازی ناموفق", "err");
     }
   }, [call, slug, loadPage, loadSitePages, flash]);
+
+  /* ── ناوبریِ صفحه‌های محتوایی ── */
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const r = await call<{ items: ContentNavRow[] }>("/admin/pages/content-nav");
+      if (!alive) return;
+      setNavItems(
+        r.ok && r.data?.items?.length
+          ? r.data.items
+          : // خواندن نشد → با پیش‌فرضِ قرارداد ویرایش را شروع کن؛ ذخیره همان موقع تنظیم را می‌سازد
+            CONTENT_PAGE_NAV.map((n) => ({ ...n, visible: true })),
+      );
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [call]);
+
+  /** جابه‌جاییِ یک گزینه در ناوبری — همان مغزِ `moveItem` که بقیهٔ پنل هم استفاده می‌کند */
+  const moveNav = (from: number, to: number) => {
+    setNavItems((prev) => moveItem(prev, from, to));
+    setNavDirty(true);
+  };
+
+  /** پنهان/نمایان کردن یک گزینه — «حذف» یعنی همین: صفحه هست، فقط از نوار پیوندش نیست */
+  const toggleNav = (index: number) => {
+    setNavItems((prev) => prev.map((row, i) => (i === index ? { ...row, visible: !row.visible } : row)));
+    setNavDirty(true);
+  };
+
+  /**
+   * اعمالِ ناوبریِ تازه روی بوم، بی‌آنکه ویرایشِ ذخیره‌نشدهٔ روی صفحه پاک شود.
+   * دو حالت: بلوک دارد → پیامِ `cms:set-nav` همان لحظه نوار را عوض می‌کند؛
+   * چیدمانِ ایستای مسیر را نشان می‌دهد (هنوز صفحه‌ای ساخته نشده) → آن رندر
+   * سمت سرور است و پیام نمی‌گیرد، پس سند از نو بار می‌شود.
+   */
+  const applyNavToCanvas = useCallback(
+    (items: ContentNavRow[]) => {
+      const links = items.filter((i) => i.visible).map(({ slug, href, title }) => ({ slug, href, title }));
+      if (blocksRef.current.length === 0) {
+        setFrameEpoch((n) => n + 1);
+        return;
+      }
+      const win = frameRef.current?.contentWindow;
+      if (!win) return;
+      try {
+        win.postMessage({ type: "cms:set-nav", items: links }, siteOrigin);
+      } catch {
+        // اگر هنوز بارگذاری نشده، سندِ تازه خودش ناوبری را از API می‌گیرد
+      }
+    },
+    [siteOrigin],
+  );
+
+  const saveNav = useCallback(async () => {
+    setNavSaving(true);
+    const r = await call<{ items: ContentNavRow[] }>("/admin/pages/content-nav", {
+      method: "PUT",
+      body: JSON.stringify({ items: navItems }),
+    });
+    setNavSaving(false);
+    if (!r.ok || !r.data) {
+      flash(r.error?.message ?? "ذخیرهٔ ناوبری ناموفق", "err");
+      return;
+    }
+    setNavItems(r.data.items);
+    setNavDirty(false);
+    applyNavToCanvas(r.data.items);
+    flash("ناوبری ذخیره شد — روی سایت و بوم اعمال شد");
+  }, [call, navItems, flash, applyNavToCanvas]);
 
   /* ── تاریخچهٔ نسخه‌ها ── */
   const loadRevisions = useCallback(async () => {
@@ -1069,7 +1156,7 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
             <iframe
               // با عوض شدن مسیر، سندِ تازه باید بارگذاری شود؛ بدون این کلید،
               // سندِ مسیر قبلی روی مسیر تازه می‌ماند.
-              key={viewPath}
+              key={`${viewPath}#${frameEpoch}`}
               ref={frameRef}
               title="پیش‌نمایش زندهٔ صفحه"
               src={`${siteUrl}${viewPath}?cmsPreview=1`}
@@ -1260,6 +1347,62 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
                     placeholder="خلاصه‌ای که در نتایج جست‌وجو نمایش داده می‌شود"
                     className="mt-1 w-full rounded-xl border border-app-line bg-app-bg px-3 py-2 text-[13px] text-app-ink outline-none focus:border-app-primary-soft"
                   />
+                </div>
+
+                <div className="rounded-xl border border-app-line bg-app-bg p-3" data-nav-editor="">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-bold text-app-ink">ناوبری صفحه‌های محتوایی</p>
+                    <span className="text-[10px] text-app-muted" data-nav-count="">
+                      {navItems.filter((n) => n.visible).length} نمایان از {navItems.length}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[10px] leading-5 text-app-muted">
+                    نوار زیرِ تیترِ هر صفحهٔ محتوایی — در سایت و بوم یکی است. نام و ترتیب همین‌جاست؛ مسیرِ پیوند ثابت می‌ماند تا پیوندِ سایت نشکند.
+                  </p>
+
+                  <div className="mt-2 space-y-1.5">
+                    {navItems.map((item, i) => (
+                      <div
+                        key={item.slug}
+                        data-nav-row={item.slug}
+                        className={`flex items-center gap-1.5 rounded-lg border border-app-line bg-app-surface px-1.5 py-1.5 ${
+                          item.visible ? "" : "opacity-60"
+                        }`}
+                      >
+                        <input
+                          value={item.title}
+                          aria-label={`عنوان ناوبری ${item.slug}`}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setNavItems((prev) => prev.map((row, j) => (j === i ? { ...row, title: value } : row)));
+                            setNavDirty(true);
+                          }}
+                          className="min-w-0 flex-1 rounded-md border border-app-line bg-app-bg px-2 py-1 text-[11px] text-app-ink outline-none focus:border-app-primary-soft"
+                        />
+                        <IconBtn title="بردن به بالا" disabled={i === 0} onClick={() => moveNav(i, i - 1)}>
+                          ↑
+                        </IconBtn>
+                        <IconBtn title="بردن به پایین" disabled={i === navItems.length - 1} onClick={() => moveNav(i, i + 1)}>
+                          ↓
+                        </IconBtn>
+                        <IconBtn
+                          title={item.visible ? "پنهان کردن از نوار" : "نمایش در نوار"}
+                          onClick={() => toggleNav(i)}
+                        >
+                          {item.visible ? "👁" : "🚫"}
+                        </IconBtn>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => void saveNav()}
+                    disabled={!navDirty || navSaving}
+                    data-nav-save=""
+                    className="mt-2 w-full rounded-xl bg-app-primary py-2 text-[11px] font-bold text-app-on-accent disabled:opacity-40"
+                  >
+                    {navSaving ? "در حال ذخیره…" : navDirty ? "ذخیرهٔ ناوبری" : "ناوبری ذخیره شده"}
+                  </button>
                 </div>
 
                 <div className="rounded-xl border border-app-line bg-app-bg p-3">

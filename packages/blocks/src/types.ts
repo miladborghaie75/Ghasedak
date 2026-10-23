@@ -1,4 +1,4 @@
-import type { CmsBlock } from "@ghasedak/contracts";
+import type { CmsBlock, ContentNavItem } from "@ghasedak/contracts";
 
 /**
  * شکل داده‌ای که بلوک‌های فروشگاهی (محصول/دسته) برای رندر لازم دارند.
@@ -47,6 +47,14 @@ export interface CmsData {
   categories: CmsCategory[];
   brands: CmsBrand[];
   guides: CmsGuide[];
+  /**
+   * ناوبریِ صفحه‌های محتوایی — از تنظیمِ سراسریِ پنل می‌آید (فروشگاه از
+   * API عمومی می‌خواند)، پس همان نوار در سایت و بوم یکی است.
+   *
+   * غایب (`undefined`) یعنی هنوز تنظیمی ذخیره نشده → ناوبریِ پیش‌فرضِ قرارداد؛
+   * آرایهٔ خالی یعنی مدیر همه را پنهان کرده → نوار رندر نمی‌شود.
+   */
+  nav?: ContentNavItem[];
 }
 
 export const EMPTY_CMS_DATA: CmsData = { products: [], categories: [], brands: [], guides: [] };

@@ -16,13 +16,17 @@ import { RequirePermission } from "../auth/permissions.guard";
 import { Identity } from "../auth/identity.decorator";
 import type { AdminIdentity } from "../auth/auth.service";
 import {
+  CONTENT_NAV_SETTING_KEY,
   emptyCmsPage,
   normalizeCmsPage,
+  normalizeContentNavInput,
+  resolveContentNavAll,
   siteContentBySlug,
   siteContentToCmsPage,
   sitePageBySlug,
   SITE_PAGES,
   sitePathForSlug,
+  type ContentNavConfigItem,
   type CmsPageData,
   type CmsPageSummary,
   type SitePageKind,
@@ -113,13 +117,14 @@ export class CmsService {
     action: string,
     entityId: string,
     meta?: Record<string, unknown>,
+    entity = "CmsPage",
   ): Promise<void> {
     try {
       await this.prisma.auditLog.create({
         data: {
           actorId: actorId ?? null,
           action,
-          entity: "CmsPage",
+          entity,
           entityId,
           newValues: (meta ?? {}) as object,
         },
@@ -127,6 +132,29 @@ export class CmsService {
     } catch {
       // audit نباید ذخیرهٔ محتوا را از کار بیندازد
     }
+  }
+
+  /**
+   * تنظیمِ ناوبریِ صفحه‌های محتوایی (`cms.contentNav`).
+   * `null` یعنی هنوز چیزی ذخیره نشده → همه چیز پیش‌فرضِ `CONTENT_PAGE_NAV`.
+   */
+  async contentNav(): Promise<unknown> {
+    const row = await this.prisma.setting.findUnique({ where: { key: CONTENT_NAV_SETTING_KEY } });
+    return row?.value ?? null;
+  }
+
+  /**
+   * ذخیرهٔ ناوبری — ورودی پیش از این از `normalizeContentNavInput` رد شده
+   * (کنترلر)، این‌جا فقط نوشتن + ثبت در audit.
+   */
+  async saveContentNav(items: ContentNavConfigItem[], actorId?: string): Promise<void> {
+    const value = { items } as object;
+    await this.prisma.setting.upsert({
+      where: { key: CONTENT_NAV_SETTING_KEY },
+      update: { value, updatedBy: actorId ?? null },
+      create: { key: CONTENT_NAV_SETTING_KEY, value, updatedBy: actorId ?? null },
+    });
+    await this.audit(actorId, "contentNav.save", CONTENT_NAV_SETTING_KEY, { items }, "ContentNav");
   }
 
   private toSummary(row: {
@@ -582,6 +610,33 @@ export class CmsAdminController {
   @RequirePermission("marketing.view")
   async site() {
     return this.cms.sitePages();
+  }
+
+  /**
+   * ناوبریِ صفحه‌های محتوایی — فهرست کامل (شامل پنهان‌ها) برای ویرایش در پنل.
+   *
+   * باید **پیش از** `@Get(":slug")` بیاید وگرنه Nest آن را slug می‌گیرد
+   * (همان دلیلِ وجود `site` قبل از `:slug`).
+   */
+  @Get("content-nav")
+  @RequirePermission("marketing.view")
+  async contentNav() {
+    return { items: resolveContentNavAll(await this.cms.contentNav()) };
+  }
+
+  /**
+   * ذخیرهٔ ناوبری (نام/ترتیب/نمایش) — سراسری است: هم سایت و هم بوم
+   * صفحه‌ساز از همین یک تنظیم می‌خوانند، پس نوارِ شش صفحه همیشه یکی است.
+   */
+  @Put("content-nav")
+  @RequirePermission("marketing.manage")
+  async saveContentNav(@Body() body: { items?: unknown }, @Identity() me: AdminIdentity | null) {
+    const normalized = normalizeContentNavInput(body?.items);
+    if ("error" in normalized) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: normalized.error });
+    }
+    await this.cms.saveContentNav(normalized.items, me?.userId);
+    return { items: resolveContentNavAll(normalized.items) };
   }
 
   @Get(":slug")

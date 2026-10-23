@@ -6,6 +6,7 @@ import {
   isPreview,
   loadLiveBrands,
   loadLiveCategories,
+  loadLiveContentNav,
   resolveCmsSlot,
   type PreviewParams,
 } from "@/lib/cms";
@@ -45,7 +46,7 @@ export default async function CmsSlot({
   const previewMode = isPreview(await searchParams);
   const slot = await resolveCmsSlot(slug, previewMode);
   const list = products ?? (await loadCatalog());
-  await Promise.all([loadLiveCategories(), loadLiveBrands()]);
+  await Promise.all([loadLiveCategories(), loadLiveBrands(), loadLiveContentNav()]);
   const data = buildCmsData(list);
 
   // ── حالت پیش‌نمایش: همیشه «سطح پیش‌نمایش» رندر می‌شود، حتی اگر هنوز

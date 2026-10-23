@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import type { CmsPageData } from "@ghasedak/contracts";
+import type { CmsPageData, ContentNavItem } from "@ghasedak/contracts";
 import type { CmsData, CmsProduct } from "@ghasedak/blocks";
 import { CATEGORIES } from "./categories";
 import { guides } from "./guides-data";
@@ -48,6 +48,8 @@ export function buildCmsData(products: ProductV2[]): CmsData {
       title: typeof g === "object" && g !== null && "title" in g ? String(g.title) : slug,
     })),
     brands: liveBrands,
+    // ناوبریِ صفحه‌های محتوایی از تنظیمِ پنل — غایب یعنی تنظیمی نیست → پیش‌فرض
+    nav: liveNav ?? undefined,
   };
 }
 
@@ -107,6 +109,41 @@ export async function loadLiveCategories(): Promise<void> {
   } catch {
     // بی‌خطر — فروشگاه با لیست ثابت ادامه می‌دهد
   }
+}
+
+/**
+ * ناوبریِ صفحه‌های محتوایی (نام/ترتیب/نمایش) از تنظیمِ پنل.
+ *
+ * همان سه اصلِ `maintenance.ts`:
+ *  ۱) **fail-open**: اگر API در دسترس نبود، آخرین ناوبریِ دیده‌شده می‌ماند
+ *     و اگر اصلاً نبود، `null` یعنی ناوبریِ پیش‌فرضِ قرارداد — قطعی API
+ *     نباید نوارِ شش صفحه را از سایت جا بیندازد.
+ *  ۲) TTL کوتاه (۱۵ ثانیه): تغییرِ پنل سریع اعمال می‌شود بدون بارِ هر درخواست.
+ *  ۳) فقط همین‌جا فرمِ پاسخ را می‌شناسد.
+ */
+const NAV_TTL_MS = 15_000;
+let navCache: { at: number; items: ContentNavItem[] } | null = null;
+let liveNav: ContentNavItem[] | null = null;
+
+export async function loadLiveContentNav(): Promise<ContentNavItem[] | null> {
+  if (navCache && Date.now() - navCache.at < NAV_TTL_MS) return navCache.items;
+  const api = process.env.API_ORIGIN ?? "http://localhost:4000";
+  try {
+    const r = await fetch(`${api}/api/v1/admin/public/content-nav`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(2_500),
+    });
+    if (r.ok) {
+      const body = (await r.json()) as { items?: unknown };
+      const items = Array.isArray(body.items) ? (body.items as ContentNavItem[]) : [];
+      liveNav = items;
+      navCache = { at: Date.now(), items };
+      return items;
+    }
+  } catch {
+    // fail-open — به آخرین ناوبریِ دیده‌شده برمی‌گردیم (یا پیش‌فرض)
+  }
+  return liveNav;
 }
 
 export interface CmsFetchResult {

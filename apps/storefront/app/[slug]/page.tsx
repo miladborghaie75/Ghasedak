@@ -8,6 +8,7 @@ import {
   isPreview,
   loadLiveBrands,
   loadLiveCategories,
+  loadLiveContentNav,
   resolveCmsSlot,
 } from "@/lib/cms";
 import CmsPreviewSurface from "@/components/cms/CmsPreviewSurface";
@@ -56,7 +57,7 @@ export default async function CmsSlugPage({
   if (!slot.page && !slot.previewMode) notFound();
 
   const products = await loadCatalog();
-  await Promise.all([loadLiveCategories(), loadLiveBrands()]);
+  await Promise.all([loadLiveCategories(), loadLiveBrands(), loadLiveContentNav()]);
   const data = buildCmsData(products);
 
   // حالت پیش‌نمایش: همان صفحه ولی زنده و قابل‌ویرایش از داخل پنل

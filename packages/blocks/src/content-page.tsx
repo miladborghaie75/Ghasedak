@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { clsx } from "clsx";
-import { CONTENT_PAGE_COPY, CONTENT_PAGE_NAV, parseBody, type ContentLine, type ContentSpan } from "@ghasedak/contracts";
+import {
+  CONTENT_PAGE_COPY,
+  CONTENT_PAGE_NAV,
+  parseBody,
+  type ContentLine,
+  type ContentNavItem,
+  type ContentSpan,
+} from "@ghasedak/contracts";
 import type { CmsBlockProps } from "./types";
 import { pItems, pStr } from "./types";
 
@@ -27,12 +34,19 @@ export function ContentPageView({
   intro,
   updated,
   sections,
+  nav,
 }: {
   /** `h1` صفحه — در فروشگاه عنوانِ صفحه، در صفحه‌ساز عنوانِ صفحهٔ CMS */
   title: string;
   intro?: string;
   updated?: string;
   sections: ContentPageSectionInput[];
+  /**
+   * نوارِ همنشین‌ها — از تنظیمِ پنل (نام/ترتیب/نمایش را مدیر عوض می‌کند).
+   * غایب یعنی تنظیمی ذخیره نشده → همان شش گزینهٔ پیش‌فرض؛ آرایهٔ خالی
+   * یعنی مدیر نوار را کلاً پنهان کرده → هیچ نواری رندر نمی‌شود.
+   */
+  nav?: ContentNavItem[];
 }) {
   return (
     <div className="mx-auto max-w-4xl px-3 pb-16 pt-6 sm:px-4 sm:pt-10">
@@ -58,17 +72,19 @@ export function ContentPageView({
       {updated && <p className="mt-2 text-xs text-app-muted">{CONTENT_PAGE_COPY.updatedPrefix} {updated}</p>}
 
       {/* نوارِ پیمایشِ همنشین‌ها — بازدیدکننده از هر صفحهٔ محتوایی به بقیه می‌رود */}
-      <div className="mt-6 flex flex-wrap gap-2 border-y border-app-line py-3">
-        {CONTENT_PAGE_NAV.map((n) => (
-          <Link
-            key={n.href}
-            href={n.href}
-            className="rounded-full border border-app-line px-3 py-1.5 text-xs text-app-muted transition-colors hover:border-app-primary/40 hover:bg-app-primary-tint hover:text-app-primary-strong"
-          >
-            {n.title}
-          </Link>
-        ))}
-      </div>
+      {(nav ?? CONTENT_PAGE_NAV).length > 0 && (
+        <div className="mt-6 flex flex-wrap gap-2 border-y border-app-line py-3">
+          {(nav ?? CONTENT_PAGE_NAV).map((n) => (
+            <Link
+              key={n.href}
+              href={n.href}
+              className="rounded-full border border-app-line px-3 py-1.5 text-xs text-app-muted transition-colors hover:border-app-primary/40 hover:bg-app-primary-tint hover:text-app-primary-strong"
+            >
+              {n.title}
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="mt-6 space-y-6">
         {sections.map((section, si) => (
@@ -209,6 +225,7 @@ export function ContentPageBlock({ block, data, pageTitle }: CmsBlockProps) {
       intro={pStr(p, "intro")}
       updated={pStr(p, "updated")}
       sections={rows.map((r) => ({ title: r.title, body: r.body }))}
+      nav={data.nav}
     />
   );
 }

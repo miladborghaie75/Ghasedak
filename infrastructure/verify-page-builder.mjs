@@ -100,6 +100,30 @@ check(
   `ناوبری: [${navSlugs}] / محتوا: [${contentSlugs}]`,
 );
 
+/* ── ۵ب) ناوبری دیگر ثابت نیست: از تنظیمِ پنل می‌آید و به هر سه‌جا می‌رسد ── */
+const navViewSrc = read("packages/blocks/src/content-page.tsx");
+check(
+  "ContentPageView ناوبری را prop می‌گیرد و بدون تنظیم به پیش‌فرض برمی‌گردد",
+  navViewSrc.includes("nav ?? CONTENT_PAGE_NAV"),
+  "نوشتنِ دوبارهٔ لیستِ ثابت در رندر یعنی تغییرِ پنل بی‌اثر می‌شود",
+);
+const blockTypesSrc = read("packages/blocks/src/types.ts");
+check(
+  "CmsData ناوبری را حمل می‌کند (پنل و سایت از یک کانال می‌گیرند)",
+  blockTypesSrc.includes("nav?: ContentNavItem[]"),
+);
+const storeCmsSrc = read("apps/storefront/lib/cms.ts");
+check(
+  "فروشگاه ناوبری را از endpoint عمومی می‌خواند",
+  storeCmsSrc.includes("admin/public/content-nav"),
+  "بدون این، ناوبریِ ذخیره‌شده فقط در پنل می‌ماند",
+);
+const builderSrc = read("apps/admin/app/builder/BuilderClient.tsx");
+check(
+  "پنل صفحه‌ساز ویرایشگر ناوبری دارد (نام/ترتیب/نمایش)",
+  builderSrc.includes("content-nav") && builderSrc.includes("data-nav-row"),
+);
+
 /* ── ۶) صفحه‌های مسیر باید متادیتای پویا داشته باشند (سئوی صفحه‌ساز اعمال شود) ── */
 for (const slug of contentSlugs) {
   const file = `apps/storefront/app/${slug}/page.tsx`;

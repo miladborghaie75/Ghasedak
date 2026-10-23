@@ -1,4 +1,5 @@
 import { Controller, Get } from "@nestjs/common";
+import { CONTENT_NAV_SETTING_KEY, resolveContentNav } from "@ghasedak/contracts";
 import { PrismaService } from "../prisma/prisma.service";
 
 /** تم عمومی فروشگاه — فقط فیلدهای ایمن؛ بدون credential (بند ۴۴) */
@@ -35,6 +36,19 @@ export class PublicThemeController {
   }
 
   /** سکشن‌های صفحه اصلی از صفحه‌ساز زنده (`/cms/page/home`) می‌آیند؛ این مسیر حذف شد. */
+
+  /**
+   * ناوبریِ صفحه‌های محتوایی برای فروشگاه — عمومی و ایمن.
+   *
+   * فقط برچسب/مسیر صفحه‌های محتوایی است که مدیر در پنل چیده؛ نه داده‌ای از
+   * داخلی. فروشگاه همین را در نوارِ زیرِ تیترِ هر صفحهٔ محتوایی و در بوم
+   * صفحه‌ساز رندر می‌کند. تنظیم نبود → پیش‌فرضِ قرارداد (شش صفحه).
+   */
+  @Get("content-nav")
+  async contentNav() {
+    const row = await this.prisma.setting.findUnique({ where: { key: CONTENT_NAV_SETTING_KEY } });
+    return { items: resolveContentNav(row?.value ?? null) };
+  }
 
   /**
    * وضعیت تعمیر فروشگاه (گام ۱۰) — عمومی و ایمن؛ فقط enabled/پیام/مهلت.
