@@ -793,64 +793,106 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-app-bg" dir="rtl">
       {/* ───────── نوار بالا ───────── */}
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-app-line bg-app-surface px-3 py-2">
-        <span className="text-[13px] font-black text-app-ink">صفحه‌ساز</span>
+      {/* ───────── نوار بالا ─────────
+          در عرض‌های باریک (زیر `lg`) هدر دقیقاً **دو ردیفِ** ثابت است:
+          ردیفِ زمینه (انتخابِ پنل + صفحه + وضعیت) و ردیفِ کنش‌ها (دستگاه،
+          واگرد/ازنو، دیدن، ذخیره، انتشار). جابه‌جاییِ بین پنل‌ها (بوم/
+          بلوک‌ها/تنظیمات) هم داخلِ همین ردیفِ اول است — پیش‌تر یک نوارِ
+          جدا زیر هدر یک ردیفِ دیگر (~۴۴px) از ارتفاعِ بوم را می‌خورد؛ عنوانِ
+          ثابتِ «صفحه‌ساز» در عرض کم جایش را به آن داد (از منو معلوم است).
+          پیش از این همه‌چیز در یک `flex-wrap` می‌افتاد و در ۳۹۰px چهار ردیف
+          می‌شد. از `lg` به بالا همان چیدمانِ یک‌ردیفِ قبلی است (`lg:ms-auto`
+          ردیفِ کنش‌ها را به انتهای همان سطر می‌برد). */}
+      <header className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-app-line bg-app-surface px-2.5 py-1.5 lg:px-3 lg:py-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 lg:flex-none">
+          <span className="hidden shrink-0 text-[13px] font-black text-app-ink lg:inline">صفحه‌ساز</span>
 
-        <select
-          value={slug}
-          onChange={(e) => {
-            const s = e.target.value;
-            if (!s) return;
-            setSlug(s);
-            void loadPage(s);
-          }}
-          className="h-9 max-w-64 rounded-xl border border-app-line bg-app-bg px-2 text-[12px] text-app-ink"
-        >
-          {editablePages.map((p) => (
-            <option key={p.path} value={p.slug ?? ""}>
-              {p.path} — {p.title} ({statusBadge(p)})
-            </option>
-          ))}
-          {editablePages.length === 0 && <option value={slug}>{slug}</option>}
-        </select>
-
-        <button
-          onClick={() => {
-            const s = window.prompt("شناسهٔ صفحه (حروف انگلیسی کوچک، عدد و خط تیره):", "landing-1");
-            if (!s) return;
-            const t = window.prompt("عنوان صفحه:", "صفحهٔ تازه");
-            void createPage(s.trim(), (t ?? "صفحهٔ تازه").trim(), "landing");
-          }}
-          className="h-9 rounded-xl border border-app-primary-soft px-3 text-[12px] font-bold text-app-primary-strong hover:bg-app-primary-tint"
-          title="ساخت یک لندینگ سفارشی"
-        >
-          + لندینگ تازه
-        </button>
-
-        <span
-          className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
-            status === "PUBLISHED" ? "bg-app-primary-tint text-app-primary-strong" : "bg-app-bg text-app-muted"
-          }`}
-        >
-          {status === "PUBLISHED" ? "منتشر شده" : "پیش‌نویس"}
-        </span>
-        {status === "PUBLISHED" && pendingChanges && (
-          <span
-            className="rounded-full bg-app-warning/15 px-2.5 py-1 text-[10px] font-bold text-app-warning"
-            title="پیش‌نویس ذخیره شده با نسخهٔ روی سایت فرق دارد"
+          {/* جابه‌جاییِ بین پنل‌ها در چیدمانِ تک‌پنلی — سگمنتِ داخلِ هدر،
+              جایِ نوارِ جداگانهٔ قبلی. از `lg` به بالا پنهان است. */}
+          <nav
+            aria-label="پنل فعال صفحه‌ساز"
+            className="flex shrink-0 items-center gap-0.5 rounded-xl border border-app-line p-0.5 lg:hidden"
           >
-            تغییرات منتشرنشده
-          </span>
-        )}
-        {dirty && <span className="text-[10px] font-bold text-app-warning">ذخیره نشده</span>}
+            {(
+              [
+                ["canvas", "بوم"],
+                ["blocks", "بلوک‌ها"],
+                ["settings", "تنظیمات"],
+              ] as Array<[MobilePane, string]>
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setMobilePane(id)}
+                aria-pressed={mobilePane === id}
+                className={`rounded-lg px-1.5 py-1 text-[11px] font-bold transition-colors ${
+                  mobilePane === id
+                    ? "bg-app-primary text-app-on-accent"
+                    : "text-app-muted hover:bg-app-bg"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
 
-        <div className="ms-auto flex flex-wrap items-center gap-1.5">
+          <select
+            value={slug}
+            onChange={(e) => {
+              const s = e.target.value;
+              if (!s) return;
+              setSlug(s);
+              void loadPage(s);
+            }}
+            className="h-8 min-w-0 flex-1 truncate rounded-xl border border-app-line bg-app-bg px-2 text-[12px] text-app-ink lg:h-9 lg:flex-none lg:max-w-64"
+          >
+            {editablePages.map((p) => (
+              <option key={p.path} value={p.slug ?? ""}>
+                {p.path} — {p.title} ({statusBadge(p)})
+              </option>
+            ))}
+            {editablePages.length === 0 && <option value={slug}>{slug}</option>}
+          </select>
+
+          <button
+            onClick={() => {
+              const s = window.prompt("شناسهٔ صفحه (حروف انگلیسی کوچک، عدد و خط تیره):", "landing-1");
+              if (!s) return;
+              const t = window.prompt("عنوان صفحه:", "صفحهٔ تازه");
+              void createPage(s.trim(), (t ?? "صفحهٔ تازه").trim(), "landing");
+            }}
+            className="h-8 shrink-0 rounded-xl border border-app-primary-soft px-2 text-[12px] font-bold text-app-primary-strong hover:bg-app-primary-tint lg:h-9 lg:px-3"
+            title="ساخت یک لندینگ سفارشی"
+          >
+            <span className="hidden lg:inline">+ لندینگ تازه</span>
+            <span className="lg:hidden">+</span>
+          </button>
+
+          <span
+            className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+              status === "PUBLISHED" ? "bg-app-primary-tint text-app-primary-strong" : "bg-app-bg text-app-muted"
+            }`}
+          >
+            {status === "PUBLISHED" ? "منتشر شده" : "پیش‌نویس"}
+          </span>
+          {status === "PUBLISHED" && pendingChanges && (
+            <span
+              className="shrink-0 rounded-full bg-app-warning/15 px-2.5 py-1 text-[10px] font-bold text-app-warning"
+              title="پیش‌نویس ذخیره شده با نسخهٔ روی سایت فرق دارد"
+            >
+              تغییرات منتشرنشده
+            </span>
+          )}
+          {dirty && <span className="shrink-0 text-[10px] font-bold text-app-warning">ذخیره نشده</span>}
+        </div>
+
+        <div className="flex w-full items-center gap-1.5 lg:ms-auto lg:w-auto">
           <div className="flex overflow-hidden rounded-xl border border-app-line">
             {(["mobile", "tablet", "desktop"] as Device[]).map((d) => (
               <button
                 key={d}
                 onClick={() => setDevice(d)}
-                className={`px-2.5 py-1.5 text-[11px] font-bold ${
+                className={`px-1.5 py-1 text-[11px] font-bold lg:px-2.5 lg:py-1.5 ${
                   device === d ? "bg-app-primary text-app-on-accent" : "bg-app-surface text-app-muted"
                 }`}
                 title={`عرض ${DEVICE_WIDTH[d]}px`}
@@ -863,7 +905,7 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
           <button
             onClick={undo}
             disabled={past.current.length === 0}
-            className="h-9 rounded-xl border border-app-line px-2.5 text-[12px] font-bold disabled:opacity-35"
+            className="h-8 shrink-0 rounded-xl border border-app-line px-2 text-[12px] font-bold disabled:opacity-35 lg:h-9 lg:px-2.5"
             title="واگرد (Ctrl+Z)"
           >
             ↶
@@ -871,25 +913,28 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
           <button
             onClick={redo}
             disabled={future.current.length === 0}
-            className="h-9 rounded-xl border border-app-line px-2.5 text-[12px] font-bold disabled:opacity-35"
+            className="h-8 shrink-0 rounded-xl border border-app-line px-2 text-[12px] font-bold disabled:opacity-35 lg:h-9 lg:px-2.5"
             title="ازنو (Ctrl+Shift+Z)"
           >
             ↷
           </button>
 
+          {/* در عرض کم، «دیدن در سایت» فقط ↗ می‌شود و ms-auto کنش‌های اصلی
+              را به انتهای ردیف می‌برد؛ در `lg` همان دکمهٔ کاملِ قبلی است. */}
           <a
             href={`${siteUrl}${viewPath}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex h-9 items-center rounded-xl border border-app-line px-3 text-[12px] font-bold text-app-primary-strong"
+            className="flex h-8 shrink-0 items-center rounded-xl border border-app-line px-2 text-[12px] font-bold text-app-primary-strong max-lg:ms-auto lg:h-9 lg:px-3"
+            title="دیدن در سایت"
           >
-            دیدن در سایت ↗
+            <span className="hidden lg:inline">دیدن در سایت </span>↗
           </a>
 
           <button
             onClick={() => void save()}
             disabled={loading || loadingPage}
-            className="h-9 rounded-xl border border-app-primary-soft px-3 text-[12px] font-bold text-app-primary-strong disabled:opacity-50"
+            className="h-8 shrink-0 rounded-xl border border-app-primary-soft px-2.5 text-[12px] font-bold text-app-primary-strong disabled:opacity-50 lg:h-9 lg:px-3"
             title="ذخیره (Ctrl+S)"
           >
             ذخیره
@@ -903,27 +948,32 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
                 <button
                   onClick={() => void publish()}
                   disabled={loading || loadingPage}
-                  className="h-9 rounded-xl bg-app-primary px-4 text-[12px] font-bold text-app-on-accent disabled:opacity-50"
+                  className="h-8 shrink-0 rounded-xl bg-app-primary px-2.5 text-[12px] font-bold text-app-on-accent disabled:opacity-50 lg:h-9 lg:px-4"
                   title="پیش‌نویس را روی سایت منتشر کن"
                 >
-                  انتشار تغییرات
+                  <span className="hidden lg:inline">انتشار تغییرات</span>
+                  <span className="lg:hidden">انتشار</span>
                 </button>
               )}
               <button
                 onClick={() => void unpublish()}
                 disabled={loading}
-                className="h-9 rounded-xl border border-app-line px-3 text-[12px] font-bold text-app-muted disabled:opacity-50"
+                className="h-8 shrink-0 rounded-xl border border-app-line px-2.5 text-[12px] font-bold text-app-muted disabled:opacity-50 lg:h-9 lg:px-3"
+                title="لغو انتشار"
               >
-                لغو انتشار
+                <span className="hidden lg:inline">لغو انتشار</span>
+                <span className="lg:hidden">لغو</span>
               </button>
             </>
           ) : (
             <button
               onClick={() => void publish()}
               disabled={loading || loadingPage}
-              className="h-9 rounded-xl bg-app-primary px-4 text-[12px] font-bold text-app-on-accent disabled:opacity-50"
+              className="h-8 shrink-0 rounded-xl bg-app-primary px-2.5 text-[12px] font-bold text-app-on-accent disabled:opacity-50 lg:h-9 lg:px-4"
+              title="انتشار در سایت"
             >
-              انتشار در سایت
+              <span className="hidden lg:inline">انتشار در سایت</span>
+              <span className="lg:hidden">انتشار</span>
             </button>
           )}
         </div>
@@ -939,35 +989,6 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
           {msg.text}
         </div>
       )}
-
-      {/* ───────── نوارِ انتخابِ پنل، فقط در عرض‌های باریک ───────── */}
-      {/* از `lg` به بالا پنهان است و هر سه ستون مثل قبل کنارِ هم می‌مانند. */}
-      <nav
-        aria-label="پنل فعال صفحه‌ساز"
-        className="hidden shrink-0 gap-1 border-b border-app-line bg-app-surface p-1.5 max-lg:flex"
-      >
-        {(
-          [
-            ["canvas", "بوم"],
-            ["blocks", "بلوک‌ها"],
-            ["settings", "تنظیمات"],
-          ] as Array<[MobilePane, string]>
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setMobilePane(id)}
-            aria-pressed={mobilePane === id}
-            className={`flex-1 rounded-xl px-2 py-2 text-[11px] font-bold transition-colors ${
-              mobilePane === id
-                ? "bg-app-primary text-app-on-accent"
-                : "text-app-muted hover:bg-app-bg"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
 
       <div className="flex min-h-0 flex-1">
         {/* ───────── ستون راست: ساختار / بلوک‌ها / صفحات سایت ───────── */}
