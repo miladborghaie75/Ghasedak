@@ -7,6 +7,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx scripts/seed.ts",
+    "db:rebuild-content-pages": "tsx scripts/rebuild-content-pages.ts",
     "db:visual-fixture": "node scripts/visual-fixture.mjs",
     "db:studio": "prisma studio",
     "typecheck": "tsc -p tsconfig.json --noEmit"

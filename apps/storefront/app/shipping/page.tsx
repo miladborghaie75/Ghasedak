@@ -1,17 +1,20 @@
-import { meta } from "@/components/layout/LegalShell";
+import type { Metadata } from "next";
 import { SiteContentView } from "@/components/layout/SiteContentView";
 import CmsSlot from "@/components/cms/CmsSlot";
-import { site } from "@/lib/site";
+import { contentPageMetadata } from "@/lib/cms";
 import { COPY } from "@/lib/copy";
 import { SHIPPING_CONTENT } from "@ghasedak/contracts";
 
-export const metadata = meta(
-  `${COPY.legal.shipping} — ${site.fullName}`,
-  "ارسال سریع پستی، تحویل حضوری از سه شعبه قاصدک و نحوه پیگیری سفارش.",
-);
-
 /** مسیر زنده است تا صفحه‌ساز بتواند محتوایش را جایگزین کند */
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return contentPageMetadata({
+    slug: "shipping",
+    title: COPY.legal.shipping,
+    description: "ارسال سریع پستی، تحویل حضوری از سه شعبه قاصدک و نحوه پیگیری سفارش.",
+  });
+}
 
 export default function ShippingPage({
   searchParams,

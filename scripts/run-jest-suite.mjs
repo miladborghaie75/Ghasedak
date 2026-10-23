@@ -103,8 +103,13 @@ for (const spec of specs) {
       timeout: 600_000,
     }).toString();
     const clean = out.replace(/\x1b\[[0-9;]*m/g, "");
-    const m = clean.match(/Tests:\s+(\d+) passed(?:,\s+(\d+) failed)?(?:,\s+(\d+) total)?/);
-    const p = m ? Number(m[1]) : 0;
+    // خلاصهٔ jest: «N passed[, N failed][, N skipped][, N todo][, N total]» —
+    // سوئیت‌های فقط-skipped (مثل witness-smtp-live) نرخ pass ندارند ولی قرمز هم نیستند؛
+    // فقط failed>0 یا نبود خلاصهٔ Tests قرمز است.
+    const m =
+      clean.match(/Tests:\s+(\d+) passed(?:,\s+(\d+) failed)?(?:,\s+(\d+) skipped)?(?:,\s+(\d+) todo)?/) ??
+      clean.match(/Tests:\s+(\d+) skipped/);
+    const p = m && clean.match(/passed/) ? Number(m[1]) : 0;
     const f = m && m[2] ? Number(m[2]) : 0;
     testsPass += p; testsFail += f;
     if (f > 0 || !m) {
@@ -113,7 +118,7 @@ for (const spec of specs) {
       console.log(`FAIL${f ? ` (${f} failed)` : " (no summary)"}`);
     } else {
       suitesPass++;
-      console.log(`OK (${p} tests)`);
+      console.log(p > 0 ? `OK (${p} tests)` : `OK (skipped)`);
     }
   } catch (e) {
     const out = ((e.stdout?.toString() ?? "") + (e.stderr?.toString() ?? "")).replace(/\x1b\[[0-9;]*m/g, "");

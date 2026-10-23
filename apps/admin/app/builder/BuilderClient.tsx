@@ -10,6 +10,7 @@ import {
   type CmsPageData,
 } from "@ghasedak/blocks";
 import { useAdminApi } from "@/components/useAdminApi";
+import { editBodyLine } from "@/lib/content-sections";
 import FieldEditor from "./FieldEditor";
 
 /**
@@ -45,6 +46,8 @@ interface SitePageRow {
     publishedAt: string | null;
     /** پیش‌نویس با نسخهٔ منتشرشده فرق دارد → هنوز منتشر نشده */
     hasUnpublishedChanges: boolean;
+    /** صفحهٔ محتوایی با مدل قدیمی (هیرو + متن) — نیاز به بازسازی دارد */
+    legacyModel?: boolean;
   } | null;
 }
 
@@ -52,9 +55,20 @@ type PanelIncoming =
   | { type: "cms:ready" }
   | { type: "cms:block-select"; id: string; field?: string }
   | { type: "cms:block-hover"; id: string | null }
-  | { type: "cms:field-input"; blockId: string; key: string; value: string };
+  | { type: "cms:field-input"; blockId: string; key: string; value: string }
+  /** ویرایشِ درجای یک خط از «صفحهٔ محتوایی» — فقط متنِ خالصِ همان خط */
+  | { type: "cms:line-input"; blockId: string; sectionIndex: number; lineIndex: number; text: string };
 
 type RightTab = "structure" | "blocks" | "pages";
+
+/**
+ * در پنجره‌های باریک، سه ستون جا نمی‌شوند: دو پنل ۲۵۶ + ۳۲۰ پیکسل‌اند و
+ * ۵۷۶ پیکسل از عرض را می‌گیرند — یعنی یک پنجرهٔ ۵۷۶ پیکسلی بومِ صفر
+ * دارد. پس زیرِ `lg` فقط یک پنل نشان داده می‌شود و این نوع می‌گوید کدام؛
+ * `lg` همان نقطه‌ای است که پنلِ مدیریت هم چیدمانِ جمع‌وجورش را عوض می‌کند
+ * و آن‌جا بوم حداقل ~۴۴۸ پیکسل جا می‌گیرد.
+ */
+type MobilePane = "canvas" | "blocks" | "settings";
 
 /** صفحهٔ خالی — برای مسیری که هنوز در صفحه‌ساز ساخته نشده */
 const EMPTY_PAGE: CmsPageData = { version: 1, title: "", blocks: [] };
@@ -79,6 +93,8 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
   const [dirty, setDirty] = useState(false);
   const [loadingPage, setLoadingPage] = useState(false);
   const [tab, setTab] = useState<RightTab>("structure");
+  /** پنلِ فعال در چیدمانِ تک‌پنلی — از `lg` به بالا بی‌اثر است */
+  const [mobilePane, setMobilePane] = useState<MobilePane>("canvas");
   const [revisions, setRevisions] = useState<Array<{ id: string; createdAt: string; actorId: string | null }>>([]);
   const [revisionsOpen, setRevisionsOpen] = useState(false);
   const [frame, setFrame] = useState({ w: 1280, h: 800, scale: 1 });
@@ -105,6 +121,16 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
   const [, bumpHistory] = useState(0);
   /** پایهٔ ویرایش درجا — برای اینکه undo یک‌باره کل ویرایش متن برگرداند */
   const inlineBase = useRef<{ key: string; blocks: CmsBlock[] } | null>(null);
+
+  /* ── دستگاهِ پیش‌نمایشِ پیش‌فرض ──
+     در چیدمانِ تک‌پنلیِ زیر `lg` بوم تمام‌عرض است، اما قابِ ۱۲۸۰ پیکسلی
+     آن‌قدر کوچک می‌شود که متن‌ها خوانا نیستند. پس همان‌جا از «موبایل»
+     شروع می‌کنیم؛ سه دکمهٔ دستگاه سر جایشان می‌مانند و انتخابِ بعدیِ مدیر
+     مقدم است. فقط یک‌بار در mount اجرا می‌شود — تغییرِ بعدیِ عرض، انتخابِ
+     فعلی را عوض نمی‌کند. */
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 1023.98px)").matches) setDevice("mobile");
+  }, []);
 
   const payload = useCallback(
     (): CmsPageData => ({
@@ -174,12 +200,15 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
 
   const commit = useCallback(
     (next: CmsBlock[] | ((prev: CmsBlock[]) => CmsBlock[])) => {
-      setBlocks((prev) => {
-        past.current = [...past.current.slice(-49), prev];
-        future.current = [];
-        bumpHistory((n) => n + 1);
-        return typeof next === "function" ? next(prev) : next;
-      });
+      // snapshot هم بیرون از updater — همان دلیلِ undo (StrictMode)
+      const prev = blocksRef.current;
+      const value = typeof next === "function" ? next(prev) : next;
+      past.current = [...past.current.slice(-49), prev];
+      future.current = [];
+      bumpHistory((n) => n + 1);
+      // صریح به‌روز می‌شود تا دو commitِ پشتِ‌سرهم در یک tick snapshotِ کهنه نگیرند
+      blocksRef.current = value;
+      setBlocks(value);
       inlineBase.current = null;
       setDirty(true);
       schedulePush();
@@ -187,27 +216,33 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
     [schedulePush],
   );
 
+  /**
+   * واگرد/ازنو — پشته‌ها **بیرون** از updater عوض می‌شوند.
+   *
+   * چرا؟ React در حالت StrictMode تابع updater را دوبار صدا می‌زند تا
+   * ناخالصی را بگیرد؛ pop/push داخل آن یعنی یک واگرد، دو تاریخچه را
+   * می‌خورد و عملاً هیچ برنمی‌گردد. `blocksRef` آخرین حالتِ کامیت‌شده است
+   * و همین برای فرستادن به پشتهٔ مقابل کافی است.
+   */
   const undo = useCallback(() => {
-    setBlocks((cur) => {
-      const prev = past.current.pop();
-      if (!prev) return cur;
-      future.current = [...future.current, cur];
-      bumpHistory((n) => n + 1);
-      return prev;
-    });
+    const prev = past.current.pop();
+    if (!prev) return;
+    future.current = [...future.current, blocksRef.current];
+    bumpHistory((n) => n + 1);
+    blocksRef.current = prev;
+    setBlocks(prev);
     inlineBase.current = null;
     setDirty(true);
     schedulePush();
   }, [schedulePush]);
 
   const redo = useCallback(() => {
-    setBlocks((cur) => {
-      const nxt = future.current.pop();
-      if (!nxt) return cur;
-      past.current = [...past.current, cur];
-      bumpHistory((n) => n + 1);
-      return nxt;
-    });
+    const nxt = future.current.pop();
+    if (!nxt) return;
+    past.current = [...past.current, blocksRef.current];
+    bumpHistory((n) => n + 1);
+    blocksRef.current = nxt;
+    setBlocks(nxt);
     inlineBase.current = null;
     setDirty(true);
     schedulePush();
@@ -312,11 +347,42 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
         return;
       }
       if (m.type === "cms:block-select") {
+        // عمداً پنلِ موبایل را عوض نمی‌کنیم: کلیک روی متن در بوم، ویرایشِ
+        // درجا را شروع می‌کند؛ پریدن به «تنظیمات» همان لحظه بوم را پنهان
+        // می‌کرد و تایپ در صفحه قطع می‌شد.
         setSelectedId(m.id || null);
         setHighlightField(m.field ?? null);
         return;
       }
       if (m.type === "cms:block-hover") {
+        return;
+      }
+      if (m.type === "cms:line-input") {
+        // ویرایش درجای یک خط از بخش‌های صفحهٔ محتوایی. نشانه‌ها (پیوند/برجسته)
+        // در پنل و با موقعیتشان نگه داشته می‌شوند؛ بوم فقط متنِ خالص را می‌فرستد.
+        const si = Number(m.sectionIndex);
+        const li = Number(m.lineIndex);
+        if (!Number.isInteger(si) || si < 0 || !Number.isInteger(li) || li < 0) return;
+        const fk = `${m.blockId}:line:${si}:${li}`;
+        if (!inlineBase.current || inlineBase.current.key !== fk) {
+          inlineBase.current = { key: fk, blocks: blocksRef.current };
+          past.current = [...past.current.slice(-49), blocksRef.current];
+          future.current = [];
+          bumpHistory((n) => n + 1);
+        }
+        setSelectedId(m.blockId);
+        setBlocks((prev) =>
+          prev.map((b) =>
+            b.id === m.blockId
+              ? {
+                  ...b,
+                  props: { ...b.props, sections: editBodyLine(b.props.sections, si, li, m.text) },
+                }
+              : b,
+          ),
+        );
+        setDirty(true);
+        schedulePush(600);
         return;
       }
       if (m.type === "cms:field-input") {
@@ -359,7 +425,11 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
+
     const measure = () => {
+      // بوم در چیدمانِ تک‌پنلی با CSS پنهان می‌شود؛ اندازه‌گیریِ ۰ پیکسل
+      // مقیاس را خراب می‌کرد و بازگشت به بوم یک لحظه ریز و پریده دیده می‌شد.
+      if (el.clientWidth === 0) return;
       const availW = Math.max(240, el.clientWidth - 32);
       const availH = Math.max(320, el.clientHeight - 32);
       const scale = Math.min(1, availW / DEVICE_WIDTH[device]);
@@ -460,6 +530,28 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
     [call, loadPage, loadSitePages, flash],
   );
 
+  /**
+   * بازسازی صفحهٔ محتواییِ قدیمی از متنِ مشترک سایت.
+   *
+   * صفحه‌هایی که پیش از بلوک «صفحهٔ محتوایی» ساخته شده‌اند (هیرو + متن‌های
+   * پراکنده) با چیدمان واقعی سایت نمی‌خوانند. این دکمه همان صفحه را از همان
+   * متنی که سایت رندر می‌کند دوباره می‌سازد؛ payload قبلی در «نسخه‌های قبلی»
+   * می‌ماند و تا وقتی مدیر «انتشار» نزند، سایت دست‌نخورده است.
+   */
+  const rebuildFromSite = useCallback(async () => {
+    const r = await call<{ slug: string; data: CmsPageData }>(`/admin/pages/${slug}/rebuild-from-site`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    if (r.ok && r.data) {
+      await loadPage(slug);
+      void loadSitePages();
+      flash("صفحه از محتوای فعلی سایت بازسازی شد — برای اعمال روی سایت «انتشار» بزن");
+    } else {
+      flash(r.error?.message ?? "بازسازی ناموفق", "err");
+    }
+  }, [call, slug, loadPage, loadSitePages, flash]);
+
   /* ── تاریخچهٔ نسخه‌ها ── */
   const loadRevisions = useCallback(async () => {
     const r = await call<{ items: Array<{ id: string; createdAt: string; actorId: string | null }> }>(
@@ -494,6 +586,8 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
       const b = makeBlock(type);
       commit((prev) => [...prev, b]);
       setSelectedId(b.id);
+      // بلوکِ تازه انتخاب شده؛ در عرض باریک مستقیم به فیلدهایش برو.
+      setMobilePane("settings");
     },
     [commit],
   );
@@ -759,9 +853,42 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
         </div>
       )}
 
+      {/* ───────── نوارِ انتخابِ پنل، فقط در عرض‌های باریک ───────── */}
+      {/* از `lg` به بالا پنهان است و هر سه ستون مثل قبل کنارِ هم می‌مانند. */}
+      <nav
+        aria-label="پنل فعال صفحه‌ساز"
+        className="hidden shrink-0 gap-1 border-b border-app-line bg-app-surface p-1.5 max-lg:flex"
+      >
+        {(
+          [
+            ["canvas", "بوم"],
+            ["blocks", "بلوک‌ها"],
+            ["settings", "تنظیمات"],
+          ] as Array<[MobilePane, string]>
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setMobilePane(id)}
+            aria-pressed={mobilePane === id}
+            className={`flex-1 rounded-xl px-2 py-2 text-[11px] font-bold transition-colors ${
+              mobilePane === id
+                ? "bg-app-primary text-app-on-accent"
+                : "text-app-muted hover:bg-app-bg"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
       <div className="flex min-h-0 flex-1">
         {/* ───────── ستون راست: ساختار / بلوک‌ها / صفحات سایت ───────── */}
-        <aside className="flex w-64 shrink-0 flex-col border-e border-app-line bg-app-surface">
+        <aside
+          className={`flex w-64 shrink-0 flex-col border-e border-app-line bg-app-surface max-lg:w-full max-lg:border-e-0 ${
+            mobilePane === "blocks" ? "" : "max-lg:hidden"
+          }`}
+        >
           <div className="flex shrink-0 border-b border-app-line">
             {(
               [
@@ -800,6 +927,8 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
                     onClick={() => {
                       setSelectedId(b.id);
                       scrollToBlock(b.id);
+                      // در عرض باریک، ردیفِ بلوک همان فیلدهایش را باز کند.
+                      setMobilePane("settings");
                     }}
                     className={`group cursor-pointer rounded-xl border p-2 transition-colors ${
                       selectedId === b.id
@@ -927,7 +1056,12 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
             نشده. دلیلش این است که مدیر باید همان چیزی را ببیند که بازدیدکننده
             می‌بیند؛ آن‌وقت می‌تواند تصمیم بگیرد صفحه را بسازد یا نه. قبلاً
             اینجا کارتِ «هنوز ساخته نشده» می‌آمد و هیچ صفحه‌ای لود نمی‌شد. */}
-        <main ref={canvasRef} className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-app-bg p-4">
+        <main
+          ref={canvasRef}
+          className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-app-bg p-4 max-lg:p-2 ${
+            mobilePane === "canvas" ? "" : "max-lg:hidden"
+          }`}
+        >
           <div
             className="mx-auto overflow-hidden rounded-2xl border border-app-line bg-white shadow-app-shadow-2"
             style={{ width: frame.w * frame.scale, height: frame.h * frame.scale }}
@@ -976,6 +1110,29 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
             </div>
           )}
 
+          {/* نوار «مدل قدیمی» — صفحهٔ محتواییِ ساخته‌شده با هیرو + متن‌های پراکنده.
+              چنین صفحه‌ای با چیدمان واقعی سایت نمی‌خواند؛ بازسازی، همان متن را
+              در قالب «صفحهٔ محتوایی» می‌نشاند (نسخهٔ قبل در تاریخچه می‌ماند). */}
+          {pageExists && current?.cms?.legacyModel && (
+            <div className="absolute inset-x-0 top-4 z-10 flex justify-center px-4">
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-app-warning/40 bg-app-surface px-4 py-2.5 shadow-app-shadow-2">
+                <p className="text-[12px] font-bold text-app-ink">
+                  این صفحه با مدل قدیمی (هیرو + متن) ساخته شده و با چیدمان واقعی سایت نمی‌خواند
+                </p>
+                <button
+                  onClick={() => {
+                    if (!window.confirm("پیش‌نویس فعلی با محتوای مشترک سایت جایگزین می‌شود (نسخهٔ قبل در «نسخه‌های قبلی» می‌ماند). ادامه می‌دهی؟"))
+                      return;
+                    void rebuildFromSite();
+                  }}
+                  className="rounded-xl bg-app-primary px-4 py-2 text-[12px] font-bold text-app-on-accent"
+                >
+                  بازسازی از محتوای فعلی
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* بوم در حال بالا آمدن است */}
           {frameStatus === "waiting" && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
@@ -1007,7 +1164,11 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
         </main>
 
         {/* ───────── ستون تنظیمات ───────── */}
-        <aside className="w-80 shrink-0 overflow-y-auto border-s border-app-line bg-app-surface">
+        <aside
+          className={`w-80 shrink-0 overflow-y-auto border-s border-app-line bg-app-surface max-lg:w-full max-lg:border-s-0 ${
+            mobilePane === "settings" ? "" : "max-lg:hidden"
+          }`}
+        >
           {selected && selectedDef ? (
             <div className="p-4">
               <div className="mb-4 flex items-start justify-between gap-2 border-b border-app-line pb-3">
@@ -1039,7 +1200,10 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
 
               <div className="mt-5 border-t border-app-line pt-4">
                 <button
-                  onClick={() => scrollToBlock(selected.id)}
+                  onClick={() => {
+                    setMobilePane("canvas");
+                    scrollToBlock(selected.id);
+                  }}
                   className="w-full rounded-xl border border-app-line py-2 text-[11px] font-bold text-app-primary-strong hover:bg-app-primary-tint"
                 >
                   نشان‌کردن در بوم

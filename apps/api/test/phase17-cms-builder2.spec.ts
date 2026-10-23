@@ -18,6 +18,7 @@ import {
   ART_FRAME_DEFAULTS,
   ART_FRAME_NOTES,
   SITE_PAGES,
+  contentPageToSiteContent,
   normalizeCmsPage,
   resolveArtFrames,
   sanitizeBlockProps,
@@ -256,33 +257,36 @@ describe("Phase 17 — الگوهای شروع صفحه", () => {
 });
 
 describe("Phase 17 — ساخت صفحه از محتوای فعلی سایت (starter=site)", () => {
-  /** متنِ یکپارچهٔ بلوک‌های متنیِ پیش‌نویس */
-  function draftText(data: { blocks: Array<{ type: string; props: Record<string, unknown> }> }): string {
-    return data.blocks
-      .filter((b) => b.type === "RICH_TEXT")
-      .map((b) => String(b.props.text ?? ""))
-      .join("\n\n");
-  }
-
-  /** فاصله‌ها یکی می‌شوند تا شکستِ متنِ بلند، تفاوتِ معنایی نسازد */
+  /** فاصله‌ها یکی می‌شود تا مقایسهٔ متن به تفاوتِ تایپوگرافی گیر نکند */
   const flatten = (s: string) => s.replace(/\s+/g, " ").trim();
 
+  /** متنِ یک صفحهٔ محتوایی — تیترها + بندها، برای مقایسهٔ دوطرفه */
+  const plain = (p: { sections: Array<{ title?: string; blocks: object[] }> }): string =>
+    flatten(
+      p.sections
+        .map((s) => `${s.title ?? ""}\n${s.blocks.map((b) => siteBlockText(b as never)).join("\n")}`)
+        .join("\n"),
+    );
+
   for (const slug of ["about", "contact", "returns", "shipping", "privacy", "terms"]) {
-    it(`starter=site متن اصلیِ /${slug} را بی‌کم‌و‌اضافه می‌آورد`, async () => {
+    it(`starter=site برای /${slug} یک بلوک «صفحهٔ محتوایی» می‌سازد — بدون هیرو`, async () => {
       const svc = new CmsService(makePrisma() as never);
       const { data } = await svc.create(slug, "عنوان صفحه", "site", "u1");
 
+      // صفحهٔ محتوایی در سایت هیرو ندارد؛ صفحه‌ساز هم نباید بسازد —
+      // وگرنه صفحهٔ پنل با صفحهٔ واقعی سایت یک شکل نبود (شکایت اصلی).
+      expect(data.blocks.map((b) => b.type)).toEqual(["CONTENT_PAGE"]);
+      expect(data.title).toBe("عنوان صفحه");
+
       const content = siteContentBySlug(slug);
       expect(content).toBeDefined();
-      const expected = content!.sections
-        .map((s) => s.blocks.map(siteBlockText).filter((t) => t.trim().length > 0).join("\n\n"))
-        .filter((t) => t.trim().length > 0)
-        .join("\n\n");
-
-      expect(flatten(draftText(data))).toBe(flatten(expected));
-      expect(data.blocks[0].type).toBe("HERO");
-      // تیترِ هیرو همان عنوانی است که مدیر داده
-      expect(data.blocks[0].props.title).toBe("عنوان صفحه");
+      // متن و تیترها بی‌کم‌و‌اضافه می‌آیند — با بازگشت به مدلِ غنی مقایسه می‌شود
+      const built = contentPageToSiteContent(data);
+      expect(built).toBeDefined();
+      expect(plain(built!)).toBe(plain(content!));
+      // پاراگراف معرفی و تاریخ به‌روزرسانی هم حفظ می‌شوند
+      expect(built?.intro).toBe(content!.intro);
+      expect(built?.updated).toBe(content!.updated);
     });
   }
 

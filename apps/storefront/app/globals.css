@@ -84,6 +84,8 @@
   --app-primary-strong: var(--color-primary-strong);
   --app-primary-tint: var(--color-primary-tint);
   --app-primary-soft: var(--color-primary-soft);
+  /* رنگِ تیترِ صفحه‌های محتوایی (بلوک CONTENT_PAGE) — همان «بنفش تیره» برند */
+  --app-plum: var(--color-plum);
   --app-on-accent: #ffffff;
   --app-success: var(--color-success);
   --app-error: var(--color-error);
@@ -136,6 +138,7 @@
   --color-app-primary-strong: var(--app-primary-strong);
   --color-app-primary-tint: var(--app-primary-tint);
   --color-app-primary-soft: var(--app-primary-soft);
+  --color-app-plum: var(--app-plum);
   --color-app-on-accent: var(--app-on-accent);
   --color-app-success: var(--app-success);
   --color-app-error: var(--app-error);

@@ -20,6 +20,7 @@ import {
   normalizeCmsPage,
   siteContentBySlug,
   siteContentToCmsPage,
+  sitePageBySlug,
   SITE_PAGES,
   sitePathForSlug,
   type CmsPageData,
@@ -35,6 +36,12 @@ export interface SitePageCmsStatus {
   publishedAt: string | null;
   /** پیش‌نویس با نسخهٔ منتشرشده تفاوت دارد → سایت هنوز نسخهٔ قبلی را نشان می‌دهد */
   hasUnpublishedChanges: boolean;
+  /**
+   * صفحهٔ محتوایی با مدلِ قدیمی — ساخته‌شده پیش از بلوک `CONTENT_PAGE`
+   * (هیرو + متن‌های پراکنده). چنین صفحه‌ای با چیدمان واقعی سایت نمی‌خواند؛
+   * پنل با این پرچم دکمهٔ «بازسازی از محتوای فعلی» را نشان می‌دهد.
+   */
+  legacyModel: boolean;
 }
 
 /**
@@ -161,6 +168,14 @@ export class CmsService {
     const rows = await this.prisma.cmsPage.findMany({ orderBy: { slug: "asc" } });
     const bySlug = new Map(rows.map((r) => [r.slug, this.toSummary(r)]));
 
+    // صفحه‌های محتوایی که هنوز بلوک CONTENT_PAGE ندارند → مدل قدیمی (هیرو‌دار)
+    const legacy = new Set<string>();
+    for (const r of rows) {
+      if (!siteContentBySlug(r.slug)) continue;
+      const page = normalizeCmsPage(r.payload);
+      if (!page.blocks.some((b) => b.type === "CONTENT_PAGE")) legacy.add(r.slug);
+    }
+
     const items: SitePageItem[] = SITE_PAGES.map((def) => {
       const summary = def.slug ? bySlug.get(def.slug) : undefined;
       return {
@@ -177,6 +192,7 @@ export class CmsService {
               updatedAt: summary.updatedAt,
               publishedAt: summary.publishedAt,
               hasUnpublishedChanges: summary.hasUnpublishedChanges,
+              legacyModel: def.slug ? legacy.has(def.slug) : false,
             }
           : null,
       };
@@ -198,6 +214,8 @@ export class CmsService {
           updatedAt: summary.updatedAt,
           publishedAt: summary.publishedAt,
           hasUnpublishedChanges: summary.hasUnpublishedChanges,
+          // لندینگ سفارشی — مدل محتوایی ندارد و بازسازی هم معنا ندارد
+          legacyModel: false,
         },
       });
     }
@@ -275,6 +293,61 @@ export class CmsService {
       return slug === "home" ? landingTemplate(title) : simpleTemplate(title);
     }
     return emptyCmsPage(title);
+  }
+
+  /**
+   * بازسازیِ صفحهٔ محتوایی از منبعِ مشترکِ متن — دکمهٔ «بازسازی از محتوای فعلی».
+   *
+   * صفحه‌هایی که پیش از بلوک `CONTENT_PAGE` ساخته شده‌اند (هیرو + متن‌های
+   * پراکنده) با چیدمان واقعی سایت نمی‌خواندند. این متد همان صفحه را از همان
+   * متنی که سایت رندر می‌کند دوباره می‌سازد: یک بلوک `CONTENT_PAGE` با همان
+   * تیترها، همان ترتیب و همان پیوندها.
+   *
+   * سه قاعدهٔ ایمنی:
+   *  ۱) payload قبلی در `ContentRevision` می‌ماند — هیچ‌چیز پاک نمی‌شود؛
+   *  ۲) وضعیت انتشار دست‌نخورده می‌ماند — سایت تا «انتشار» دستی همان چیزی
+   *     را نشان می‌دهد که تا الان نشان می‌داد؛
+   *  ۳) فقط مسیرهایی که محتوای مشترک دارند بازسازی می‌شوند (وگرنه ۴۰۰).
+   */
+  async rebuildFromSite(
+    slug: string,
+    title: string | undefined,
+    actor: string | undefined,
+  ): Promise<{ slug: string; data: CmsPageData; created: boolean }> {
+    const s = this.assertSlug(slug);
+    const content = siteContentBySlug(s);
+    if (!content) {
+      throw new BadRequestException({
+        code: "NO_SITE_CONTENT",
+        message: "برای این مسیر محتوای مشترکی در کد نیست؛ بازسازی ممکن نیست.",
+      });
+    }
+    const before = await this.prisma.cmsPage.findUnique({ where: { slug: s } });
+    // عنوان صفحه حفظ می‌شود (تغییر عنوان کارِ خودِ مدیر است، نه بازسازی)
+    const resolvedTitle =
+      title?.trim() || (before ? normalizeCmsPage(before.payload).title : sitePageBySlug(s)?.title || content.slug);
+    const data = siteContentToCmsPage(content, resolvedTitle);
+
+    if (before) {
+      await this.prisma.contentRevision.create({
+        data: {
+          entity: "CmsPage",
+          entityId: s,
+          payload: (before.payload ?? {}) as object,
+          actorId: actor ?? null,
+        },
+      });
+      await this.prisma.cmsPage.update({
+        where: { slug: s },
+        data: { payload: data as object, updatedBy: actor ?? null },
+      });
+    } else {
+      await this.prisma.cmsPage.create({
+        data: { slug: s, payload: data as object, status: "DRAFT", updatedBy: actor ?? null },
+      });
+    }
+    await this.audit(actor, "cms.page.rebuild-from-site", s, { blocks: data.blocks.length });
+    return { slug: s, data, created: !before };
   }
 
   /** ذخیرهٔ پیش‌نویس — payload همیشه نرمال‌سازی می‌شود */
@@ -559,6 +632,17 @@ export class CmsAdminController {
   @RequirePermission("marketing.view")
   async revisions(@Param("slug") slug: string) {
     return this.cms.revisions(slug);
+  }
+
+  /** بازسازی صفحهٔ محتوایی از متنِ مشترک — برای صفحه‌های قدیمیِ هیرو‌دار */
+  @Post(":slug/rebuild-from-site")
+  @RequirePermission("marketing.manage")
+  async rebuildFromSite(
+    @Param("slug") slug: string,
+    @Body() body: { title?: string },
+    @Identity() me: AdminIdentity | null,
+  ) {
+    return this.cms.rebuildFromSite(slug, typeof body?.title === "string" ? body.title : undefined, me?.userId);
   }
 
   @Post(":slug/restore/:revisionId")

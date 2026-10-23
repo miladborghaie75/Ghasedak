@@ -5,9 +5,11 @@ import { PRIVACY_CONTENT } from "./privacy";
 import { RETURNS_CONTENT } from "./returns";
 import { SHIPPING_CONTENT } from "./shipping";
 import { TERMS_CONTENT } from "./terms";
+import { bodyToBlocks, sectionToBody } from "./markup";
 import { paragraphText, type SiteContentBlock, type SiteContentPage } from "./types";
 
 export * from "./types";
+export * from "./markup";
 export { ABOUT_CONTENT } from "./about";
 export { CONTACT_CONTENT } from "./contact";
 export { PRIVACY_CONTENT } from "./privacy";
@@ -44,61 +46,27 @@ export function siteBlockText(block: SiteContentBlock): string {
 }
 
 /**
- * سقفِ متنِ هر بلوک.
+ * تبدیلِ **وفادارانه** صفحهٔ ایستا به صفحهٔ صفحه‌ساز.
  *
- * چرا؟ چون فیلد `textarea` در قراردادِ بلوک‌ها تا ۲۰۰۰ نویسه نگه می‌دارد و
- * متنِ بلندتر **بی‌صدا** بریده می‌شود — یعنی صفحه‌ای که مدیر می‌بیند با
- * متنی که در سایت منتشر می‌شود فرق می‌کند. پس متنِ بلند را خودمان به
- * چند بلوکِ پشت‌سرهم می‌شکنیم.
- */
-const MAX_BLOCK_TEXT = 1500;
-
-/** شکستنِ متنِ بلند به تکه‌هایی که هرکدام در یک بلوک جا شوند */
-export function splitSiteText(text: string, max = MAX_BLOCK_TEXT): string[] {
-  if (text.length <= max) return [text];
-  const chunks: string[] = [];
-  let rest = text;
-  while (rest.length > max) {
-    let cut = rest.lastIndexOf("\n\n", max);
-    if (cut < 200) cut = rest.lastIndexOf("\n", max);
-    if (cut < 200) cut = max;
-    chunks.push(rest.slice(0, cut).trim());
-    rest = rest.slice(cut).trim();
-  }
-  if (rest) chunks.push(rest);
-  return chunks;
-}
-
-/**
- * تبدیلِ **وفادارانه** صفحهٔ ایستا به صفحهٔ CMS.
- *
- * «وفادارانه» یعنی: همان متن، همان ترتیب بخش‌ها، همان تیترها — بدون اینکه
- * چیزی کم یا اضافه شود. برای همین متن از همان منبعِ مشترکی می‌آید که
- * سایت رندر می‌کند (نه از یک کپیِ دیگر).
+ * «وفادارانه» یعنی: همان متن، همان ترتیب بخش‌ها، همان تیترها، همان پیوندها —
+ * بدون اینکه چیزی کم یا زیاد شود. نتیجه **یک** بلوک `CONTENT_PAGE` است، نه
+ * هیرو + ده‌ها بلوک متن: صفحه‌های محتوایی در سایت هیرو ندارند و صفحه‌ساز هم
+ * نباید بسازد. متنِ هر بخش با نشانه‌گذاریِ `site-content/markup` ذخیره می‌شود
+ * تا مدیر همان ساختار (پاراگراف/فهرست/یادداشت/پیوند) را ببیند و ویرایش کند.
  */
 export function siteContentToCmsPage(content: SiteContentPage, title: string): CmsPageData {
+  const sections = content.sections.map((section) => ({
+    title: section.title ?? "",
+    body: sectionToBody(section),
+  }));
+
   const blocks: CmsBlock[] = [
     {
       id: newBlockId(),
-      type: "HERO",
-      props: { title, subtitle: content.intro ?? "", align: "start" },
+      type: "CONTENT_PAGE",
+      props: { intro: content.intro ?? "", updated: content.updated ?? "", sections },
     },
   ];
-
-  for (const section of content.sections) {
-    const text = section.blocks
-      .map((b) => siteBlockText(b))
-      .filter((t) => t.trim().length > 0)
-      .join("\n\n");
-    if (!text.trim()) continue;
-    for (const chunk of splitSiteText(text)) {
-      blocks.push({
-        id: newBlockId(),
-        type: "RICH_TEXT",
-        props: { title: section.title ?? "", text: chunk, align: "start" },
-      });
-    }
-  }
 
   return normalizeCmsPage({
     version: 1,
@@ -106,4 +74,24 @@ export function siteContentToCmsPage(content: SiteContentPage, title: string): C
     seo: { title, description: content.intro ?? "" },
     blocks,
   });
+}
+
+/**
+ * وارونِ `siteContentToCmsPage` — صفحهٔ صفحه‌ساز را به مدلِ محتوای مشترک
+ * برمی‌گرداند. برای تستِ «چیزی گم نشده» و برای هر مقایسهٔ دوطرفه لازم است:
+ * اگر تبدیل رو به جلو چیزی را بشکند، این تابع همان شکستگی را آشکار می‌کند.
+ */
+export function contentPageToSiteContent(page: CmsPageData): SiteContentPage | undefined {
+  const block = page.blocks.find((b) => b.type === "CONTENT_PAGE");
+  if (!block) return undefined;
+  const intro = typeof block.props.intro === "string" ? block.props.intro : "";
+  const updated = typeof block.props.updated === "string" ? block.props.updated : "";
+  const rawRows = Array.isArray(block.props.sections) ? block.props.sections : [];
+  const sections = rawRows
+    .filter((row): row is Record<string, unknown> => typeof row === "object" && row !== null)
+    .map((row) => ({
+      title: typeof row.title === "string" ? row.title : "",
+      blocks: bodyToBlocks(typeof row.body === "string" ? row.body : ""),
+    }));
+  return { slug: "", ...(intro ? { intro } : {}), ...(updated ? { updated } : {}), sections };
 }

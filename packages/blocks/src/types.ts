@@ -65,6 +65,11 @@ export function pickProducts(data: CmsData, source: unknown, limit: number): Cms
 export interface CmsBlockProps {
   block: CmsBlock;
   data: CmsData;
+  /**
+   * عنوانِ صفحه — برای بلوک‌هایی که `h1` را از عنوانِ صفحه می‌سازند
+   * (مثل `CONTENT_PAGE` که در سایت هم `h1` صفحه از همین‌جا می‌آید).
+   */
+  pageTitle?: string;
 }
 
 /** خواندن امن یک prop رشته‌ای */

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ART_KINDS, ART_FRAME_DEFAULT_COLORS, ArtPlaque, isArtFrameColor } from "@ghasedak/blocks";
 import type { CmsBlockType, CmsField, CmsItemField } from "@ghasedak/blocks";
 import { moveItem } from "@/lib/reorder";
+import ContentSectionsEditor from "./ContentSectionsEditor";
 
 /**
  * فرم تنظیمات بلوک — کاملاً داده‌محور.
@@ -156,9 +157,18 @@ export default function FieldEditor({
             </select>
           )}
 
-          {f.type === "list" && (
-            <ListEditor field={f} value={props[f.key]} onChange={(v) => onChange(f.key, v)} />
-          )}
+          {/*
+           * بخش‌های صفحهٔ محتوایی فرمِ اختصاصی دارند: هر خط نوعش را دارد
+           * (بند/فهرست/یادداشت) و پیوند و برجسته با انتخابِ عبارت ساخته
+           * می‌شود — مدیر نشانه‌گذاری نمی‌نویسد. بقیهٔ لیست‌ها همان ویرایشگرِ
+           * عمومی را می‌گیرند.
+           */}
+          {f.type === "list" &&
+            (blockType === "CONTENT_PAGE" && f.key === "sections" ? (
+              <ContentSectionsEditor value={props[f.key]} onChange={(rows) => onChange(f.key, rows)} />
+            ) : (
+              <ListEditor field={f} value={props[f.key]} onChange={(v) => onChange(f.key, v)} />
+            ))}
 
           {f.help && <p className="mt-1 text-[11px] leading-5 text-app-muted">{f.help}</p>}
         </div>

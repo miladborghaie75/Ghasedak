@@ -1,17 +1,21 @@
-import { meta } from "@/components/layout/LegalShell";
+import type { Metadata } from "next";
 import { SiteContentView } from "@/components/layout/SiteContentView";
 import CmsSlot from "@/components/cms/CmsSlot";
-import { site } from "@/lib/site";
+import { contentPageMetadata } from "@/lib/cms";
 import { COPY } from "@/lib/copy";
 import { CONTACT_CONTENT } from "@ghasedak/contracts";
 
-export const metadata = meta(
-  `${COPY.legal.contact} — ${site.fullName}`,
-  "راه‌های ارتباط با لباس زیر قاصدک: شماره تماس، سه شعبه در خیابان عبدالمطلب و صفحه اینستاگرام.",
-);
-
 /** مسیر زنده است تا صفحه‌ساز بتواند محتوایش را جایگزین کند */
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return contentPageMetadata({
+    slug: "contact",
+    title: COPY.legal.contact,
+    description:
+      "راه‌های ارتباط با لباس زیر قاصدک: شماره تماس، سه شعبه در خیابان عبدالمطلب و صفحه اینستاگرام.",
+  });
+}
 
 export default function ContactPage({
   searchParams,

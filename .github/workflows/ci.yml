@@ -46,6 +46,9 @@ jobs:
         run: pnpm --filter @ghasedak/storefront copy:audit
       - name: ممیزی لحن کپی پنل ادمین (copy:audit)
         run: pnpm --filter @ghasedak/admin copy:audit
+      - name: بررسی سازگاری صفحه‌ساز با مسیرهای واقعی سایت
+        # رجیستری بلوک‌ها، فهرست مسیرها/پیشنهادی/ناوبری و متادیتای شش صفحهٔ محتوایی
+        run: node infrastructure/verify-page-builder.mjs
       - name: build (API + فروشگاه + پنل)
         run: pnpm build
 

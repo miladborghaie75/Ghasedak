@@ -254,10 +254,14 @@ describe("Phase 11 — P1 (inventory atomicity + refund lifecycle)", () => {
   });
 
   it("B2) refund bank + concurrent finalize: فقط یکی COMPLETED می‌شود", async () => {
-    // snapshot ماندهٔ همهٔ حساب‌های بانکی متصل به GL 1100 — مجموع باید دقیقاً 300k کم شود
-    // (کدام حساب انتخاب می‌شود تصمیم treasury است؛ invariant، کاهش کل است)
+    // snapshot ماندهٔ همهٔ حساب‌های بانکی متصل به درخت GL 1100 — مجموع باید دقیقاً 300k کم شود
+    // (کدام حساب انتخاب می‌شود تصمیم treasury است؛ invariant، کاهش کل است).
+    // توجه: هر حساب بانکی به زیرشاخهٔ 1100-XX وصل است (glAccountForNew) — پس کل زیردرخت را جمع میزنیم.
     const glBank = await prisma.account.findUniqueOrThrow({ where: { code: "1100" } });
-    const banksBefore = await prisma.bankAccount.aggregate({ where: { glAccountId: glBank.id, active: true }, _sum: { currentBalance: true } });
+    const glChildren = await prisma.account.findMany({ where: { parentAccountId: glBank.id }, select: { id: true } });
+    const glIds = [glBank.id, ...glChildren.map((c) => c.id)];
+    const bankWhere = { glAccountId: { in: glIds }, active: true } as never;
+    const banksBefore = await prisma.bankAccount.aggregate({ where: bankWhere, _sum: { currentBalance: true } });
     const beforeSum = banksBefore._sum.currentBalance ?? 0n;
     const rr = await prisma.returnRequest.create({ data: { number: `RT-${tag}-B`, status: "SETTLED", actorId: actor } as never });
     const refund = await prisma.refund.create({
@@ -290,10 +294,11 @@ describe("Phase 11 — P1 (inventory atomicity + refund lifecycle)", () => {
 
     const after = await prisma.refund.findUniqueOrThrow({ where: { id: refund.id } });
     expect(after.state).toBe("COMPLETED");
-    const banksAfter = await prisma.bankAccount.aggregate({ where: { glAccountId: glBank.id, active: true }, _sum: { currentBalance: true } });
+    const banksAfter = await prisma.bankAccount.aggregate({ where: bankWhere, _sum: { currentBalance: true } });
     expect((banksAfter._sum.currentBalance ?? 0n)).toBe(beforeSum - 300_000n);
     const entry = await prisma.journalEntry.findFirstOrThrow({ where: { sourceType: "refund", sourceId: refund.id }, include: { lines: { include: { account: true } } } });
-    expect(entry.lines.find((l) => l.account.code === "1100")?.credit).toBe(300_000n);
+    // سند روی زیرشاخهٔ واقعی بانک (1100-XX) ثبت میشود — نه گروه 1100
+    expect(entry.lines.find((l) => l.account.code.startsWith("1100"))?.credit).toBe(300_000n);
   });
 
   it("B3) refund STORE_CREDIT بدون خزانه/سند؛ cancel فقط از PENDING", async () => {

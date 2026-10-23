@@ -28,7 +28,20 @@ type Outgoing =
   | { type: "cms:ready" }
   | { type: "cms:block-select"; id: string; field?: string }
   | { type: "cms:block-hover"; id: string | null }
-  | { type: "cms:field-input"; blockId: string; key: string; value: string };
+  | { type: "cms:field-input"; blockId: string; key: string; value: string }
+  /** ویرایشِ درجای یک خط از بخش‌های صفحهٔ محتوایی — متنِ خالص، بدون نشانه */
+  | { type: "cms:line-input"; blockId: string; sectionIndex: number; lineIndex: number; text: string };
+
+/**
+ * جای نشانگرِ متن — یا یک فیلدِ ساده (`key`) یا یک خط از بخش‌ها.
+ *
+ * برای خط‌ها نمی‌توان از `firstChild` استفاده کرد: خط ممکن است از چند
+ * `<span>`/`<a>` ساخته شود؛ پس آفستِ نویسه‌ای در کلِ عنصر نگه داشته می‌شود و
+ * بعد از رندر دوباره روی درختِ متن نشانده می‌شود.
+ */
+type Caret =
+  | { blockId: string; key: string; offset: number }
+  | { blockId: string; sectionIndex: number; lineIndex: number; offset: number };
 
 /** origin پنل (والد) — از referrer می‌فهمیم */
 function parentOrigin(): string {
@@ -57,9 +70,19 @@ export default function CmsPreviewSurface({
   fallback?: ReactNode;
 }) {
   const [live, setLive] = useState<CmsPageData>(page);
+  /**
+   * شمارهٔ رندر — وقتی پنل عیناً همان صفحه‌ای را می‌فرستد که داریم،
+   * ری‌اکت متنی را که مرورگر مستقیم داخل `contenteditable` نوشته نمی‌بیند
+   * و DOM با مدل ناهم‌خوان می‌ماند (مثلاً واگرد پیش از echo). پس در این
+   * حالتِ نادر، درخت را از نو می‌سازیم تا متنِ مدل برگردد.
+   */
+  const [epoch, setEpoch] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
-  /** مکان نشانگر داخل فیلدِ در حال تایپ — بعد از رندر دوباره برمی‌گردد */
-  const caret = useRef<{ blockId: string; key: string; offset: number } | null>(null);
+  /** آخرین صفحهٔ رندرشده — برای مقایسهٔ پیامِ تازه، بدون وابستگیِ effect */
+  const liveRef = useRef<CmsPageData>(page);
+  liveRef.current = live;
+  /** مکان نشانگر داخل فیلد/خطِ در حال تایپ — بعد از رندر دوباره برمی‌گردد */
+  const caret = useRef<Caret | null>(null);
   /** آخرین بلوک هاورشده — برای اینکه پیام تکراری نفرستیم */
   const hovered = useRef<string | null>(null);
   const selected = useRef<string | null>(null);
@@ -87,6 +110,15 @@ export default function CmsPreviewSurface({
       if (!msg || typeof msg !== "object") return;
 
       if (msg.type === "cms:set-page") {
+        // پیامِ یکسان با آنچه نمایش می‌دهیم معمولاً یعنی واگرد به همین
+        // وضعیتِ پیش از تایپ؛ چون تایپ مستقیم در DOM انجام شده، باید درخت
+        // را از نو بسازیم وگرنه ری‌اکت تغییری نمی‌بیند و متنِ تایپ‌شده
+        // روی صفحه می‌ماند.
+        if (JSON.stringify(msg.page) === JSON.stringify(liveRef.current)) {
+          setEpoch((n) => n + 1);
+          return;
+        }
+        liveRef.current = msg.page;
         setLive(msg.page);
         return;
       }
@@ -132,19 +164,20 @@ export default function CmsPreviewSurface({
     const c = caret.current;
     if (!c) return;
     caret.current = null;
-    const el = rootRef.current?.querySelector<HTMLElement>(
-      `[data-cms-field="${CSS.escape(c.key)}"][data-cms-block="${CSS.escape(c.blockId)}"]`,
-    );
-    const node = el?.firstChild;
-    if (!node || node.nodeType !== Node.TEXT_NODE) return;
-    const max = node.textContent?.length ?? 0;
-    const range = document.createRange();
-    range.setStart(node, Math.min(c.offset, max));
-    range.collapse(true);
-    const sel = window.getSelection();
-    if (!sel) return;
-    sel.removeAllRanges();
-    sel.addRange(range);
+    const root = rootRef.current;
+    if (!root) return;
+    // داخلِ همان بلوک بگرد، نه با `data-cms-block` که افکتِ passive بعداً
+    // می‌نشاند؛ در رندرِ اولِ یک خطِ تازه، آن attribute هنوز نیست.
+    const wrapper = root.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(c.blockId)}"]`);
+    if (!wrapper) return;
+    const el =
+      "key" in c
+        ? wrapper.querySelector<HTMLElement>(`[data-cms-field="${CSS.escape(c.key)}"]`)
+        : wrapper.querySelector<HTMLElement>(
+            `[data-cms-section="${c.sectionIndex}"][data-cms-line="${c.lineIndex}"]`,
+          );
+    if (!el) return;
+    placeCaret(el, c.offset);
   });
 
   /* ── رویدادهای تعامل ── */
@@ -177,19 +210,40 @@ export default function CmsPreviewSurface({
 
   const onInput = useCallback(
     (e: React.FormEvent) => {
-      const el = e.target as HTMLElement;
-      const key = el.dataset?.cmsField;
-      const blockId = el.dataset?.cmsBlock;
-      if (!key || !blockId) return;
-      const text = el.textContent ?? "";
+      const target = e.target as HTMLElement;
+      const host = target.closest<HTMLElement>("[data-cms-field]");
+      if (!host) return;
+      const blockId =
+        host.closest<HTMLElement>("[data-block-id]")?.dataset.blockId ?? host.dataset.cmsBlock ?? "";
+      if (!blockId) return;
+
+      /* ── خطِ صفحهٔ محتوایی ──
+         فقط متنِ خالص می‌رود؛ پیوند/برجسته را پنل از روی همان متن و
+         با موقعیتِ نشانه‌ها نگه می‌دارد. اینجا state را عوض نمی‌کنیم تا
+         هر کلمه یک رندرِ کامل و پرشِ نشانگر نسازد؛ پنل پس از توقفِ تایپ
+         کلِ صفحه را می‌فرستد. */
+      const lineEl = target.closest<HTMLElement>("[data-cms-line]");
+      if (lineEl) {
+        const sectionIndex = Number(lineEl.dataset.cmsSection);
+        const lineIndex = Number(lineEl.dataset.cmsLine);
+        if (!Number.isInteger(sectionIndex) || !Number.isInteger(lineIndex)) return;
+        caret.current = {
+          blockId,
+          sectionIndex,
+          lineIndex,
+          offset: caretOffset(lineEl),
+        };
+        const text = lineEl.textContent ?? "";
+        post({ type: "cms:line-input", blockId, sectionIndex, lineIndex, text });
+        return;
+      }
+
+      const key = host.dataset.cmsField;
+      if (!key) return;
+      const text = host.textContent ?? "";
 
       // مکان نشانگر را نگه می‌داریم تا بعد از رندر برگردد
-      const sel = window.getSelection();
-      const offset =
-        sel && sel.rangeCount > 0 && el.contains(sel.getRangeAt(0).startContainer)
-          ? sel.getRangeAt(0).startOffset
-          : text.length;
-      caret.current = { blockId, key, offset };
+      caret.current = { blockId, key, offset: caretOffset(host) };
 
       // متن را در state هم نگه می‌داریم تا ریاکت بداند DOM چیست
       setLive((prev) => ({
@@ -204,6 +258,18 @@ export default function CmsPreviewSurface({
     [post],
   );
 
+  /* ── Enter در یک خط، خطِ تازه نمی‌سازد ──
+     مدلِ متن هر خط را یک بند می‌داند؛ خطِ تازه باید از پنل اضافه شود. */
+  const onKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const target = e.target as HTMLElement;
+    const line = target.closest<HTMLElement>("[data-cms-line]");
+    if (!line) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      line.blur();
+    }
+  }, []);
+
   return (
     <div
       ref={rootRef}
@@ -211,15 +277,64 @@ export default function CmsPreviewSurface({
       onClick={onClick}
       onMouseOver={onMouseOver}
       onInput={onInput}
+      onKeyDown={onKeyDown}
+      onBlur={() => {
+        // فوکوس از بوم رفت؛ نشانگرِ ذخیره‌شده نباید در رندرِ بعدی فوکوس را بدزدد.
+        caret.current = null;
+      }}
       className="flex flex-col"
     >
       {live.blocks.length === 0 && fallback ? (
         fallback
       ) : (
-        <CmsRenderer page={live} data={data} />
+        <CmsRenderer key={epoch} page={live} data={data} />
       )}
     </div>
   );
+}
+
+/** آفستِ نویسه‌ایِ نشانگر در کلِ متنِ یک عنصرِ ویرایش‌پذیر */
+function caretOffset(el: HTMLElement): number {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return (el.textContent ?? "").length;
+  const range = sel.getRangeAt(0);
+  if (!el.contains(range.startContainer)) return (el.textContent ?? "").length;
+  const before = document.createRange();
+  before.selectNodeContents(el);
+  before.setEnd(range.startContainer, range.startOffset);
+  return before.toString().length;
+}
+
+/** نشاندنِ نشانگر روی آفستِ نویسه‌ای — مستقل از اینکه خط چند `<span>` دارد */
+function placeCaret(el: HTMLElement, offset: number): void {
+  const sel = window.getSelection();
+  if (!sel) return;
+  const range = document.createRange();
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let remaining = Math.max(0, offset);
+  let last: Text | null = null;
+  let node = walker.nextNode() as Text | null;
+  while (node) {
+    const len = node.textContent?.length ?? 0;
+    if (remaining <= len) {
+      range.setStart(node, remaining);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return;
+    }
+    remaining -= len;
+    last = node;
+    node = walker.nextNode() as Text | null;
+  }
+  if (last) {
+    range.setStart(last, last.textContent?.length ?? 0);
+  } else {
+    range.selectNodeContents(el);
+  }
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
 }
 
 /** برجسته‌کردن بلوک انتخاب‌شده در خود صفحه */

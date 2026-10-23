@@ -13,6 +13,7 @@
  * مسیرهای «داده‌ای» (`/p/*`, `/c/*`, `/guides/*`) عمداً فقط‌خواندنی‌اند:
  * محتوایشان از کاتالوگ و راهنماها می‌آید، نه از صفحه‌ساز.
  */
+import { LEGAL_PAGE_TITLES } from "./site-copy";
 
 /** نوع مسیر از نظر اینکه محتوایش از کجا می‌آید */
 export type SitePageKind =
@@ -61,7 +62,8 @@ const EDITABLE_PAGES: SitePageDef[] = [
   {
     path: "/about",
     slug: "about",
-    title: "دربارهٔ ما",
+    // عنوان از برچسبِ مشترک می‌آید — پنل، فوتر و `h1` سایت یک متن را ببینند
+    title: LEGAL_PAGE_TITLES.about,
     kind: "STATIC",
     editable: true,
     note: "متن ثابت دربارهٔ فروشگاه.",
@@ -69,7 +71,7 @@ const EDITABLE_PAGES: SitePageDef[] = [
   {
     path: "/contact",
     slug: "contact",
-    title: "تماس با ما",
+    title: LEGAL_PAGE_TITLES.contact,
     kind: "STATIC",
     editable: true,
     note: "راه‌های ارتباطی و فرم تماس.",
@@ -77,7 +79,7 @@ const EDITABLE_PAGES: SitePageDef[] = [
   {
     path: "/returns",
     slug: "returns",
-    title: "شرایط بازگشت کالا",
+    title: LEGAL_PAGE_TITLES.returns,
     kind: "STATIC",
     editable: true,
     note: "شرایط مرجوعی — صفحهٔ حقوقی.",
@@ -85,7 +87,7 @@ const EDITABLE_PAGES: SitePageDef[] = [
   {
     path: "/shipping",
     slug: "shipping",
-    title: "روش‌های ارسال",
+    title: LEGAL_PAGE_TITLES.shipping,
     kind: "STATIC",
     editable: true,
     note: "روش‌ها و زمان‌بندی ارسال.",
@@ -93,7 +95,7 @@ const EDITABLE_PAGES: SitePageDef[] = [
   {
     path: "/privacy",
     slug: "privacy",
-    title: "حریم خصوصی",
+    title: LEGAL_PAGE_TITLES.privacy,
     kind: "STATIC",
     editable: true,
     note: "سیاست حریم خصوصی — صفحهٔ حقوقی.",
@@ -101,7 +103,7 @@ const EDITABLE_PAGES: SitePageDef[] = [
   {
     path: "/terms",
     slug: "terms",
-    title: "قوانین و مقررات",
+    title: LEGAL_PAGE_TITLES.terms,
     kind: "STATIC",
     editable: true,
     note: "شرایط استفاده از فروشگاه — صفحهٔ حقوقی.",

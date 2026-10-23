@@ -1,17 +1,20 @@
-import { meta } from "@/components/layout/LegalShell";
+import type { Metadata } from "next";
 import { SiteContentView } from "@/components/layout/SiteContentView";
 import CmsSlot from "@/components/cms/CmsSlot";
-import { site } from "@/lib/site";
+import { contentPageMetadata } from "@/lib/cms";
 import { COPY } from "@/lib/copy";
 import { PRIVACY_CONTENT } from "@ghasedak/contracts";
 
-export const metadata = meta(
-  `${COPY.legal.privacy} — ${site.fullName}`,
-  "نحوه جمع‌آوری، استفاده و نگهداری اطلاعات شخصی مشتریان لباس زیر قاصدک.",
-);
-
 /** مسیر زنده است تا صفحه‌ساز بتواند محتوایش را جایگزین کند */
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return contentPageMetadata({
+    slug: "privacy",
+    title: COPY.legal.privacy,
+    description: "نحوه جمع‌آوری، استفاده و نگهداری اطلاعات شخصی مشتریان لباس زیر قاصدک.",
+  });
+}
 
 export default function PrivacyPage({
   searchParams,

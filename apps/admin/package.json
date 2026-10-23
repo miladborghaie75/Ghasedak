@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start --port 3200",
     "typecheck": "tsc --noEmit",
-    "test": "node --test lib/copy.test.mjs && node --experimental-strip-types --test lib/reorder.test.ts lib/photo-upload.test.ts lib/photo-approve.test.ts lib/upstream.test.ts",
+    "test": "node --test lib/copy.test.mjs && node --experimental-strip-types --test lib/reorder.test.ts lib/photo-upload.test.ts lib/photo-approve.test.ts lib/upstream.test.ts lib/content-sections.test.ts",
     "copy:audit": "node scripts/copy-audit.mjs"
   },
   "dependencies": {

@@ -1,17 +1,20 @@
-import { meta } from "@/components/layout/LegalShell";
+import type { Metadata } from "next";
 import { SiteContentView } from "@/components/layout/SiteContentView";
 import CmsSlot from "@/components/cms/CmsSlot";
-import { site } from "@/lib/site";
+import { contentPageMetadata } from "@/lib/cms";
 import { COPY } from "@/lib/copy";
 import { ABOUT_CONTENT } from "@ghasedak/contracts";
 
-export const metadata = meta(
-  `${COPY.legal.about} — ${site.fullName}`,
-  "لباس زیر قاصدک چیست و چرا سه شعبه در خیابان عبدالمطلب دارد؟",
-);
-
 /** مسیر زنده است تا صفحه‌ساز بتواند محتوایش را جایگزین کند */
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return contentPageMetadata({
+    slug: "about",
+    title: COPY.legal.about,
+    description: "لباس زیر قاصدک چیست و چرا سه شعبه در خیابان عبدالمطلب دارد؟",
+  });
+}
 
 export default function AboutPage({
   searchParams,

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import type { CmsPageData } from "@ghasedak/contracts";
 import type { CmsData, CmsProduct } from "@ghasedak/blocks";
 import { CATEGORIES } from "./categories";
@@ -226,3 +227,34 @@ export async function hasPublishedPage(slug: string): Promise<boolean> {
 
 /** slug صفحهٔ اصلی — نگاشت مسیر «/» به صفحهٔ CMS */
 export const HOME_SLUG = "home";
+
+/**
+ * متادیتای صفحه‌های محتوایی (درباره ما، تماس، قوانین، حریم، ارسال، بازگشت).
+ *
+ * تا پیش از این این صفحه‌ها `metadata` ثابت داشتند؛ یعنی سئویی که مدیر در
+ * صفحه‌ساز می‌نوشت هرگز روی سایت اعمال نمی‌شد (برخلاف مسیر پویای `[slug]`).
+ * حالا قاعده یکی است: اگر صفحهٔ منتشرشده سئو دارد، همان اعمال می‌شود؛
+ * وگرنه عنوان و توضیح پیش‌فرضِ همان صفحه می‌ماند.
+ */
+export async function contentPageMetadata(opts: {
+  slug: string;
+  /** عنوان پیش‌فرض — همان چیزی که در فوتر و ناوبری می‌آید */
+  title: string;
+  /** توضیح پیش‌فرض — سئوی ثابتی که پیش از صفحه‌ساز نوشته شده بود */
+  description: string;
+}): Promise<Metadata> {
+  const cms = await fetchCmsPage(opts.slug);
+  const seo = cms?.page.seo;
+  const seoTitle = seo?.title?.trim();
+  const seoDescription = seo?.description?.trim();
+  const base = seoTitle || opts.title;
+  return {
+    // نام برند اینجا اضافه **نمی‌شود**: قالبِ عنوان در `app/layout.tsx` خودش
+    // « | قاصدک» را می‌گذارد. قبلاً هر دو انجام می‌شد و سطرِ تبِ شش صفحه
+    // این‌طور بود: «درباره ما — لباس زیر قاصدک | قاصدک». مدیر فقط عنوانِ خودِ
+    // صفحه را می‌نویسد؛ نام فروشگاه از یک جا (قالب) می‌آید.
+    title: base,
+    description: seoDescription || opts.description,
+    ...(seo?.noIndex ? { robots: { index: false, follow: false } } : {}),
+  };
+}

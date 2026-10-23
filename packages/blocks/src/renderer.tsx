@@ -18,6 +18,7 @@ import {
   TestimonialsBlock,
   TrustBarBlock,
 } from "./blocks/index";
+import { ContentPageBlock } from "./content-page";
 
 /**
  * رجیستری رندر — نگاشت `type` به کامپوننت.
@@ -40,6 +41,7 @@ export const CMS_RENDERERS: Record<CmsBlockType, CmsRendererFn> = {
   FEATURE_TRIPLE: FeatureTripleBlock,
   IMAGE_TEXT: ImageTextBlock,
   RICH_TEXT: RichTextBlock,
+  CONTENT_PAGE: ContentPageBlock,
   STATS: StatsBlock,
   FAQ: FaqBlock,
   TESTIMONIALS: TestimonialsBlock,
@@ -48,11 +50,20 @@ export const CMS_RENDERERS: Record<CmsBlockType, CmsRendererFn> = {
   SPACER: SpacerBlock,
 };
 
-/** رندر یک بلوک تنها */
-export function CmsBlockView({ block, data }: CmsBlockProps) {
+/**
+ * رندر یک بلوک تنها.
+ *
+ * اگر نوعی رندرر نداشته باشد (payload دست‌کاری‌شده یا بلوکِ آینده روی دادهٔ
+ * قدیمی)، بی‌صدا ناپدید نمی‌شود: هم هشدار توسعه‌ای می‌دهد هم یک گرهٔ خالی
+ * برمی‌گرداند تا خوردنِ بی‌صدا قابل پیگیری باشد.
+ */
+export function CmsBlockView({ block, data, pageTitle }: CmsBlockProps) {
   const fn = CMS_RENDERERS[block.type];
-  if (!fn) return null;
-  return fn({ block, data });
+  if (!fn) {
+    console.warn(`[cms] رندرری برای بلوک «${block.type}» ثبت نشده است.`);
+    return null;
+  }
+  return fn({ block, data, pageTitle });
 }
 
 /** رندر کل صفحه — ترتیب بلوک‌ها همان چیزی است که مدیر چیده */
@@ -71,7 +82,7 @@ export function CmsRenderer({
     <div data-cms-page={page.title} className="flex flex-col">
       {blocks.map((block) => (
         <div key={block.id} data-block-id={block.id}>
-          <CmsBlockView block={block} data={data} />
+          <CmsBlockView block={block} data={data} pageTitle={page.title} />
         </div>
       ))}
     </div>

@@ -82,6 +82,8 @@
   --app-primary-soft: var(--color-primary-soft);
   --app-primary-tint: var(--color-primary-tint);
   --app-deep: var(--color-deep);
+  /* رنگِ تیترِ صفحه‌های محتوایی (بلوک CONTENT_PAGE) — همان «بنفش تیره» برند */
+  --app-plum: var(--color-plum);
   --app-ok: var(--color-ok);
   --app-err: var(--color-err);
   /* نام‌های هم‌معنی فروشگاه — تا بلوک‌های مشترک در هر دو اپ یکسان رندر شوند */
@@ -131,6 +133,7 @@
   /* صفحهٔ رنگیِ قاب آرت — همان چیزی که فروشگاه رندر می‌کند */
   --color-app-primary-tint: var(--app-primary-tint);
   --color-app-deep: var(--app-deep);
+  --color-app-plum: var(--app-plum);
   --color-app-ok: var(--app-ok);
   --color-app-err: var(--app-err);
   --color-app-on-accent: var(--app-on-accent);

@@ -11,6 +11,8 @@
  * (سرور و کلاینت) قابل استفاده باشد.
  */
 
+import { SITE_EDITABLE_PAGES } from "./site-pages";
+
 /** انواع بلوک‌های قابل ساخت */
 export const CMS_BLOCK_TYPES = [
   "HERO",
@@ -22,6 +24,7 @@ export const CMS_BLOCK_TYPES = [
   "FEATURE_TRIPLE",
   "IMAGE_TEXT",
   "RICH_TEXT",
+  "CONTENT_PAGE",
   "STATS",
   "FAQ",
   "TESTIMONIALS",
@@ -697,6 +700,54 @@ export const CMS_BLOCK_DEFS: Record<CmsBlockType, CmsBlockDef> = {
     defaults: { title: "", text: "", align: "start" },
   },
 
+  /**
+   * صفحهٔ محتوایی — چیدمانِ صفحه‌های درباره ما، تماس، قوانین، حریم،
+   * روش‌های ارسال و شرایط بازگشت.
+   *
+   * چرا یک بلوکِ واحد و نه هیرو + متن‌ها؟ چون این صفحه‌ها در فروشگاه هیرو
+   * ندارند؛ اگر «ساخت صفحه از محتوای فعلی» آن‌ها را به هیرو تبدیل می‌کرد،
+   * صفحهٔ ساخته‌شده با صفحهٔ واقعی سایت یک شکل نبود. این بلوک همان ساختار
+   * سایت (تیتر + معرفی + نوار صفحات + بخش‌ها) را رندر می‌کند و متنِ هر بخش
+   * با نشانه‌گذاریِ `site-content/markup` ذخیره می‌شود: خط تازه = بند،
+   * `- ` = فهرست، `> ` = یادداشت، `[متن](پیوند)` = پیوند، `**متن**` = برجسته.
+   */
+  CONTENT_PAGE: {
+    type: "CONTENT_PAGE",
+    label: "صفحهٔ محتوایی",
+    description:
+      "ساختار صفحه‌های درباره ما، تماس، قوانین، حریم، ارسال و بازگشت — بدون هیرو، با بخش‌های تیتردار.",
+    group: "content",
+    glyph: "☰",
+    fields: [
+      {
+        key: "intro",
+        label: "پاراگراف معرفی",
+        type: "textarea",
+        help: "یک بند کوتاه زیر تیتر اصلی — همان چیزی که بازدیدکننده پیش از بخش‌ها می‌خواند.",
+      },
+      {
+        key: "updated",
+        label: "آخرین به‌روزرسانی",
+        type: "text",
+        placeholder: "مثلاً: مهر ۱۴۰۵",
+        help: "خالی بگذارید تا این خط نمایش داده نشود.",
+      },
+      {
+        key: "sections",
+        label: "بخش‌ها",
+        type: "list",
+        listRows: 16,
+        help:
+          "هر بخش از چند خط ساخته می‌شود: بند، عضوِ فهرست یا یادداشت. با دکمه‌های «پیوند» و «برجسته» نشانه می‌گذاری — اول عبارت را در متن انتخاب کن. (متنِ نشانه‌دارِ قدیمی هم خوانده می‌شود: `- ` و `> ` و `[متن](نشانی)` و `**متن**`.)",
+        itemFields: [
+          { key: "title", label: "تیتر بخش", type: "text", maxLength: 200 },
+          { key: "body", label: "متن بخش", type: "textarea", maxLength: 4000 },
+        ],
+      },
+    ],
+    defaults: { intro: "", updated: "", sections: [] },
+  },
+
   STATS: {
     type: "STATS",
     label: "آمار و اعداد",
@@ -1008,11 +1059,13 @@ export function emptyCmsPage(title = "صفحهٔ جدید"): CmsPageData {
   return { version: 1, title, blocks: [] };
 }
 
-/** صفحاتی که صفحه‌ساز به‌صورت پیش‌فرض پیشنهاد می‌کند */
-export const CMS_SUGGESTED_PAGES: Array<{ slug: string; title: string; route: string }> = [
-  { slug: "home", title: "صفحه اصلی", route: "/" },
-  { slug: "about", title: "درباره ما", route: "/about" },
-  { slug: "returns", title: "شرایط بازگشت کالا", route: "/returns" },
-  { slug: "shipping", title: "روش‌های ارسال", route: "/shipping" },
-  { slug: "contact", title: "تماس با ما", route: "/contact" },
-];
+/**
+ * صفحاتی که صفحه‌ساز به‌صورت پیش‌فرض پیشنهاد می‌کند.
+ *
+ * از فهرستِ مرجعِ مسیرهای واقعی سایت می‌آید، نه از یک لیستِ دستی: پیش از
+ * این `terms` و `privacy` از اینجا جا مانده بودند و مدیر دو صفحهٔ واقعیِ
+ * سایت را در پنل نمی‌دید. چون هر دو فهرست از `SITE_EDITABLE_PAGES` می‌آیند،
+ * دیگر هیچ‌وقت با واقعیت نمی‌خواند.
+ */
+export const CMS_SUGGESTED_PAGES: Array<{ slug: string; title: string; route: string }> =
+  SITE_EDITABLE_PAGES.map((p) => ({ slug: p.slug as string, title: p.title, route: p.path }));

@@ -782,11 +782,18 @@ private async glAccountForNew(kind: "cash" | "bank", explicitCode?: string): Pro
     return this.prisma.cashAccount.findFirst({ where: { glAccountId: gl.id, kind: "cash", active: true }, orderBy: { name: "asc" } });
   }
 
-  /** حساب بانکی اصلی (GL 1100) — پرداخت آنلاین/کارت */
+  /** حساب بانکی اصلی (GL 1100 یا زیرشاخه‌های 1100-XX) — پرداخت آنلاین/کارت.
+   *  توجه: glAccountForNew هر حساب بانکی را به زیرشاخهٔ 1100-XX وصل میکند، پس
+   *  جست‌وجوی «فقط دقیقاً 1100» هیچ حسابی برنمی‌گرداند و پرداخت آنلاین/بازپرداخت
+   *  بی‌صدا عمل نمیکرد — اکنون کل زیردرخت 1100 پوشش داده میشود. */
   private async primaryBankAccount() {
     const gl = await this.prisma.account.findUnique({ where: { code: TreasuryService.GL_BANK } });
     if (!gl) return null;
-    return this.prisma.bankAccount.findFirst({ where: { glAccountId: gl.id, active: true }, orderBy: { name: "asc" } });
+    const children = await this.prisma.account.findMany({ where: { parentAccountId: gl.id }, select: { id: true } });
+    return this.prisma.bankAccount.findFirst({
+      where: { glAccountId: { in: [gl.id, ...children.map((c) => c.id)] }, active: true },
+      orderBy: { name: "asc" },
+    });
   }
 
   private async cashBalance(id: string): Promise<string> {

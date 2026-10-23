@@ -18,7 +18,7 @@
  * (فروشگاه و دستیار) خوانده می‌شوند. خطاها راه‌حل می‌دهند (قاعدهٔ R4) و دکمه‌ها
  * فعل همان کار را نام می‌برند (قاعدهٔ R3). راهنمای کامل: `docs/copy-tone-guide.md`.
  */
-import { SHARED_COPY } from "@ghasedak/contracts";
+import { CONTENT_PAGE_COPY, LEGAL_PAGE_TITLES, SHARED_COPY } from "@ghasedak/contracts";
 
 export const COPY = {
   /** کنش اصلی خرید، وقتی ترکیب انتخاب شده و موجود است */
@@ -30,11 +30,11 @@ export const COPY = {
   /** تلاش مجدد بعد از خطا — دکمهٔ استاندارد همهٔ حالت‌های خطا */
   retry: "تلاش دوباره",
   /** بازگشت از صفحات بن‌بست (خطای پرداخت، صفحهٔ ۴۰۴) به خانهٔ فروشگاه */
-  backToStore: "بازگشت به فروشگاه",
+  backToStore: CONTENT_PAGE_COPY.backToStore,
   /** نقطهٔ ورود جستجو — عنوان صفحه، aria-label و placeholder جعبهٔ جستجو */
   search: "جستجو",
   /** برچسب ناوبری مسیر (breadcrumb) در همهٔ صفحات دامنه‌ای */
-  breadcrumb: "مسیر صفحه",
+  breadcrumb: CONTENT_PAGE_COPY.breadcrumb,
   /** راهنمای تعیین سایز — دکمهٔ همهٔ مسیرهای ورود + عنوان برگهٔ سایز */
   sizeGuide: SHARED_COPY.sizeGuide,
   /** راهنمای انتخاب محصول (سوتین‌ها/شلوارها) — کارت‌های صفحهٔ اول و فوتر */
@@ -56,13 +56,7 @@ export const COPY = {
   /** خطای شبکهٔ عمومی با راه‌حل (قاعدهٔ R4) */
   networkError: "خطای شبکه؛ اتصال اینترنت را بررسی کن و دوباره تلاش کن.",
 
-  // — عنوان صفحات تعهدی/حقوقی (لحن رسمی؛ همان عنوان در فوتر و LegalShell) —
-  legal: {
-    about: "درباره ما",
-    returns: "شرایط بازگشت کالا",
-    shipping: "روش‌های ارسال",
-    terms: "قوانین و مقررات",
-    privacy: "حریم خصوصی",
-    contact: "تماس با ما",
-  },
+  // — عنوان صفحات تعهدی/حقوقی (لحن رسمی؛ همان عنوان در فوتر و نوار صفحات محتوایی) —
+  // از پکیج قراردادها می‌آید چون بلوک CONTENT_PAGE هم به همین برچسب‌ها نیاز دارد
+  legal: LEGAL_PAGE_TITLES,
 } as const;
