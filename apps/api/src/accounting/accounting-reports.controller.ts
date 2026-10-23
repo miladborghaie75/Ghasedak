@@ -8,6 +8,7 @@ import { RequirePermission } from "../auth/permissions.guard";
 import { Identity } from "../auth/identity.decorator";
 import { optionalDate } from "../common/query-date";
 import { GL, GL_EXPENSE, GL_LIABILITIES } from "@ghasedak/contracts";
+import { AGING_BUCKET_LABELS, buildApAging } from "./ap-aging";
 
 /**
  * گزارش‌ها و عملیات گسترده حسابداری — بند ۲۴/۳۱/۱۰۶:
@@ -322,6 +323,41 @@ export class AccountingReportsController {
       createdAt: p.createdAt.toISOString(),
     }));
     return { items, total: items.length };
+  }
+
+  /**
+   * گزارش سن بدهی (AP aging) — گام ۱۸.
+   *
+   * منبع حقیقت: AccountsPayable تسویه‌نشده (state ≠ SETTLED)؛ مانده هر ردیف
+   * = amount − paidAmount (بدون محاسبه موازی). سبد از سررسید؛ نبودِ سررسید
+   * یعنی سبد «جاری» از تاریخ ثبت. فقط فاکتورهای خرید (refType=purchase_invoice).
+   */
+  @Get("ap-aging")
+  @RequirePermission("accounting.reports")
+  async apAging() {
+    const aps = await this.prisma.accountsPayable.findMany({
+      where: { state: { not: "SETTLED" }, refType: "purchase_invoice" },
+      orderBy: { createdAt: "asc" },
+      include: { supplierAccount: { select: { supplierId: true } } },
+    });
+    const supplierIds = [...new Set(aps.map((a) => a.supplierAccount.supplierId))];
+    const suppliers = await this.prisma.supplier.findMany({
+      where: { id: { in: supplierIds } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(suppliers.map((s) => [s.id, s.name]));
+    const report = buildApAging(
+      aps.map((a) => ({
+        supplierId: a.supplierAccount.supplierId,
+        supplierName: nameById.get(a.supplierAccount.supplierId) ?? "—",
+        refType: a.refType,
+        remaining: a.amount - a.paidAmount,
+        dueDate: a.dueDate,
+        fallbackDate: a.createdAt,
+      })),
+      new Date(),
+    );
+    return { ...report, bucketLabels: AGING_BUCKET_LABELS };
   }
 
   /** ثبت حقوق و دستمزد — سند اتوماتیک Dr هزینه حقوق / Cr بدهکاران (بند ۲۵) */

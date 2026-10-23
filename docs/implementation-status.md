@@ -1,6 +1,8 @@
 # وضعیت پیاده‌سازی — Ghasedak (بند ۲/۱۱۸ سند Master)
 
-> آخرین به‌روزرسانی: ۲۰۲۶-۱۰-۲۰ — ایستگاه ۳/`F1-13` + گام ۱۰/`F1-14` + گام ۱۱ + گام ۱۲ (`F1-2` — گزارش‌های مالی) + گام ۱۳ (`F1-3` — ورود گروهی CSV: پیش‌نمایش/اعمال/بازگردانی) + گام ۱۴ (`F1-15` — بازیابی رمز با کانال) + گام ۱۵ (`F1-16` — آنالیتیکس) + **گام ۱۶ (`F1-4` — ویزارد «چی لازم داری؟») بسته شد**؛ جزئیات در جدول ایستگاه ۴/گام‌های ۱۲ و ۱۶ پایین‌تر (گام‌های ۱۴ و ۱۵ فقط در [نقشهٔ راه](../plans/completion-launch-plan.md) بسته شده‌اند).
+> آخرین به‌روزرسانی: ۲۰۲۶-۱۰-۲۳ —
+>
+> (تازه: **گام ۱۸ (F1-11 — AP aging + وبهوک خروجی) بسته شد**؛ جدول ایستگاه ۴/گام ۱۸ پایین‌تر.) ایستگاه ۳/`F1-13` + گام ۱۰/`F1-14` + گام ۱۱ + گام ۱۲ (`F1-2` — گزارش‌های مالی) + گام ۱۳ (`F1-3` — ورود گروهی CSV: پیش‌نمایش/اعمال/بازگردانی) + گام ۱۴ (`F1-15` — بازیابی رمز با کانال) + گام ۱۵ (`F1-16` — آنالیتیکس) + **گام ۱۶ (`F1-4` — ویزارد «چی لازم داری؟») بسته شد**؛ جزئیات در جدول ایستگاه ۴/گام‌های ۱۲ و ۱۶ پایین‌تر (گام‌های ۱۴ و ۱۵ فقط در [نقشهٔ راه](../plans/completion-launch-plan.md) بسته شده‌اند).
 >
 > (پیش‌تر: **گام ۱۱ (بند ۴۱ — نظرات و امتیاز) بسته شد**: چرخهٔ کامل OTP → توکن یک‌بارمصرف → ثبت PENDING → بج «خرید واقعی» از سفارش PAID → صف ادمین (تأیید/رد/پاسخ + AuditLog) → انتشار عمومی بدون PII؛ UI ادمین `/reviews` + بخش نظرات PDP فروشگاه (خلاصهٔ امتیاز + لیست + فرم OTP) + `aggregateRating` در JSON-LD. سوئیت محلی روی DB تازه‌کار (migrate+seed طبق رویهٔ CI): **۴۱/۴۱ سوئیت · ۲۳۵/۲۳۵ تست**؛ typecheck+build سه اپ سبز؛ ممیزی لحن دو اپ ۰ تخلف.
 > تعریف «پیاده‌سازی‌شده»: مسیر runtime کامل کار کند (بند ۱۱۴/۱۱۸). Schema و سند به‌تنهایی «پیاده‌شده» نیست.
@@ -129,6 +131,18 @@
 | **بدهیِ ثبت‌شده — هدرِ باریک**: هدر صفحه‌ساز در ۳۹۰px چهار ردیف می‌شود و ارتفاع بوم را می‌خورد؛ به‌درخواستِ کاربر در این گام دست نخورد و برای بعد ثبت شد | ⬜ NOT-DONE | [page-builder-checklist.md](page-builder-checklist.md) — بخش «بدهی UI صفحه‌ساز» |
 | کمبودهای باقی‌مانده (ناوبریِ قابل‌ویرایش، diff نسخه‌ها و…) | ⬜ NOT-DONE | [page-builder-checklist.md](page-builder-checklist.md) — جدول اولویت‌دار |
 | **رفعِ دروازه (۲۰۲۶-۱۰-۲۳):** باگ واقعی خزانه — `primaryBankAccount` فقط حسابِ متصل به گروه GL 1100 را می‌یافت؛ با ساختار زیرشاخهٔ 1100-XX هیچ حسابی برنمی‌گشت و پرداخت آنلاین/بازپرداختِ بانکی بی‌صدا عمل نمی‌کرد. رفع: پوشش کل زیردرخت 1100 + آپدیتِ invariant تستِ B2 فاز ۱۱ + پاک‌سازی ۴ ردیف نشتیِ فیکسچر تست از DB دمو | ✅ IMPLEMENTED | [treasury.service.ts](../apps/api/src/treasury/treasury.service.ts) · [phase11-p1.spec.ts](../apps/api/test/phase11-p1.spec.ts) · [run-jest-suite.mjs](../scripts/run-jest-suite.mjs) (خلاصهٔ skipped قرمز نشمارده می‌شود) |
+
+## ایستگاه ۴/گام ۱۸ (`F1-11` — اسناد خرید/AP + وبهوک خروجی) — ۲۰۲۶-۱۰-۲۳ — runtime-tested
+| قابلیت | وضعیت | مدرک |
+|---|---|---|
+| تأیید وضعیت فعلی خرید/AP: سند و دفتر خرید، فاکتور خرید و ثبت پرداخت از قبل کامل بود — این گام دو شکاف واقعی را بست | ✅ IMPLEMENTED | [purchasing.service.ts](../apps/api/src/inventory/purchasing.service.ts) · `AccountsPayable`/`PurchaseInvoice` در [schema.prisma](../packages/database/prisma/schema.prisma) |
+| **گزارش سن بدهی AP** (AP aging): بازه‌های ۰–۳۰/۳۱–۶۰/۶۱–۹۰/۹۰+ روز از سررسید، فقط فاکتورهای OPEN/PARTIAL، جمع نهایی + شمارنده؛ endpoint ادمین با مجوز گزارش مالی | ✅ IMPLEMENTED | [ap-aging.ts](../apps/api/src/accounting/ap-aging.ts) (منطق خالص قابل‌تست) + [accounting-reports.controller.ts](../apps/api/src/accounting/accounting-reports.controller.ts) — `GET /admin/accounting/reports/ap-aging` |
+| **وبهوک خروجی — مدل داده**: `OutboundWebhook` (URL/secret/رویدادها/فعال) + `OutboundWebhookDelivery` (وضعیت/پاسخ/تلاش) + مهاجرت افزایشی | ✅ IMPLEMENTED | [migration](../packages/database/prisma/migrations/20261022090000_step18_outbound_webhooks/migration.sql) — روی DB دمو و DB تمرین اعمال شد |
+| CRUD ادمین وبهوک + تست اتصال: مجوز تنظیمات، secret فقط یک‌بار کامل نمایش داده می‌شود (بعدش ماسک)، AuditLog | ✅ IMPLEMENTED | [webhooks.controller.ts](../apps/api/src/events/webhooks.controller.ts) |
+| اتصال به EventBus: ارسال پس از موفقیتِ هندلر رویداد دامنه — شکستِ وبهوک هرگز رویداد را قرمز نمی‌کند؛ وابستگی اختیاری (سوئیت‌های موجود بدون تغییر سبز می‌مانند) | ✅ IMPLEMENTED | [event-bus.service.ts](../apps/api/src/events/event-bus.service.ts) · [webhooks.service.ts](../apps/api/src/events/webhooks.service.ts) |
+| امضای HMAC-SHA256 (`X-Ghasedak-Signature`) + `X-Ghasedak-Event` + `X-Ghasedak-Delivery` + payload استاندارد (id/type/occurredAt/data)؛ timeout ۱۰ ثانیه | ✅ IMPLEMENTED | تست «امضای HMAC» در [phase18-ap-aging-webhooks.spec.ts](../apps/api/test/phase18-ap-aging-webhooks.spec.ts) — سرور محلی ورودی را تأیید می‌کند |
+| retry با backoff و سقف ۵ تلاش؛ delivery بعد از خطا قابل retry دستی از پنل | ✅ IMPLEMENTED | تست «retry»؛ فقط endpoint های فعال subscription می‌گیرند |
+| گیت سبز این گام | ✅ IMPLEMENTED | API **۵۷/۵۷** سوئیت (۴۳۶ تست) روی DB تمرین تازه (`scripts/run-jest-suite.mjs`) · typecheck سبز · `npx pnpm --filter @ghasedak/api typecheck` پاک |
 
 ## فاز ۱۳ (۲۰۲۶-۰۹-۳۰) — runtime-tested
 | قابلیت | وضعیت | مدرک |

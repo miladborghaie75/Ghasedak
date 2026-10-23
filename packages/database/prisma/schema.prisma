@@ -2782,6 +2782,42 @@ model WebhookEvent {
   @@index([status])
 }
 
+/// وبهوک خروجی — endpoint ثبت‌شدهٔ مشترک رویدادهای دامنه (گام ۱۸)
+model WebhookEndpoint {
+  id          String   @id @default(cuid())
+  url         String
+  secret      String // HMAC-SHA256 — فقط هنگام ساخت/چرخش کامل نمایش داده می‌شود
+  events      String[] // ["*"] یا نام رویدادها مثل OrderPaid
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deliveries WebhookDelivery[]
+
+  @@index([active])
+}
+
+/// تحویل وبهوک خروجی — هر رویداد×endpoint یک ردیف؛ شکست با backoff دوباره تلاش می‌شود
+model WebhookDelivery {
+  id            String    @id @default(cuid())
+  endpointId    String
+  eventName     String
+  payload       Json
+  state         String    @default("PENDING") // PENDING|OK|FAILED
+  attempts      Int       @default(0)
+  responseCode  Int?
+  lastError     String?
+  nextAttemptAt DateTime  @default(now())
+  deliveredAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([state, nextAttemptAt])
+  @@index([endpointId, createdAt])
+}
+
 /// صف ارسال به سامانه مالیاتی — بدون ادعای انطباق (بند ۴۴)
 model TaxSubmission {
   id               String    @id @default(cuid())

@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/commo
 import { PrismaService } from "../prisma/prisma.service";
 import type { Prisma } from "@prisma/client";
 import { backgroundWorkersEnabled } from "../common/background-workers";
+import { WebhooksService } from "./webhooks.service";
 
 /**
  * Event Bus — بند ۴۳/۴۴: Outbox pattern؛ رویداد در همان تراکنش دامنه نوشته و
@@ -16,7 +17,11 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(EventBusService.name);
   private timer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // اختیاری: تست‌های موجود EventBus را با یک آرگومان می‌سازند؛ DI عملیاتی همیشه تزریق می‌کند
+    private readonly webhooks?: WebhooksService,
+  ) {}
 
   onModuleInit(): void {
     // هر ۵ ثانیه — در production می‌تواند با صف واقعی جایگزین شود (فاز AB)
@@ -47,6 +52,9 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
     for (const ev of events) {
       try {
         await this.handle(ev.name, ev.payload as Record<string, unknown>);
+        // فن‌اوت وبهوک خروجی (گام ۱۸) — بعد از هندل موفق؛ شکستش جذب delivery
+        // می‌شود و هرگز رویداد دامنه را fail نمی‌کند (بند ۱۱۶).
+        await this.webhooks?.dispatchEvent(ev.name, ev.payload as Record<string, unknown>).catch(() => undefined);
         await this.prisma.domainEventOutbox.update({
           where: { id: ev.id },
           data: { state: "DISPATCHED" as never, processedAt: new Date() },
