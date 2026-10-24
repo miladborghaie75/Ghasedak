@@ -825,7 +825,7 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
                 type="button"
                 onClick={() => setMobilePane(id)}
                 aria-pressed={mobilePane === id}
-                className={`rounded-lg px-1.5 py-1 text-[11px] font-bold transition-colors ${
+                className={`rounded-lg px-1 py-1 text-[11px] font-bold transition-colors sm:px-1.5 ${
                   mobilePane === id
                     ? "bg-app-primary text-app-on-accent"
                     : "text-app-muted hover:bg-app-bg"
@@ -861,15 +861,14 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
               const t = window.prompt("عنوان صفحه:", "صفحهٔ تازه");
               void createPage(s.trim(), (t ?? "صفحهٔ تازه").trim(), "landing");
             }}
-            className="h-8 shrink-0 rounded-xl border border-app-primary-soft px-2 text-[12px] font-bold text-app-primary-strong hover:bg-app-primary-tint lg:h-9 lg:px-3"
+            className="hidden h-8 shrink-0 rounded-xl border border-app-primary-soft px-2 text-[12px] font-bold text-app-primary-strong hover:bg-app-primary-tint lg:flex lg:h-9 lg:px-3"
             title="ساخت یک لندینگ سفارشی"
           >
-            <span className="hidden lg:inline">+ لندینگ تازه</span>
-            <span className="lg:hidden">+</span>
+            + لندینگ تازه
           </button>
 
           <span
-            className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+            className={`shrink-0 rounded-full px-1.5 py-1 text-[10px] font-bold sm:px-2.5 ${
               status === "PUBLISHED" ? "bg-app-primary-tint text-app-primary-strong" : "bg-app-bg text-app-muted"
             }`}
           >
@@ -877,13 +876,14 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
           </span>
           {status === "PUBLISHED" && pendingChanges && (
             <span
-              className="shrink-0 rounded-full bg-app-warning/15 px-2.5 py-1 text-[10px] font-bold text-app-warning"
+              className="shrink-0 rounded-full bg-app-warning/15 px-1.5 py-1 text-[10px] font-bold text-app-warning sm:px-2.5"
               title="پیش‌نویس ذخیره شده با نسخهٔ روی سایت فرق دارد"
             >
-              تغییرات منتشرنشده
+              <span className="hidden sm:inline">تغییرات منتشرنشده</span>
+              <span className="sm:hidden">منتشرنشده</span>
             </span>
           )}
-          {dirty && <span className="shrink-0 text-[10px] font-bold text-app-warning">ذخیره نشده</span>}
+          {dirty && <span className="hidden shrink-0 text-[10px] font-bold text-app-warning sm:inline">ذخیره نشده</span>}
         </div>
 
         <div className="flex w-full items-center gap-1.5 lg:ms-auto lg:w-auto">
@@ -976,6 +976,21 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
               <span className="lg:hidden">انتشار</span>
             </button>
           )}
+
+          {/* در عرض‌های باریک، «+» (ساختِ لندینگ تازه) از ردیفِ بالا به اینجا
+              آمده تا انتخابگرِ صفحه جایش را پس بگیرد — اینجا انتهایِ ردیف خالی است. */}
+          <button
+            onClick={() => {
+              const s = window.prompt("شناسهٔ صفحه (حروف انگلیسی کوچک، عدد و خط تیره):", "landing-1");
+              if (!s) return;
+              const t = window.prompt("عنوان صفحه:", "صفحهٔ تازه");
+              void createPage(s.trim(), (t ?? "صفحهٔ تازه").trim(), "landing");
+            }}
+            className="h-8 shrink-0 rounded-xl border border-app-primary-soft px-2 text-[12px] font-bold text-app-primary-strong hover:bg-app-primary-tint lg:hidden"
+            title="ساخت یک لندینگ سفارشی"
+          >
+            +
+          </button>
         </div>
       </header>
 
