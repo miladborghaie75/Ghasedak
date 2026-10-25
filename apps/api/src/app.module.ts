@@ -27,9 +27,11 @@ import { CartModule } from "./cart/cart.module";
 import { WishlistModule } from "./wishlist/wishlist.module";
 import { ImportModule } from "./import/import.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
+import { MonitoringModule } from "./monitoring/monitoring.module";
 import { GeoModule } from "./geo/geo.module";
 import { PhotographyModule } from "./photography/photography.module";
 import { PermissionsGuard } from "./auth/permissions.guard";
+import { CsrfGuard } from "./auth/csrf.guard";
 import { RequestIdMiddleware } from "./common/request-id.middleware";
 import { BigIntJsonMiddleware } from "./common/bigint-serializer.middleware";
 import { RateLimitMiddleware } from "./common/rate-limit.middleware";
@@ -39,13 +41,18 @@ import { RateLimitMiddleware } from "./common/rate-limit.middleware";
  * PermissionsGuard سراسری: مجوز در همه مسیرهای @RequirePermission به‌صورت server-side چک می‌شود (بند ۷).
  */
 @Module({
-  imports: [PrismaModule, HealthModule, AuthModule, ProductsModule, AccountingModule, InventoryModule, OrdersModule, PaymentsModule, PosModule, ReturnsModule, ShippingModule, EventsModule, CatalogModule, AdminPanelModule, CustomersModule, PricingModule, TreasuryModule, ChecksModule, ReportsModule, CmsModule, ReviewsModule, PayrollModule, CartModule, WishlistModule, GeoModule, CogsModule, ImportModule, AnalyticsModule, PhotographyModule],
-  providers: [{ provide: APP_GUARD, useClass: PermissionsGuard }],
+  imports: [PrismaModule, HealthModule, AuthModule, ProductsModule, AccountingModule, InventoryModule, OrdersModule, PaymentsModule, PosModule, ReturnsModule, ShippingModule, EventsModule, CatalogModule, AdminPanelModule, CustomersModule, PricingModule, TreasuryModule, ChecksModule, ReportsModule, CmsModule, ReviewsModule, PayrollModule, CartModule, WishlistModule, GeoModule, CogsModule, ImportModule, AnalyticsModule, PhotographyModule, MonitoringModule],
+  providers: [
+    { provide: APP_GUARD, useClass: PermissionsGuard },
+    // گارد CSRF سراسری — فقط مسیرهایی که @RequireCsrf دارند (اکشن‌های حساس مالی) بررسی می‌شوند
+    { provide: APP_GUARD, useClass: CsrfGuard },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply(RequestIdMiddleware).forRoutes("*");
     consumer.apply(BigIntJsonMiddleware).forRoutes("*");
-    consumer.apply(RateLimitMiddleware).forRoutes("auth", "orders", "payments", "reviews", "wishlist");
+    // "admin" برای قانون چت AI (گام ۱۸-۳) است — بدون آن قانون ۳۰/دقیقهٔ /admin/capabilities/ai/chat هرگز اعمال نمی‌شد
+    consumer.apply(RateLimitMiddleware).forRoutes("auth", "orders", "payments", "reviews", "wishlist", "admin");
   }
 }

@@ -10,7 +10,11 @@ import { loadNeedFinderSteps, matchesNeed } from "@/lib/needs";
 import { COPY } from "@/lib/copy";
 import { TrackOnMount } from "@/components/analytics/TrackOnMount";
 
-export const metadata: Metadata = { title: COPY.search };
+export const metadata: Metadata = {
+  title: COPY.search,
+  // کانونیکال بدون پارامتر — نسخه‌های ?q=... جایگزین نشوند
+  alternates: { canonical: "/search" },
+};
 
 /** داده از API واقعی — رندر داینامیک */
 export const dynamic = "force-dynamic";

@@ -1,7 +1,9 @@
 import type { MetadataRoute } from "next";
+import { SITE_PAGES } from "@ghasedak/contracts";
 import { getAllProductsV2, loadCatalog } from "@/lib/catalog-repo";
 import { CATEGORIES } from "@/lib/categories";
 import { guides } from "@/lib/guides-data";
+import { loadPublishedCmsPages } from "@/lib/cms";
 import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +13,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = SITE_URL;
   const now = new Date();
 
+  // صفحه‌های CMS که مدیر در صفحه‌ساز منتشر کرده (`/[slug]`) — با lastModified واقعی.
+  // اسلاگ‌های صفحه‌های محتوایی سایت (about/contact/…) رد می‌شوند چون همین‌جا
+  // به‌صورت مسیرهای ثابت لیست شده‌اند؛ «home» هم همان ریشهٔ سایت است.
+  const sitePageSlugs = new Set(SITE_PAGES.map((p) => p.slug));
+  const cmsPages = (await loadPublishedCmsPages()).filter((p) => !sitePageSlugs.has(p.slug));
+
   return [
+    ...cmsPages.map((p) => ({
+      url: `${base}/${p.slug}`,
+      lastModified: new Date(p.lastModified),
+      priority: 0.5,
+    })),
     { url: base, lastModified: now, priority: 1 },
     ...CATEGORIES.map((c) => ({
       url: `${base}/c/${c.slug}`,

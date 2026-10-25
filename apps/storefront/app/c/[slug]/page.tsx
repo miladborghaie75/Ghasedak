@@ -13,6 +13,7 @@ import { CATEGORIES, getCategoryBySlug } from "@/lib/categories";
 import { sortV2 } from "@/lib/catalog-repo";
 import { parseSortParam } from "@/lib/sort";
 import { COPY } from "@/lib/copy";
+import { SITE_URL } from "@/lib/site";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -29,6 +30,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title: `${cat.name} — خرید آنلاین`,
     description: cat.blurb,
+    alternates: { canonical: `/c/${slug}` },
   };
 }
 
@@ -51,6 +53,20 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
     "@type": "ItemList",
     name: cat.name,
     numberOfItems: sorted.length,
+    itemListElement: sorted.slice(0, 20).map((p, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: p.name,
+      url: `${SITE_URL}/p/${p.slug}`,
+    })),
+    // مسیر ناوبری صفحه — برای نتایج غنی جست‌وجو
+    breadcrumb: {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "خانه", item: SITE_URL },
+        { "@type": "ListItem", position: 2, name: cat.name, item: `${SITE_URL}/c/${cat.slug}` },
+      ],
+    },
   };
 
   return (

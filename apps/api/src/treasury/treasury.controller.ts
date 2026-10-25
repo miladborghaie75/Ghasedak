@@ -1,12 +1,14 @@
 import { Body, Controller, Get, Param, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
 import { RequirePermission } from "../auth/permissions.guard";
+import { RequireCsrf } from "../auth/csrf.guard";
 import { TreasuryService } from "./treasury.service";
 
 /**
  * خزانه — نقد و بانک (فاز ۸، بند ۵۹–۶۲ Master).
  * مانده صندوق/بانک projection روی GL است؛ سندها از JournalService (بند ۱۰۷).
  */
+@RequireCsrf() // خزانه — اکشن مالی حساس (گام ۲۲)
 @Controller("admin/treasury")
 export class TreasuryController {
   constructor(private readonly treasury: TreasuryService) {}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { csrfHeaders } from "@/lib/csrf";
 
 /**
  * فرم ثبت نظر مهمان (گام ۱۱ — بند ۴۱):
@@ -17,7 +18,8 @@ interface ApiFail {
 async function post(action: string, payload: Record<string, unknown>) {
   const res = await fetch("/api/reviews", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    // هدر CSRF (double-submit) — مسیر /api/reviews بدون آن رد می‌کند
+    headers: { "content-type": "application/json", ...csrfHeaders() },
     body: JSON.stringify({ action, payload }),
   });
   const body = (await res.json().catch(() => null)) as

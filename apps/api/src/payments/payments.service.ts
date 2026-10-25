@@ -16,6 +16,7 @@ import { resolveCallbackUrl } from "./callback-url";
 import { MeasurementService } from "../analytics/measurement.service";
 import { GL, GL_COGS, GL_EXPENSE, GL_REVENUE, gatewayFeeAmount } from "@ghasedak/contracts";
 import { warehouseGlCode } from "../inventory/inventory.service";
+import { emitAlert } from "../monitoring/alert-bus";
 
 /** گذارهای مجاز وضعیت پرداخت — بند ۸: گذار دلخواه ممنوع */
 const TRANSITIONS: Record<string, string[]> = {
@@ -290,9 +291,25 @@ export class PaymentsService implements OnModuleInit {
 
     if (!result.ok) {
       await this.recordTransition(attempt.id, "FAILED", actorId, `verify: ${result.reason}`);
+      // هوک مانیتورینگ (گام ۲۳): پرداختی که درگاه تاییدش نکرد/مبلغ-ارجاع هم‌خوان نیست —
+      // فقط رویداد هشدار (طوفان‌گریز)؛ هیچ دستکاری داده‌ای اینجا انجام نمی‌شود.
+      emitAlert(
+        "PAYMENT_MISMATCH",
+        `تایید پرداخت درگاه ناموفق بود — مبلغ/ارجاع با تراکنش درگاه هم‌خوان نیست یا درگاه رد کرده است.`,
+        { attemptId: attempt.id, authority: attempt.authority, amount: Number(attempt.amount), reason: result.reason ?? null },
+      );
       throw new BadRequestException({ code: "PAYMENT_VERIFY_FAILED", message: "تایید پرداخت ناموفق بود." });
     }
     return this.finalizePaid(attempt.id, result.refId, actorId);
+  }
+
+  /**
+   * گام ۱۸-۱ — نهایی‌سازی پرداختِ تأییدشدهٔ دستی (کارت‌به‌کارت).
+   * همان زنجیرهٔ آنلاین: سفارش PAID + مصرف رزرو + سند فروش + خزانه + رویداد OrderPaid.
+   * idempotent: سفارش PAID دوباره consume یا سند نمی‌زند (بند ۱۰/۱۱۶).
+   */
+  async finalizeVerifiedAttempt(attemptId: string, refId: string, actorId?: string): Promise<{ state: string; refId: string }> {
+    return this.finalizePaid(attemptId, refId, actorId);
   }
 
   /**

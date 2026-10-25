@@ -1,19 +1,20 @@
-import { BadRequestException, Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, ConflictException, Delete, Get, Inject, Param, Patch, Post, Query } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
 import { assertCleanFields, assertCleanText } from "../common/text-guard";
 import { randomUUID } from "crypto";
+import { slugifyFa, isReservedSlug, ensureUniqueSlug } from "@ghasedak/contracts";
 
-function slugify(input: string): string {
-  return (
-    input
-      .trim()
-      .toLowerCase()
-      .replace(/[\s\u200c]+/g, "-")
-      .replace(/[^a-z0-9\u0600-\u06FF-]/g, "")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "") || `item-${randomUUID().slice(0, 8)}`
-  );
+/** اسلاگ از تک‌منبع مشترک (contracts/persian) — نرمال‌سازی فارسی + رزرو + یکتایی */
+function fallbackSlug(): string {
+  return `item-${randomUUID().slice(0, 8)}`;
+}
+
+/** گارد اسلاگ رزروی — با خطاِ فارسیِ صریح رد می‌شود (نه سکوت) */
+function assertNotReserved(slug: string): void {
+  if (isReservedSlug(slug)) {
+    throw new ConflictException({ code: "SLUG_RESERVED", message: `«${slug}» یک مسیر رزروی سایت است و نمی‌تواند اسلاگ باشد.` });
+  }
 }
 
 /**
@@ -56,10 +57,11 @@ export class AdminCatalogController {
       const parent = await this.prisma.category.findUnique({ where: { id: walk }, select: { parentId: true } });
       walk = parent?.parentId ?? null;
     }
-    let slug = slugify(body.name);
-    if (await this.prisma.category.findUnique({ where: { slug } })) {
-      slug = `${slug}-${randomUUID().slice(0, 4)}`;
-    }
+    const base = slugifyFa(body.name) || fallbackSlug();
+    assertNotReserved(base);
+    const slug = await ensureUniqueSlug(base, (c) =>
+      this.prisma.category.findUnique({ where: { slug: c }, select: { id: true } }).then((r) => r !== null),
+    );
     const created = await this.prisma.category.create({
       data: {
         name: body.name.trim(),
@@ -139,10 +141,11 @@ export class AdminCatalogController {
   async createBrand(@Body() body: { name: string; website?: string; description?: string; logoMediaId?: string | null; sortOrder?: number }) {
     if (!body.name?.trim()) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نام برند الزامی است." });
     assertCleanFields({ name: body.name, description: body.description });
-    let slug = slugify(body.name);
-    if (await this.prisma.brand.findUnique({ where: { slug } })) {
-      slug = `${slug}-${randomUUID().slice(0, 4)}`;
-    }
+    const base = slugifyFa(body.name) || fallbackSlug();
+    assertNotReserved(base);
+    const slug = await ensureUniqueSlug(base, (c) =>
+      this.prisma.brand.findUnique({ where: { slug: c }, select: { id: true } }).then((r) => r !== null),
+    );
     return this.prisma.brand.create({
       data: {
         name: body.name.trim(),
@@ -199,7 +202,9 @@ export class AdminCatalogController {
   async createAttribute(@Body() body: { name: string; type?: string; isFilterable?: boolean; isVariantAxis?: boolean; terms?: Array<{ value: string; hex?: string }> }) {
     if (!body.name?.trim()) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نام ویژگی الزامی است." });
     assertCleanText(body.name, "name");
-    const slug = slugify(body.name);
+    const slug = slugifyFa(body.name);
+    if (!slug) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "نام ویژگی باید حداقل یک کاراکتر معتبر داشته باشد." });
+    assertNotReserved(slug);
     if (await this.prisma.attribute.findUnique({ where: { slug } })) {
       throw new BadRequestException({ code: "DUPLICATE", message: "ویژگی هم‌نام وجود دارد." });
     }
@@ -211,7 +216,7 @@ export class AdminCatalogController {
         isFilterable: body.isFilterable ?? true,
         isVariantAxis: body.isVariantAxis ?? false,
         terms: body.terms?.length
-          ? { create: body.terms.map((t, i) => ({ value: t.value, slug: slugify(t.value), hex: t.hex ?? null, sortOrder: i })) }
+          ? { create: body.terms.map((t, i) => ({ value: t.value, slug: slugifyFa(t.value) || fallbackSlug(), hex: t.hex ?? null, sortOrder: i })) }
           : undefined,
       },
       include: { terms: true },
@@ -224,7 +229,7 @@ export class AdminCatalogController {
     if (!body.value?.trim()) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "مقدار الزامی است." });
     assertCleanText(body.value, "value");
     return this.prisma.attributeTerm.create({
-      data: { attributeId: id, value: body.value.trim(), slug: slugify(body.value), hex: body.hex ?? null },
+      data: { attributeId: id, value: body.value.trim(), slug: slugifyFa(body.value) || fallbackSlug(), hex: body.hex ?? null },
     });
   }
 

@@ -7,6 +7,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { QuickAddHost } from "@/components/commerce/QuickAddHost";
 import { ConsentGate } from "@/components/analytics/ConsentGate";
+import { ChatWidget } from "@/components/commerce/ChatWidget";
 import { ThemeInit } from "@/components/providers/theme-init";
 import { MotionReveal } from "@/components/MotionReveal";
 import { site, SITE_URL } from "@/lib/site";
@@ -116,6 +117,39 @@ export default async function RootLayout({
           <QuickAddHost />
           {/* گام ۱۵ — رضایت آنالیتیکس: بنر تصمیم + لود GA4 فقط پس از رضایت */}
           <ConsentGate />
+          {/* گام ۱۸-۳ — دستیار خرید قاصدک (چت‌بات هوشمند) */}
+          <ChatWidget />
+          {/* دادهٔ ساخت‌یافتهٔ سطح سایت (گام ۲۰): هویت فروشگاه + جست‌وجوی سایت */}
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify({
+                "@context": "https://schema.org",
+                "@graph": [
+                  {
+                    "@type": "Organization",
+                    name: site.fullName,
+                    url: SITE_URL,
+                    logo: `${SITE_URL}/icon.svg`,
+                    email: site.email,
+                    telephone: site.phone,
+                    sameAs: [site.instagram],
+                  },
+                  {
+                    "@type": "WebSite",
+                    name: site.name,
+                    url: SITE_URL,
+                    inLanguage: "fa-IR",
+                    potentialAction: {
+                      "@type": "SearchAction",
+                      target: { "@type": "EntryPoint", urlTemplate: `${SITE_URL}/search?q={search_term_string}` },
+                      "query-input": "required name=search_term_string",
+                    },
+                  },
+                ],
+              }),
+            }}
+          />
         </AppProviders>
       </body>
     </html>

@@ -19,6 +19,7 @@ import {
 } from "react";
 import { ensureCatalogClient } from "@/lib/catalog-repo";
 import { track } from "@/lib/analytics";
+import { csrfHeaders } from "@/lib/csrf";
 /** خط سبد: شناسه واریانت (SKU) + تعداد */
 export interface CartLine {
   variantId: string;
@@ -191,7 +192,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       try {
         const res = await fetch(path, {
           method,
-          headers: { "content-type": "application/json" },
+          // گارد CSRF double-submit (تک‌منبع lib/csrf) — routeهای مینت سبد بدون آن ۴۰۳ می‌دهند
+          headers: { "content-type": "application/json", ...csrfHeaders() },
           ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         });
         if (!res.ok) return;

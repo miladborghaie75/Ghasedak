@@ -5,6 +5,7 @@ import { loadNeedFinderSteps } from "@/lib/needs";
 export const metadata: Metadata = {
   title: "چی لازم داری؟ — راهنمای انتخاب",
   description: "سه سؤال کوتاه، پیشنهادهای منطبق با نیازت — با دلیل انطباق.",
+  alternates: { canonical: "/need" },
 };
 
 /**

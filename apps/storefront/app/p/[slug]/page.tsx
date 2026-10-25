@@ -44,6 +44,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title: brand ? `${p.name} — ${brand.name}` : p.name,
     description: `${p.name}. ${p.short ?? ""} — با راهنمای سایز و ارسال سریع.`,
+    alternates: { canonical: `/p/${slug}` },
+    openGraph: {
+      title: brand ? `${p.name} — ${brand.name}` : p.name,
+      description: p.short ?? undefined,
+      type: "website",
+      ...(p.image ? { images: [{ url: p.image }] } : {}),
+    },
   };
 }
 
@@ -68,6 +75,11 @@ export default async function ProductPage({ params }: PageProps) {
     "@type": "Product",
     name: product.name,
     description: product.short,
+    url: `${SITE_URL}/p/${product.slug}`,
+    // تصویر باید مطلق باشد تا موتور جست‌وجو آن را بخواند (مسیر خام از API می‌آید)
+    ...(product.image
+      ? { image: product.image.startsWith("http") ? product.image : `${SITE_URL}${product.image}` }
+      : {}),
     category: cat?.name,
     material: materials.map((m) => safeLabel(m)).join("، "),
     brand: brand ? { "@type": "Brand", name: brand.name } : undefined,

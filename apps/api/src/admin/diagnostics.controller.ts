@@ -68,6 +68,9 @@ export class DiagnosticsController {
     // ۵) بکاپ — آخرین manifest + تسک زمان‌بند (بازاستفاده از همان منابع بند ۴)
     checks.push(await this.checkBackup());
 
+    // ۶) مغایرت تسویه — فقط گزارش (بدون هشدار خودکار — تصمیم گام ۲۳)
+    checks.push(await this.checkTreasuryMatch());
+
     const fail = checks.some((c) => c.state === "FAIL");
     const warn = checks.some((c) => c.state === "WARN");
     return {
@@ -194,6 +197,32 @@ export class DiagnosticsController {
       detail: `آخرین: ${l.name} (${l.complete ? "کامل" : "ناقص"}${l.verifyOk ? "، تأییدشده" : ""}) — تسک: ${r!.task.found ? (r!.task.enabled ? "فعال" : "غیرفعال") : "یافت نشد"}`,
       latencyMs: ms,
       data: { latest: l.name, complete: l.complete, verified: l.verifyOk, taskFound: r!.task.found, taskEnabled: r!.task.enabled },
+    };
+  }
+
+  private async checkTreasuryMatch(): Promise<Check> {
+    const { r, e, ms } = await this.timed(async () => {
+      // ردیف‌های صورتحساب بانکی که هنوز به تراکنشی تطبیق داده نشده‌اند (منطق autoMatch)
+      const rows = await this.prisma.bankStatement.findMany({
+        where: { matchedPaymentId: null },
+        select: { amount: true },
+      });
+      return { unmatched: rows.length, sum: rows.reduce((s, x) => s + Number(x.amount), 0) };
+    });
+    if (e) {
+      return { key: "treasury-match", label: "مغایرت تسویه", state: "WARN", detail: "شمارش مغایرت‌ها در دسترس نیست", latencyMs: ms };
+    }
+    const state: State = r!.unmatched > 0 ? "WARN" : "OK";
+    return {
+      key: "treasury-match",
+      label: "مغایرت تسویه",
+      state,
+      detail:
+        r!.unmatched > 0
+          ? `${r!.unmatched} ردیف صورتحساب بانکی بدون تطبیق (مجموع ${r!.sum}) — فقط گزارش؛ تطبیق از صفحهٔ خزانه انجام می‌شود`
+          : "همهٔ ردیف‌های صورتحساب تطبیق داده شده‌اند",
+      latencyMs: ms,
+      data: r as Record<string, number>,
     };
   }
 }

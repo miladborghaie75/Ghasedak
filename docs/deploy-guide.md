@@ -139,3 +139,120 @@ Start-Process -WindowStyle Hidden -FilePath cmd -ArgumentList '/c','npx next sta
 | purchase در GA4 ثبت نمی‌شود | `GA4_API_SECRET`/Measurement ID ست نشده (هشدار بوت API) یا سرور به `google-analytics.com` نمی‌رسد | env سرویس API را چک کنید؛ در ایران خروجی GA4 ممکن است نیاز به پروکسی خروجی داشته باشد |
 | بنر رضایت نمی‌آید | `NEXT_PUBLIC_GA4_MEASUREMENT_ID` خالی است (بدون آن، آنالیتیکس کاملاً خاموش است) | مقدار `G-…` را در env فروشگاه بگذارید و rebuild کنید |
 | بکاپ lastResult=1 | DB در دسترس نیست یا کرئنشیال غلط | لاگ `backup.log` آخرین اجرا |
+
+## ۹. دامنهٔ کانونیکال و ریدایرکت ۳۰۱ (گام ۲۰ — تصمیم #۴)
+
+کانونیکال `https://www.lebaszirghasedak.ir` است؛ `lebaszirghasedak.ir` (بدون www) باید با **۳۰۱ دائمی** به www برود و هیچ صفحه‌ای روی apex ایندکس نشود.
+
+- **داخل Next:** `apps/storefront/middleware.ts` همین ریدایرکت را انجام می‌دهد (فقط در production و فقط اگر هاست واقعاً apex باشد؛ با `CANONICAL_HOST` قابل تست است). پایان‌اسلش هم همان‌جا با ۳۰۸ حذف می‌شود (`/path/` → `/path`).
+- **در reverse-proxy (الزامی):** لایهٔ proxy هم باید همین قاعده را داشته باشد تا حتی وقتی Next پایین است، apex بسته بماند:
+
+  nginx:
+  ```nginx
+  server {
+    listen 443 ssl;
+    server_name lebaszirghasedak.ir;
+    return 301 https://www.lebaszirghasedak.ir$request_uri;
+  }
+  ```
+  caddy:
+  ```caddyfile
+  lebaszirghasedak.ir {
+    redir https://www.lebaszirghasedak.ir{uri} permanent
+  }
+  ```
+
+- SSL برای **هر دو** دامنه (www و apex) لازم است؛ `CORS_ORIGINS` فقط دامنهٔ کانونیکال.
+- پنل ادمین روی ساب‌دامین جدا (`admin.lebaszirghasedak.ir` با `X-Robots-Tag: noindex`) پیشنهاد می‌شود — جزئیات در سند تصمیم‌ها.
+
+## ۱۰. CSRF و مبدأهای مجاز (گام ۲۲)
+
+- **فروشگاه:** همهٔ routeهای مینت (سبد، نظر، تسویه، شروع پرداخت، آمار/رضایت) با الگوی double-submit بررسی می‌شوند: کوکی `csrf_token` (در middleware ساخته می‌شود) باید در هدر `x-csrf-token` برگردد؛ کلاینت این کار را با `csrfHeaders()` از `apps/storefront/lib/csrf.ts` انجام می‌دهد.
+- **API ادمین:** کنترلرهای حساس مالی (`orders`, `payments`, `admin/settlements`, `admin/treasury`, `admin/accounting`, `admin`, `admin/capabilities/credentials`, `admin/capabilities/payment-gateway`) گارد `CsrfGuard` دارند: یا هدر double-submit درست، یا `Origin`/`Referer` هم‌مبدأ؛ بدون هر دو (fetch سمت‌سرور/callback درگاه) عبور می‌کند.
+- **متغیر محیطی:** `CSRF_ALLOWED_ORIGINS` — فهرست با کاما از مبدأهای مجاز پنل/فروشگاه (مثلاً `https://www.lebaszirghasedak.ir,https://admin.lebaszirghasedak.ir`). اگر ست نشود از `CORS_ORIGINS` خوانده می‌شود. در محیط توسعه localhost همیشه مجاز است.
+
+## ۱۱. مانیتورینگ و هشدار (گام ۲۳ — تصمیم #۷ بدون SaaS جدید)
+
+### ۱۱.۱ ابزار uptime بیرونی
+
+`GET /api/v1/health` را با هر ابزاری (UptimeRobot، Uptime Kuma، cron سرور) پایش کنید؛ فقط وقتی `status` برابر `ok` است سالم است. این پاسخ شامل `checks.db`، `version` و `uptimeSeconds` هم می‌شود و پاسخ آنی است (زیر ۱ ثانیه).
+
+### ۱۱.۲ کانال هشدار (تلگرام با env — بدون UI اضافه)
+
+```ini
+ALERT_TELEGRAM_BOT_TOKEN=<توکن ربات از BotFather>
+ALERT_TELEGRAM_CHAT_ID=<شناسهٔ چت/کانال — با ربات‌تان پیام بدهید و id را از getUpdates بخوانید>
+ALERT_EMAIL=<اختیاری — گیرندهٔ ایمیل جایگزین؛ پیش‌فرض SMTP_USER>
+```
+
+رفتار: تلگرام (فراخوانی مستقیم Bot API) ← اگر نبود/شکست خورد، ایمیل از همان SMTP صف `Notification` ← اگر هیچ‌کدام ست نیست، **dry-run** با لاگ ساخت‌یافته (`component=alerting, status=DRY_RUN`) — در تست هرگز ارسال واقعی نمی‌شود. هر نوع هشدار حداکثر یک‌بار در ۳۰ دقیقه ارسال می‌شود (طوفان‌گریز).
+
+### ۱۱.۳ فهرست هشدارها و آستانه‌ها
+
+| نوع | شرط | منبع |
+|---|---|---|
+| `HEALTH_DOWN` | دیتابیس در ۲ بررسی پشت‌سرهم (هر ۱ دقیقه) در دسترس نیست | HealthWatch |
+| `HTTP_5XX_SPIKE` | بیش از ۱۰ خطای ۵xx در ۵ دقیقهٔ اخیر | شمارندهٔ `http-exception.filter` |
+| `DISK_HIGH` | بیش از ۸۵٪ فضای پارتیشن داده پر باشد (هر ۵ دقیقه) | HealthWatch |
+| `BACKUP_FAILED` | آخرین manifest بکاپ ناقص یا بدون verify (هر ۶۰ دقیقه) | HealthWatch (فقط خواندن دیسک) |
+| `WORKER_ERROR` | event-bus یا dispatcher اعلان‌ها خطا دید | heartbeat ساخت‌یافتهٔ هر worker |
+| `PAYMENT_MISMATCH` | تایید پرداخت درگاه ناموفق (مبلغ/ارجاع هم‌خوان نیست یا درگاه رد کرده) | `payments.service.verify` |
+
+**نکتهٔ بکاپ:** خودِ بکاپ با Task Scheduler ویندوزی گرفته می‌شود (بخش ۶)؛ هشدار بالا فقط سلامتِ «آخرین اجرا» را از روی دیسک می‌خواند. اگر بکاپ را بیرون از این سرور می‌گیرید، همان مسیر manifest را پایش کنید یا ابزار بیرونی روی فایل خروجی بگذارید.
+
+### ۱۱.۴ دو موردِ معلق (کد نشده — صریح)
+
+1. **اعتبار پیامک:** sms-providers فعلی API گزارش credit ندارد و در Settings چیزی برای آستانه ذخیره نمی‌شود؛ پس هشدار خودکار اعتبار **نداریم**. پنل ارائه‌دهنده (کاوه‌نگار و…) خودش هشدار اعتبار می‌دهد — به پنل اپراتور اعتماد کنید یا بعداً اگر endpoint credit اضافه شد، همان‌جا به رأس هشدار وصل شود.
+2. **تطبیق کامل تسویهٔ درگاه:** منطق مقایسه‌ای مستقل هنوز کامل نیست. هوک نقطهٔ «پرداخت موفق ولی مبلغ/ارجاع ناسازگار» گذاشته شده (هشذار `PAYMENT_MISMATCH`) و مبالغ unmatched در خروجی `GET /admin/diagnostics` فقط **گزارش** می‌شوند (چک `treasury-match`) — هشدار خودکار ندارد.
+
+## ۱۲. چت‌بات هوشمند قاصدک (گام ۱۸-۳ — AI Chat)
+
+### ۱۲.۱ پیکربندی متغیرهای محیطی
+
+افزودن سه متغیر در `.env` (یا `apps/api/.env.local` که پنل ادمین می‌نویسد):
+
+```ini
+AI_BASE_URL=https://api.falkor.ai/v1      # یا هر endpoint OpenAI-compatible
+AI_API_KEY=sk-...                          # کلید API ارائه‌دهنده
+AI_MODEL=falkor-1                          # نام مدل (پاسخ API `models.list` برای تأیید)
+GHASEDAK_API_KEY=<کلید تصادفی طولانی>     # کلید سرویس‌به‌سرویس فروشگاه→API (پایین را ببینید)
+```
+
+**نکته:** هرگز `NEXT_PUBLIC_` پیشوند ندهید — این کلیدها فقط سمت سرور (API و فروشگاه) هستند.
+
+**حذف پیکربندی mock محلی (آماده‌سازی production):** پیکربندی توسعه‌ای که به سرور mock محلی (`http://127.0.0.1:8099/v1` با کلید/مدل `mock-local`) اشاره می‌کرد از `apps/api/.env.local` حذف شده است. در سرور production فقط کلید واقعی ارائه‌دهنده را (ترجیحاً از پنل ادمین، بخش ۱۲.۲) وارد کنید؛ تا وقتی سه متغیر ست نشده‌اند، اندپوینت چت صادقانه `REQUIRES_CREDENTIAL` برمی‌گرداند و هیچ پاسخ جعلی ساخته نمی‌شود (بند ۱۱۱). متغیر `AI_INSECURE_TLS` که مخصوص همان تست محلی بود هم از الگوی env حذف شد.
+
+**کلید سرویس فروشگاه (`GHASEDAK_API_KEY`):** اندپوینت چت پشت احراز هویت ادمین است؛ فروشگاه (route سمت سرور `app/api/ai/chat`) با هدر `x-api-key` بالادست را صدا می‌زند و `SessionMiddleware` آن را به هویت سرویس تبدیل می‌کند — کلید هرگز به مرورگر مشتری نمی‌رسد. همان مقدار را در **هر دو** `apps/api/.env.local` و `apps/storefront/.env.local` بگذارید؛ اگر ست نشود، مشتریِ واردنشده پاسخ 503 می‌گیرد.
+
+### ۱۲.۲ راه توصیه‌شده: پیکربندی و تست از پنل ادمین
+
+1. وارد پنل ادمین شوید → **سیستم ← پیامک و درگاه پرداخت** (مسیر: `/settings/capabilities`).
+2. در کارت «چت‌بات هوشمند» (گام ۱۸-۳)، سه فیلد را ببینید: **نشانی سرویس (Base URL)**، **کلید API** (فقط ماسک‌شده نمایش داده می‌شود) و **مدل**. وضعیت کارت از `GET /admin/capabilities/ai` می‌آید.
+3. مقادیر را وارد و **ذخیره** کنید — درخواست `POST /admin/capabilities/ai/settings` فرستاده می‌شود و مقدار در `apps/api/.env.local` (خارج از git) نوشته و بلافاصله در فرایند جاری اعمال می‌شود. کلید خالی بماند یعنی «بدون تغییر».
+4. دکمه **تست اتصال** را بزنید: درخواست `POST /admin/capabilities/ai/test` فرستاده می‌شود که با همان کلید/مدل ذخیره‌شده یک پیام کوتاه واقعی به مدل می‌فرستد و `reply` پاسخ را برمی‌گرداند. سبز = ارائه‌دهنده، کلید و مدل همه سالم‌اند.
+
+### ۱۲.۳ نحوه کارکرد
+
+- **Endpoint:** `POST /api/v1/admin/capabilities/ai/chat` (برای ویجت فروشگاه) — هم `stream=true` (SSE) و `stream=false` (JSON) پشتیبانی می‌کند.
+- **اعتبارسنجی:** پیام‌های `user`/`assistant` مجاز؛ `system` رد می‌شود. هر پیام حداکثر ۲۰۰۰ کاراکتر؛ تاریخچه بیش از ۱۰ پیام آخر تریم می‌شود (بند ۳۳).
+- **System Prompt:** در کد (`apps/api/src/admin/capabilities.controller.ts`) صلب است — هوش مصنوعی به‌عنوان **«مشاور خرید قاصدک»** رفتار می‌کند: صمیمی، حساس به بوی، مراقب حریم خصوصی، و فقط از کاتالوگ/صفحات سایت (نه دانش عمومی) پاسخ می‌دهد. فال‌بک به **جادویار قاصدک** (گام ۱۶) برای هدایت کاربر به دسته/محصول مناسب وجود دارد.
+- **Rate Limit:** ۳۰ درخواست در دقیقه در `apps/api/src/common/rate-limit.middleware.ts` (قانون `/admin/capabilities/ai/chat`).
+- **Credential:** اگر `AI_BASE_URL` یا `AI_API_KEY` ست نشود → `REQUIRES_CREDENTIAL` (بند ۱۱۱: هیچ فیک/پاسخ جعلی).
+
+### ۱۲.۴ ادغام در فروشگاه (Storefront)
+
+- ویجت: `components/commerce/ChatWidget.tsx` — أسفل‌چپ (موبایل) / مودال (دسکتاپ)، RTL، Accessible (ARIA، فوکوس‌ترپ، Escape).
+- کلاینت: `lib/ai-client.ts` — `aiChat(messages)` و `aiChatStream(messages, onChunk)` برای SSE.
+- تاریخچه در `localStorage` (`ghasedak-chat-history`) ۷ روز نگه‌داری می‌شود و در بازکردن مجدد بازیابی می‌شود.
+
+### ۱۲.۵ عیب‌یابی
+
+| علامت | علت | اقدام |
+|---|---|---|
+| `REQUIRES_CREDENTIAL` | کلید سرویس `GHASEDAK_API_KEY` در فروشگاه/API ست نیست (پیام: «چت موقتاً در دسترس نیست») | همان کلید را در `apps/api/.env.local` و `apps/storefront/.env.local` بگذارید و هر دو سرویس را ری‌استارت کنید |
+| `REQUIRES_CREDENTIAL` (از تست اتصال پنل) | `AI_BASE_URL` یا `AI_API_KEY` خالی | در پنل ادمین کارت «چت‌بات هوشمند» پر/ذخیره/تست کنید |
+| `VALIDATION_ERROR` | پیام خالی/بیش از ۲۰۰۰ کاراکتر/نقش `system` | اعتبارسنجی کلاینت/سرور — ورودی را اصلاح کنید |
+| `AI_PROVIDER_ERROR` | اتصال به ارائه‌دهنده برقرار نشد یا پاسخ غیر 2xx/timeout داد | `AI_BASE_URL`/`AI_MODEL` را چک کنید؛ لاگ API را ببینید |
+| `AI_EMPTY` | ارائه‌دهنده reachable ولی پاسخ خالی داد | نام مدل را از `models.list` ارائه‌دهنده تأیید کنید |
+| SSE قطع می‌شود | Proxy/Load Balancer timeout | `proxy_read_timeout` (nginx) / `timeout` (caddy) ≥ ۶۰ ثانیه |
+| ویجت باز نمی‌شود | `localStorage` پر/خطای hydration | در DevTools → Application → LocalStorage → `ghasedak-chat-history` پاک کنید |

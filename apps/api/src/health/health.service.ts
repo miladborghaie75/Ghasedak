@@ -1,15 +1,29 @@
 import { Injectable } from "@nestjs/common";
+import { existsSync, accessSync, constants } from "node:fs";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
+import { mediaDir } from "../common/media-dir";
 
 /**
- * سلامت اجزا (بند ۸۸) — db واقعی؛ redis/storage در فازهای بعدی real می‌شوند.
+ * سلامت اجزا (بند ۸۸ — اصلاح گام ۲۳).
+ *
+ * باگ قبلی: `redis`/`storage` هاردکد `false` بودند و چون status از AND هر سه
+ * می‌آمد، پاسخ همیشه `degraded` بود — یعنی هیچ ابزار uptimeی نمی‌توانست رویش
+ * هشدار بگذارد. حالا:
+ *  - چک الزامی فقط `db` است (SELECT 1) → با DB سبز، `status = "ok"`.
+ *  - `redis`/`storage` چک‌های اطلاعاتی‌اند و در status دخیل نیستند
+ *    (redis عملاً در این پروژه فعال نیست؛ storage با existence-check سبک پوشهٔ رسانه واقعی است).
+ *  - `version` (از package.json اپ) و `uptimeSeconds` برای گزارش پایش.
  */
 @Injectable()
 export class HealthService {
   constructor(private readonly prisma: PrismaService) {}
+
   async getStatus(): Promise<{
     status: "ok" | "degraded";
     checks: { api: boolean; db: boolean; redis: boolean; storage: boolean };
+    version: string;
     uptimeSeconds: number;
   }> {
     let db = false;
@@ -19,14 +33,42 @@ export class HealthService {
     } catch {
       db = false;
     }
-    const redis = false; // Phase 17+: ping
-    const storage = false; // Phase 6: storage abstraction head request
+    const redis = false; // در این پروژه redis فعال نیست — چک اطلاعاتی، بدون اثر روی status
+    const storage = mediaStorageOk(); // وجود/نوشتنی‌بودن پوشهٔ رسانه — فقط خواندن (هیچ پوشه‌ای ساخته نمی‌شود)
 
-    const allOk = db && redis && storage;
     return {
-      status: allOk ? "ok" : "degraded",
+      // فقط db ملاک سلامت است؛ redis/storage در `checks` گزارش می‌شوند نه verdict
+      status: db ? "ok" : "degraded",
       checks: { api: true, db, redis, storage },
+      version: appVersion(),
       uptimeSeconds: Math.floor(process.uptime()),
     };
+  }
+}
+
+/** نسخهٔ اپ از package.json — در dev (src/health) و build (dist/health) هر دو دو سطح بالاتر است */
+function appVersion(): string {
+  try {
+    const raw = readFileSync(join(__dirname, "..", "..", "package.json"), "utf8");
+    const pkg = JSON.parse(raw) as { version?: string };
+    return pkg.version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+/**
+ * چک سبک رسانه — فقط خواندن: وجود + قابل‌نوشتن‌بودن. برخلاف `mediaDirReady()`
+ * هیچ پوشه‌ای نمی‌سازد تا health کاملاً read-only بماند (پوشهٔ غایب باید همان
+ * غایب دیده شود — باگی که تست checkStorage را می‌شکست).
+ */
+function mediaStorageOk(): boolean {
+  try {
+    const dir = mediaDir();
+    if (!existsSync(dir)) return false;
+    accessSync(dir, constants.W_OK);
+    return true;
+  } catch {
+    return false;
   }
 }

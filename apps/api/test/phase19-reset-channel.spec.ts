@@ -98,7 +98,7 @@ describe("Phase 19 — reset channel + message delivery (F1-15)", () => {
       data: {
         email: emailCustomer,
         mobile: `0991${String(Date.now()).slice(-6)}6`,
-        passwordHash: PasswordResetService.hashPassword(password),
+        passwordHash: await PasswordResetService.hashPassword(password),
         name: "کانال ایمیل (TEST)",
         role: "CUSTOMER",
         status: "ACTIVE",
@@ -107,7 +107,7 @@ describe("Phase 19 — reset channel + message delivery (F1-15)", () => {
     const withoutEmail = await prisma.user.create({
       data: {
         mobile: mobileOnly,
-        passwordHash: PasswordResetService.hashPassword(password),
+        passwordHash: await PasswordResetService.hashPassword(password),
         name: "بدون ایمیل (TEST)",
         role: "CUSTOMER",
         status: "ACTIVE",
@@ -168,7 +168,7 @@ describe("Phase 19 — reset channel + message delivery (F1-15)", () => {
 
     const adminEmail = `admin-${MARK}@ghasedak.test`;
     const admin = await prisma.user.create({
-      data: { email: adminEmail, passwordHash: PasswordResetService.hashPassword(password), name: "ادمین تست", role: "SUPER_ADMIN", status: "ACTIVE" },
+      data: { email: adminEmail, passwordHash: await PasswordResetService.hashPassword(password), name: "ادمین تست", role: "SUPER_ADMIN", status: "ACTIVE" },
     });
     userIds.push(admin.id);
     const a = await svc.request({ purpose: "admin", identifier: adminEmail });

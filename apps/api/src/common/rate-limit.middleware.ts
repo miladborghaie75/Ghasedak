@@ -8,7 +8,7 @@ import type { Request, Response, NextFunction } from "express";
  */
 const BUCKETS = new Map<string, { count: number; resetAt: number }>();
 
-const RULES: Array<{ match: RegExp; max: number; windowMs: number }> = [
+export const RULES: Array<{ match: RegExp; max: number; windowMs: number }> = [
   // Auth routes - strict limits to prevent brute force
   { match: /\/auth\/login$/, max: 5, windowMs: 60_000 }, // 5/min per IP (login is most critical)
   { match: /\/auth\/logout$/, max: 10, windowMs: 60_000 }, // 10/min per IP
@@ -38,6 +38,9 @@ const RULES: Array<{ match: RegExp; max: number; windowMs: number }> = [
 
   // Analytics public (گام ۱۵-۶) — ping بازدید؛ سقف شل تا ناوبری طبیعی سالم بماند
   { match: /\/analytics\/public\/visit$/, max: 120, windowMs: 60_000 }, // 120/min per IP
+
+  // AI chat endpoint (گام ۱۸-۳) — چت‌بات مشتری؛ محدودیت ستّه تا محافظت از quota API
+  { match: /\/admin\/capabilities\/ai\/chat$/, max: 30, windowMs: 60_000 }, // 30/min per IP
 ];
 
 @Injectable()

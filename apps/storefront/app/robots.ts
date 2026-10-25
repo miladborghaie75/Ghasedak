@@ -6,7 +6,8 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/checkout", "/cart", "/order/"],
+      // مسیرهای کاربردی/حساس که نباید ایندکس شوند — سفارش، سبد، حساب، پنل و علاقه‌مندی
+      disallow: ["/checkout", "/cart", "/order/", "/account", "/admin", "/wishlist"],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
   };

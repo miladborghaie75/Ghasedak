@@ -1,8 +1,3 @@
-// Ghasedak — Prisma schema (نگاشت ERD گزارش معماری)
-// Migration فقط از این پکیج مدیریت می‌شود (بند ۹۱).
-// ارجاع تصاویر به media با id متنی انجام می‌شود و relation صریح ندارد
-// تا گراف ساده بماند؛ یکپارچگی در لایه سرویس کنترل می‌شود.
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,67 +7,39 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================================
-// هویت و دسترسی (بند ۵۷ و ۱۰۳)
-// ============================================================
-
-enum UserRole {
-  CUSTOMER
-  SUPER_ADMIN
-  STORE_MANAGER
-  PRODUCT_MANAGER
-  ORDER_MANAGER
-  CONTENT_MANAGER
-  SUPPORT_AGENT
-  MARKETING_MANAGER
-  ACCOUNTANT
-  CASHIER
-  INVENTORY_MANAGER
-  SALES_MANAGER
-}
-
-enum UserStatus {
-  ACTIVE
-  SUSPENDED
-}
-
 model User {
-  id           String     @id @default(cuid())
-  mobile       String?    @unique
-  email        String?    @unique
-  passwordHash String?
-  name         String?
-  role         UserRole   @default(CUSTOMER)
-  status       UserStatus @default(ACTIVE)
-  lastLoginAt  DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-
-  adminSessions      AdminSession[]
+  id                  String                 @id @default(cuid())
+  mobile              String?                @unique
+  email               String?                @unique
+  passwordHash        String?
+  name                String?
+  role                UserRole               @default(CUSTOMER)
+  status              UserStatus             @default(ACTIVE)
+  lastLoginAt         DateTime?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  adminSessions       AdminSession[]
+  approvalsDecided    ApprovalRequest[]      @relation("ApprovalDecidedBy")
+  approvalsRequested  ApprovalRequest[]      @relation("ApprovalRequestedBy")
+  auditLogs           AuditLog[]
+  c2cDecisions        CardToCardSubmission[] @relation("C2cDecidedBy")
+  cashierShifts       CashierShift[]
+  revisions           ContentRevision[]
+  expenses            Expense[]
+  importBatches       ImportBatch[]
+  journalEntries      JournalEntry[]
+  orders              Order[]
   passwordResetTokens PasswordResetToken[]
-  orders        Order[]
-  reviews       Review[]
-  auditLogs     AuditLog[]
-  revisions     ContentRevision[]
-  importBatches ImportBatch[]
-
-  // Commerce Suite (POS/انبار/حسابداری)
-  posInvoices        PosInvoice[]
-  cashierShifts      CashierShift[]
-  stockLedgerEntries StockLedgerEntry[]
-  journalEntries     JournalEntry[]
-  approvalsRequested ApprovalRequest[]      @relation("ApprovalRequestedBy")
-  approvalsDecided   ApprovalRequest[]      @relation("ApprovalDecidedBy")
-  expenses           Expense[]
-  stocktakes         Stocktake[]
-  settlementsPosted  SettlementBatch[]    @relation("SettlementPostedBy")
-  transfersByRequest StockTransfer[]        @relation("TransferRequestedBy")
-  transfersByConfirm StockTransfer[]        @relation("TransferConfirmedBy")
-  c2cDecisions       CardToCardSubmission[] @relation("C2cDecidedBy")
-  payrollContracts   PayrollContract[]
-  payrollItems       PayrollItem[]
-  stocktakesApproved Stocktake[]            @relation("StocktakeApprovedBy")
-  photoTasks         PhotoTask[]
+  payrollContracts    PayrollContract[]
+  photoTasks          PhotoTask[]
+  posInvoices         PosInvoice[]
+  reviews             Review[]
+  settlementsPosted   SettlementBatch[]      @relation("SettlementPostedBy")
+  stockLedgerEntries  StockLedgerEntry[]
+  transfersByConfirm  StockTransfer[]        @relation("TransferConfirmedBy")
+  transfersByRequest  StockTransfer[]        @relation("TransferRequestedBy")
+  stocktakes          Stocktake[]
+  stocktakesApproved  Stocktake[]            @relation("StocktakeApprovedBy")
 }
 
 model AdminSession {
@@ -83,25 +50,22 @@ model AdminSession {
   userAgent String?
   expiresAt DateTime
   createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
-// بند ۳ — بازیابی رمز: توکن یک‌بارمصرف هش‌شده، منقضی‌شدنی، مصرف‌شدنی
 model PasswordResetToken {
-  id           String   @id @default(cuid())
-  userId       String
-  tokenHash    String   @unique
-  purpose      String   @default("admin") // admin | customer
-  channel      String   @default("email") // email | sms
-  sentTo       String // ایمیل/شمارهٔ مقصد واقعی برای audit
-  expiresAt    DateTime
-  usedAt       DateTime?
-  createdAt    DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  purpose   String    @default("admin")
+  channel   String    @default("email")
+  sentTo    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
@@ -120,49 +84,37 @@ model RolePermission {
   @@unique([role, permissionKey])
 }
 
-// ============================================================
-// دسته‌بندی، برند، اتریبیوت (بند ۷ تا ۱۱ و ۲۴)
-// ============================================================
-
-enum EntityStatus {
-  DRAFT
-  PUBLISHED
-  ARCHIVED
-}
-
 model Category {
-  id          String       @id @default(cuid())
+  id          String              @id @default(cuid())
   parentId    String?
   name        String
-  slug        String       @unique
+  slug        String              @unique
   description String?
   imageId     String?
   iconId      String?
   bannerId    String?
-  sortOrder   Int          @default(0)
-  status      EntityStatus @default(PUBLISHED)
-  seoId       String?      @unique
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  sortOrder   Int                 @default(0)
+  status      EntityStatus        @default(PUBLISHED)
+  seoId       String?             @unique
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
   deletedAt   DateTime?
-
-  parent     Category?           @relation("CategoryTree", fields: [parentId], references: [id])
-  children   Category[]          @relation("CategoryTree")
-  seo        SeoMeta?            @relation("CategorySeo", fields: [seoId], references: [id])
-  products   Product[]
-  attributes CategoryAttribute[]
+  parent      Category?           @relation("CategoryTree", fields: [parentId], references: [id])
+  children    Category[]          @relation("CategoryTree")
+  seo         SeoMeta?            @relation("CategorySeo", fields: [seoId], references: [id])
+  attributes  CategoryAttribute[]
+  products    Product[]
 }
 
 model CategoryAttribute {
-  id           String  @id @default(cuid())
+  id           String    @id @default(cuid())
   categoryId   String
   attributeId  String
-  isFilterable Boolean @default(true)
-  displayGroup String? // گروه نمایشی مثل «نوع سوتین» — صرفاً UI (بند ۸)
-  sortOrder    Int     @default(0)
-
-  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  attribute Attribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  isFilterable Boolean   @default(true)
+  displayGroup String?
+  sortOrder    Int       @default(0)
+  attribute    Attribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  category     Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@unique([categoryId, attributeId])
 }
@@ -181,92 +133,74 @@ model Brand {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   deletedAt   DateTime?
-
-  seo      SeoMeta?  @relation("BrandSeo", fields: [seoId], references: [id])
-  products Product[]
-}
-
-enum AttributeType {
-  TEXT
-  SELECT
-  MULTI_SELECT
-  COLOR
-  IMAGE
-  NUMBER
-  BOOLEAN
+  seo         SeoMeta?     @relation("BrandSeo", fields: [seoId], references: [id])
+  products    Product[]
 }
 
 model Attribute {
-  id            String        @id @default(cuid())
+  id            String              @id @default(cuid())
   name          String
-  slug          String        @unique
-  type          AttributeType @default(SELECT)
-  isFilterable  Boolean       @default(true)
-  isSearchable  Boolean       @default(false)
-  isVariantAxis Boolean       @default(false)
-  showOnCard    Boolean       @default(false)
-  showOnProduct Boolean       @default(true)
-  showInAdmin   Boolean       @default(true)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-
-  terms      AttributeTerm[]
-  categories CategoryAttribute[]
+  slug          String              @unique
+  type          AttributeType       @default(SELECT)
+  isFilterable  Boolean             @default(true)
+  isSearchable  Boolean             @default(false)
+  isVariantAxis Boolean             @default(false)
+  showOnCard    Boolean             @default(false)
+  showOnProduct Boolean             @default(true)
+  showInAdmin   Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  terms         AttributeTerm[]
+  categories    CategoryAttribute[]
 }
 
 model AttributeTerm {
-  id            String  @id @default(cuid())
+  id            String                 @id @default(cuid())
   attributeId   String
   value         String
   slug          String
-  hex           String? // رنگ (بند ۲۴)
+  hex           String?
   swatchImageId String?
-  sortOrder     Int     @default(0)
-
-  attribute Attribute              @relation(fields: [attributeId], references: [id], onDelete: Cascade)
-  products  ProductAttributeTerm[]
-  variants  VariantTerm[]
+  sortOrder     Int                    @default(0)
+  attribute     Attribute              @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  products      ProductAttributeTerm[]
+  variants      VariantTerm[]
 
   @@unique([attributeId, slug])
 }
 
-// ============================================================
-// محصول و واریانت (بند ۵ و ۶)
-// ============================================================
-
 model Product {
-  id               String       @id @default(cuid())
+  id               String                 @id @default(cuid())
   name             String
-  slug             String       @unique
+  slug             String                 @unique
   shortDescription String?
   description      String?
-  status           EntityStatus @default(DRAFT)
+  status           EntityStatus           @default(DRAFT)
   categoryId       String
   brandId          String?
-  basePrice        BigInt // تومان صحیح (بند ۹۷) — سطح قیمت ۱ (حضوری)
+  basePrice        BigInt
   salePrice        BigInt?
   saleStartsAt     DateTime?
   saleEndsAt       DateTime?
-  costPrice        BigInt? // فقط ادمین — نمایشی؛ COGS واقعی از Costing Engine (بند ۱۰۵)
+  costPrice        BigInt?
   videoUrl         String?
   weightGrams      Int?
   tags             String[]
   publishedAt      DateTime?
-  seoId            String?      @unique
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  seoId            String?                @unique
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
   deletedAt        DateTime?
-
-  category   Category               @relation(fields: [categoryId], references: [id])
-  brand      Brand?                 @relation(fields: [brandId], references: [id])
-  seo        SeoMeta?               @relation("ProductSeo", fields: [seoId], references: [id])
-  images     ProductImage[]
-  attributes ProductAttributeTerm[]
-  variants   ProductVariant[]
-  reviews    Review[]
-  wishlist   WishlistItem[]
-  bundle     ProductBundle?
-  photoTasks PhotoTask[]
+  photoTasks       PhotoTask[]
+  brand            Brand?                 @relation(fields: [brandId], references: [id])
+  category         Category               @relation(fields: [categoryId], references: [id])
+  seo              SeoMeta?               @relation("ProductSeo", fields: [seoId], references: [id])
+  attributes       ProductAttributeTerm[]
+  bundle           ProductBundle?
+  images           ProductImage[]
+  variants         ProductVariant[]
+  reviews          Review[]
+  wishlist         WishlistItem[]
 }
 
 model ProductImage {
@@ -276,23 +210,9 @@ model ProductImage {
   alt       String?
   sortOrder Int     @default(0)
   isPrimary Boolean @default(false)
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
-}
-
-/// یک کارِ عکاسی — «برای این محصول، این کادر گرفته شده یا نه».
-///
-/// چرا مدل جدا و نه یک فلگ روی محصول؟ چون برنامهٔ عکاسی چندکادری است:
-/// هر محصول چند کادر دارد و هر کادر چرخهٔ خودش را دارد (عکس گرفته شد → تأیید شد
-/// → یا نیاز به عکسِ دوباره). یک رکورد = یک «محصول × کادر»؛ یکتایی همین
-/// ترکیب در DB تضمین شده تا یک کادر دو بار ثبت نشود.
-enum PhotoTaskStatus {
-  PENDING
-  SHOT
-  NEEDS_RETAKE
-  APPROVED
 }
 
 model PhotoTask {
@@ -308,216 +228,162 @@ model PhotoTask {
   actorId   String?
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actor     User?           @relation(fields: [actorId], references: [id])
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([productId, shotKind])
   @@index([status])
 }
 
 model ProductAttributeTerm {
-  id              String @id @default(cuid())
+  id              String        @id @default(cuid())
   productId       String
   attributeTermId String
-
-  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
-  term    AttributeTerm @relation(fields: [attributeTermId], references: [id], onDelete: Cascade)
+  term            AttributeTerm @relation(fields: [attributeTermId], references: [id], onDelete: Cascade)
+  product         Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([productId, attributeTermId])
 }
 
 model ProductVariant {
-  id                String       @id @default(cuid())
-  productId         String
-  sku               String       @unique
-  barcode           String?      @unique // بارکد اصلی/کارخانه‌ای؛ بارکدهای چندگانه در VariantBarcode
-  price             BigInt // سطح قیمت ۱ (حضوری) — بند ۳
-  salePrice         BigInt?
-  stockQty          Int          @default(0) // projection نمایشی؛ حقیقت از StockLedgerEntry (بند ۱۳۵)
-  reservedQty       Int          @default(0) // projection نمایشی — رزرو فعال از StockReservation
-  lowStockThreshold Int          @default(0)
-  status            EntityStatus @default(PUBLISHED)
-  weightGrams       Int?
-  imageId           String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-  deletedAt         DateTime?
-
-  product              Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
-  terms                VariantTerm[]
-  movements            InventoryMovement[] // legacy — بعد از migration داده به Ledger حذف می‌شود
-  ledgerEntries        StockLedgerEntry[]
-  reservations         StockReservation[]
-  costLayers           CostLayer[]
-  prices               VariantPrice[]
-  priceHistory         PriceHistory[]
-  barcodes             VariantBarcode[]
-  reorderPolicy        ReorderPolicy?
-  transferItems        StockTransferItem[]
-  stocktakeItems       StocktakeItem[]
-  poItems              PurchaseOrderItem[]
-  grItems              GoodsReceiptItem[]
-  purchaseInvoiceItems PurchaseInvoiceItem[]
-  purchaseReturnItems  PurchaseReturnItem[]
+  id                   String                @id @default(cuid())
+  productId            String
+  sku                  String                @unique
+  barcode              String?               @unique
+  price                BigInt
+  salePrice            BigInt?
+  stockQty             Int                   @default(0)
+  reservedQty          Int                   @default(0)
+  lowStockThreshold    Int                   @default(0)
+  status               EntityStatus          @default(PUBLISHED)
+  weightGrams          Int?
+  imageId              String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  deletedAt            DateTime?
   cartItems            CartItem[]
+  costLayers           CostLayer[]
+  damageRecords        DamageRecord[]
+  grItems              GoodsReceiptItem[]
+  movements            InventoryMovement[]
   orderItems           OrderItem[]
   posInvoiceItems      PosInvoiceItem[]
+  priceHistory         PriceHistory[]
   bundleItems          ProductBundleItem[]
-  stockAlerts          StockAlert[]
+  product              Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  purchaseInvoiceItems PurchaseInvoiceItem[]
+  poItems              PurchaseOrderItem[]
+  purchaseReturnItems  PurchaseReturnItem[]
   quarantineRecords    QuarantineRecord[]
-  damageRecords        DamageRecord[]
+  reorderPolicy        ReorderPolicy?
+  stockAlerts          StockAlert[]
+  ledgerEntries        StockLedgerEntry[]
+  reservations         StockReservation[]
+  transferItems        StockTransferItem[]
+  stocktakeItems       StocktakeItem[]
+  barcodes             VariantBarcode[]
+  prices               VariantPrice[]
+  terms                VariantTerm[]
 
   @@index([productId])
 }
 
 model VariantTerm {
-  id              String @id @default(cuid())
+  id              String         @id @default(cuid())
   variantId       String
   attributeTermId String
-
-  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  term    AttributeTerm  @relation(fields: [attributeTermId], references: [id], onDelete: Cascade)
+  term            AttributeTerm  @relation(fields: [attributeTermId], references: [id], onDelete: Cascade)
+  variant         ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@unique([variantId, attributeTermId])
   @@index([attributeTermId])
 }
 
-enum MovementReason {
-  PURCHASE
-  ORDER
-  MANUAL
-  RETURN
-  ADJUST
-}
-
-// مدل InventoryMovement در انتهای فایل (بخش legacy) تعریف شده است.
-
-// ============================================================
-// رسانه (بند ۱۲ و ۱۳)
-// ============================================================
-
 model Media {
-  id         String   @id @default(cuid())
-  kind       String // image | video | doc
-  storageKey String   @unique
-  mime       String
-  sizeBytes  BigInt
-  width      Int?
-  height     Int?
-  alt        String?
-  title      String?
-  caption    String?
-  focalX     Int?
-  focalY     Int?
-  variants   Json? // thumb/md/lg/webp/avif (بند ۶۱)
-  createdAt  DateTime @default(now())
-
+  id          String       @id @default(cuid())
+  kind        String
+  storageKey  String       @unique
+  mime        String
+  sizeBytes   BigInt
+  width       Int?
+  height      Int?
+  alt         String?
+  title       String?
+  caption     String?
+  focalX      Int?
+  focalY      Int?
+  variants    Json?
+  createdAt   DateTime     @default(now())
   attachments Attachment[]
 }
 
-// ============================================================
-// سبد خرید
-// ============================================================
-
 model Cart {
-  id         String   @id @default(cuid())
-  token      String   @unique
+  id         String     @id @default(cuid())
+  token      String     @unique
   customerId String?
-  status     String   @default("active")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  items CartItem[]
+  status     String     @default("active")
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  items      CartItem[]
 }
 
 model CartItem {
-  id                String   @id @default(cuid())
+  id                String         @id @default(cuid())
   cartId            String
   variantId         String
   qty               Int
   unitPriceSnapshot BigInt
-  createdAt         DateTime @default(now())
-
-  cart    Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  variant ProductVariant @relation(fields: [variantId], references: [id])
+  createdAt         DateTime       @default(now())
+  cart              Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant           ProductVariant @relation(fields: [variantId], references: [id])
 
   @@unique([cartId, variantId])
 }
 
-// ============================================================
-// سفارش (بند ۳۰ تا ۳۲ و ۹۵)
-// ============================================================
-
-enum OrderStatus {
-  PENDING
-  PAID
-  PROCESSING
-  PACKED
-  SHIPPED
-  DELIVERED
-  CANCELLED
-  PARTIALLY_RETURNED
-  REFUNDED
-  FAILED
-}
-
-enum PaymentStatus {
-  PENDING
-  AUTHORIZED
-  PAID
-  FAILED
-  REFUNDED
-}
-
 model Order {
-  id                     String        @id @default(cuid())
-  code                   String        @unique
-  channelId              String? // SalesChannel — default: website (Commerce Suite)
-  warehouseId            String? // انبار تأمین (بند ۱۰۳) — default: MAIN
+  id                     String               @id @default(cuid())
+  code                   String               @unique
+  channelId              String?
+  warehouseId            String?
   customerId             String?
   userId                 String?
   guestName              String?
   guestMobile            String?
-  addressSnapshot        Json // آدرس لحظه سفارش (بند ۹۶)
-  status                 OrderStatus   @default(PENDING)
-  paymentStatus          PaymentStatus @default(PENDING)
+  addressSnapshot        Json
+  status                 OrderStatus          @default(PENDING)
+  paymentStatus          PaymentStatus        @default(PENDING)
   subtotal               BigInt
   shippingCost           BigInt
-  discountTotal          BigInt        @default(0)
-  // Tax Architecture (بند ۷۸–۸۰، تصمیم تاییدشده): نرخ پیش‌فرض ۰٪
-  taxableAmount          BigInt        @default(0)
-  taxTotal               BigInt        @default(0)
+  discountTotal          BigInt               @default(0)
+  taxableAmount          BigInt               @default(0)
+  taxTotal               BigInt               @default(0)
   total                  BigInt
-  currency               String        @default("IRT")
+  currency               String               @default("IRT")
   shippingMethodSnapshot Json?
-  // گام ۱۵ (تصمیم D-4) — UTM first-touch لحظهٔ ورود؛ با checkout ذخیره می‌شود.
-  // فقط utm_source/medium/campaign/term/content — هیچ PII اینجا نمی‌ریزد.
-  utmSnapshot            Json?
   trackingCode           String?
   notes                  String?
   customerNotes          String?
-  idempotencyKey         String?       @unique // جلوگیری از سفارش تکراری (بند ۱۱۶)
-  createdAt              DateTime      @default(now())
-  updatedAt              DateTime      @updatedAt
-
-  user           User?                @relation(fields: [userId], references: [id])
-  channel        SalesChannel?        @relation(fields: [channelId], references: [id])
-  warehouse      Warehouse?           @relation(fields: [warehouseId], references: [id])
-  items          OrderItem[]
-  history        OrderStatusHistory[]
-  events         OrderEvent[]
-  payments       Payment[] // legacy درگاه — جایگزین PaymentAttempt
-  attempts       PaymentAttempt[]
-  shipments      Shipment[]
-  coupons        CouponRedemption[]
-  returnRequests ReturnRequest[]
-  refunds        Refund[]
-  reservations   StockReservation[]
+  idempotencyKey         String?              @unique
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  utmSnapshot            Json?
+  coupons                CouponRedemption[]
+  channel                SalesChannel?        @relation(fields: [channelId], references: [id])
+  user                   User?                @relation(fields: [userId], references: [id])
+  warehouse              Warehouse?           @relation(fields: [warehouseId], references: [id])
+  events                 OrderEvent[]
+  items                  OrderItem[]
+  history                OrderStatusHistory[]
+  payments               Payment[]
+  attempts               PaymentAttempt[]
+  refunds                Refund[]
+  returnRequests         ReturnRequest[]
+  shipments              Shipment[]
+  reservations           StockReservation[]
 }
 
 model OrderItem {
-  id                   String  @id @default(cuid())
+  id                   String          @id @default(cuid())
   orderId              String
   variantId            String?
   titleSnapshot        String
@@ -526,9 +392,8 @@ model OrderItem {
   unitPrice            BigInt
   salePrice            BigInt?
   lineTotal            BigInt
-
-  order   Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant ProductVariant? @relation(fields: [variantId], references: [id])
+  order                Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant              ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@index([orderId])
   @@index([variantId])
@@ -542,8 +407,7 @@ model OrderStatusHistory {
   actorId    String?
   note       String?
   createdAt  DateTime     @default(now())
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
 }
@@ -555,13 +419,8 @@ model OrderEvent {
   payload        Json?
   idempotencyKey String   @unique
   createdAt      DateTime @default(now())
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
-
-// ============================================================
-// مشتری و آدرس (بند ۳۴ و ۳۹)
-// ============================================================
 
 model Customer {
   id           String    @id @default(cuid())
@@ -577,9 +436,8 @@ model Customer {
   lastOrderAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-
-  addresses Address[]
-  checks    Check[]
+  addresses    Address[]
+  checks       Check[]
 }
 
 model Address {
@@ -593,8 +451,7 @@ model Address {
   unit       String?
   isDefault  Boolean  @default(false)
   createdAt  DateTime @default(now())
-
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 }
 
 model Province {
@@ -602,25 +459,19 @@ model Province {
   name      String @unique
   slug      String @unique
   sortOrder Int    @default(0)
-
-  cities City[]
+  cities    City[]
 }
 
 model City {
-  id         String @id @default(cuid())
+  id         String   @id @default(cuid())
   provinceId String
   name       String
   slug       String
-  sortOrder  Int    @default(0)
-
-  province Province @relation(fields: [provinceId], references: [id], onDelete: Cascade)
+  sortOrder  Int      @default(0)
+  province   Province @relation(fields: [provinceId], references: [id], onDelete: Cascade)
 
   @@unique([provinceId, slug])
 }
-
-// ============================================================
-// ارسال (بند ۳۳)
-// ============================================================
 
 model ShippingZone {
   id          String   @id @default(cuid())
@@ -640,16 +491,11 @@ model ShippingMethod {
   status         String  @default("active")
 }
 
-// ============================================================
-// پرداخت (بند ۳۵ تا ۳۷)
-// ============================================================
-
-// Payment domain (بازنگری پرداخت): Method/Provider/Attempt — بند ۲: مفاهیم جدا، رکورد واحد ممنوع
 model PaymentMethod {
   id                   String           @id @default(cuid())
-  code                 String           @unique // online|card_to_card|pos_terminal|cash|installment|other-…
+  code                 String           @unique
   nameInternal         String
-  namePublic           String // نامی که مشتری می‌بیند
+  namePublic           String
   description          String?
   iconMediaId          String?
   active               Boolean          @default(true)
@@ -658,102 +504,77 @@ model PaymentMethod {
   minAmount            BigInt?
   maxAmount            BigInt?
   customerInstructions String?
-  adminInstructions    String? // هرگز به فرانت عمومی
-  config               Json? // تنظیمات حساس — فقط سرور
+  adminInstructions    String?
+  config               Json?
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
   paymentAttempts      PaymentAttempt[]
 }
 
 model PaymentProvider {
-  id                   String           @id @default(cuid())
-  provider             String // zarinpal|snapp-pay|tara|… — adapter خارجی
+  id                   String            @id @default(cuid())
+  provider             String
   name                 String
-  env                  String           @default("production") // sandbox|production
-  active               Boolean          @default(true)
-  priority             Int              @default(0)
+  env                  String            @default("production")
+  active               Boolean           @default(true)
+  priority             Int               @default(0)
   minAmount            BigInt?
   maxAmount            BigInt?
-  credentialsEncrypted String? // رمز؛ هرگز در پاسخ API (بند ۵)
+  credentialsEncrypted String?
   callbackUrl          String?
   methodIds            String[]
-  /// بسته‌های تسویهٔ این درگاه (فاز ۲٫۵)
-  settlementBatches    SettlementBatch[]
-  paymentAttempts      PaymentAttempt[]
-
-  // ── تسویه و کارمزد (گام ۳ فاز ۲) ──
-  // درگاه‌های اعتباری پول را چند هفته بعد و کمتر از مبلغ کامل می‌رسانند؛
-  // بدون این ستون‌ها سند فروش کل مبلغ را در بانک می‌نشاند و دفتر با واقعیت
-  // اختلاف پیدا می‌کرد.
-  /** درصد کارمزد درگاه (مثلاً ۱٫۲ برای ۱٫۲٪) — به‌ازای هر درگاه قابل تنظیم */
-  feePercentBps        Int? // درصد با دقت دهم‌درصد (basis point: ۱۰۰ = ۱٪)
-  /** مبلغ کارمزد ثابت هر تراکنش، به تومان — اگر درصده کافی نبود */
+  /// /** درصد کارمزد درگاه (مثلاً ۱٫۲ برای ۱٫۲٪) — به‌ازای هر درگاه قابل تنظیم
+  feePercentBps        Int?
+  /// * مبلغ کارمزد ثابت هر تراکنش، به تومان — اگر درصده کافی نبود
   feeFlatToman         BigInt?
-  /** کارمزد از جیب خریدار گرفته شود یا از جیب فروشگاه؟ (تصمیم کاربر) */
-  feeBorneBy           GatewayFeeBearer @default(MERCHANT)
-  /** روزهایی که درگاه پول را به حساب فروشگاه منتقل می‌کند (برای چرخهٔ تسویه) */
-  settlementDays       Int? @default(1)
-}
+  /// * کارمزد از جیب خریدار گرفته شود یا از جیب فروشگاه؟ (تصمیم کاربر)
+  feeBorneBy           GatewayFeeBearer  @default(MERCHANT)
+  /// * روزهایی که درگاه پول را به حساب فروشگاه منتقل می‌کند (برای چرخهٔ تسویه)
+  settlementDays       Int?              @default(1)
+  paymentAttempts      PaymentAttempt[]
+  settlementBatches    SettlementBatch[]
 
-/** کارمزد درگاه از چه جیبی پرداخت می‌شود */
-enum GatewayFeeBearer {
-  MERCHANT // فروشگاه (پیش‌فرض — هزینهٔ فروشگاه است)
-  CUSTOMER // خریدار (روی فاکتور مشتری اضافه می‌شود)
-}
-
-enum PayState {
-  CREATED
-  PENDING
-  REDIRECTED
-  CALLBACK_RECEIVED
-  VERIFYING
-  PAID
-  FAILED
-  CANCELLED
-  EXPIRED
-  REQUIRES_REVIEW
-  REFUNDED
-  PARTIALLY_REFUNDED
+  @@index([feeBorneBy])
 }
 
 /// تلاش پرداخت — چند attempt برای یک سفارش مجاز (بند ۹)
 model PaymentAttempt {
-  id             String    @id @default(cuid())
-  orderId        String?
-  posInvoiceId   String?
-  methodId       String
-  providerId     String?
-  channelId      String?
-  amount         BigInt
-  state          PayState  @default(CREATED)
-  idempotencyKey String    @unique
-  providerTxId   String?   @unique
-  authority      String?
-  callbackAt     DateTime?
-  verifiedAt     DateTime?
-  failReason     String?
-  expiresAt      DateTime? // بند ۲۳: انقضای پرداخت آنلاین/مهلت c2c
-  transitions    Json? // [{state, at, actorId}] — همه ترنزیشن‌ها لاگ می‌شوند (بند ۸)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  order           Order?                  @relation(fields: [orderId], references: [id])
-  posInvoice      PosInvoice?             @relation(fields: [posInvoiceId], references: [id])
-  method          PaymentMethod           @relation(fields: [methodId], references: [id])
-  provider        PaymentProvider?        @relation(fields: [providerId], references: [id])
-  submissions     CardToCardSubmission[]
-  reconciliations PaymentReconciliation[]
-  refunds         Refund[]
-  settlementBatch SettlementBatch? @relation(fields: [settlementBatchId], references: [id], onDelete: SetNull)
+  id                String                  @id @default(cuid())
+  orderId           String?
+  posInvoiceId      String?
+  methodId          String
+  providerId        String?
+  channelId         String?
+  amount            BigInt
+  state             PayState                @default(CREATED)
+  idempotencyKey    String                  @unique
+  providerTxId      String?                 @unique
+  authority         String?
+  callbackAt        DateTime?
+  verifiedAt        DateTime?
+  failReason        String?
+  expiresAt         DateTime?
+  transitions       Json?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
   /// بستهٔ تسویه‌ای که این پرداخت در آن تسویه شد (فاز ۲٫۵)
   settlementBatchId String?
+  submissions       CardToCardSubmission[]
+  method            PaymentMethod           @relation(fields: [methodId], references: [id])
+  order             Order?                  @relation(fields: [orderId], references: [id])
+  posInvoice        PosInvoice?             @relation(fields: [posInvoiceId], references: [id])
+  provider          PaymentProvider?        @relation(fields: [providerId], references: [id])
+  settlementBatch   SettlementBatch?        @relation(fields: [settlementBatchId], references: [id], onUpdate: NoAction)
+  reconciliations   PaymentReconciliation[]
+  refunds           Refund[]
 
   @@index([orderId])
   @@index([state])
+  @@index([settlementBatchId])
 }
 
 model CardToCardAccount {
-  id                   String  @id @default(cuid())
+  id                   String                 @id @default(cuid())
   bankName             String
   holderName           String
   cardNumber           String
@@ -762,97 +583,67 @@ model CardToCardAccount {
   displayTitle         String?
   logoMediaId          String?
   customerInstructions String?
-  visibleFields        Json? // ادمین تعیین می‌کند چه فیلدی به مشتری نمایش یابد (بند ۱۴)
-  active               Boolean @default(true)
-  sortOrder            Int     @default(0)
-
-  submissions CardToCardSubmission[]
-}
-
-enum C2cState {
-  PENDING_VERIFICATION
-  UNDER_REVIEW
-  APPROVED
-  REJECTED
-  CORRECTION_REQUIRED
-  EXPIRED
-  CANCELLED
+  visibleFields        Json?
+  active               Boolean                @default(true)
+  sortOrder            Int                    @default(0)
+  submissions          CardToCardSubmission[]
 }
 
 model CardToCardSubmission {
-  id                  String    @id @default(cuid())
+  id                  String            @id @default(cuid())
   attemptId           String
   destAccountId       String
   amount              BigInt
-  transferDate        String? // YYYY-MM-DD — با تاریخ شمسی UI هماهنگ می‌شود
+  transferDate        String?
   transferTime        String?
   sourceBank          String?
   referenceNo         String?
   sourceCardLast4     String?
   note                String?
   receiptAttachmentId String?
-  state               C2cState  @default(PENDING_VERIFICATION)
+  state               C2cState          @default(PENDING_VERIFICATION)
   decidedById         String?
   decidedAt           DateTime?
   decisionNote        String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  attempt             PaymentAttempt    @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  decidedBy           User?             @relation("C2cDecidedBy", fields: [decidedById], references: [id])
+  destAccount         CardToCardAccount @relation(fields: [destAccountId], references: [id])
 
-  attempt     PaymentAttempt    @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  destAccount CardToCardAccount @relation(fields: [destAccountId], references: [id])
-  decidedBy   User?             @relation("C2cDecidedBy", fields: [decidedById], references: [id])
-
-  @@unique([referenceNo, destAccountId, amount]) // جلوگیری از پذیرش تکراری انتقال (بند ۲۲)
+  @@unique([referenceNo, destAccountId, amount])
   @@index([state])
 }
 
-enum ReconciliationStatus {
-  UNMATCHED
-  MATCHED
-  PARTIALLY_MATCHED
-  RECONCILED
-  DISPUTED
-}
-
-/**
- * بستهٔ تسویه — یک گزارش تسویه از درگاه (فاز ۲٫۵).
- *
- * برای درگاه اعتباری، پولِ چند خرید با هم و چند هفته بعد به حساب ما می‌رسد.
- * پس یک «بسته» لازم است تا برای کل گزارش **یک** سند زده شود، نه یک سند به‌ازای
- * هر خرید — وگرنه دفتر پر از سندهای ریز و غیرقابل‌بررسی می‌شد.
- *
- * چرخه: `PENDING` (وارد شده، هنوز سند نخورده) → `POSTED` (سند حسابداری زده شد)
- */
+/// *
+///  * بستهٔ تسویه — یک گزارش تسویه از درگاه (فاز ۲٫۵).
+///  *
+///  * برای درگاه اعتباری، پولِ چند خرید با هم و چند هفته بعد به حساب ما می‌رسد.
+///  * پس یک «بسته» لازم است تا برای کل گزارش **یک** سند زده شود، نه یک سند به‌ازای
+///  * هر خرید — وگرنه دفتر پر از سندهای ریز و غیرقابل‌بررسی می‌شد.
+///  *
+///  * چرخه: `PENDING` (وارد شده، هنوز سند نخورده) → `POSTED` (سند حسابداری زده شد)
 model SettlementBatch {
-  id             String            @id @default(cuid())
+  id             String           @id @default(cuid())
   providerId     String
-  reference      String // شمارهٔ گزارش درگاه — یکتا در هر درگاه
+  reference      String
   settlementDate DateTime
-  grossAmount    BigInt            @default(0) // جمع کل پرداخت‌های تسویه‌شده
-  feeAmount      BigInt            @default(0) // کرمزد درگاه
-  netAmount      BigInt            @default(0) // آنچه واقعاً به حساب ما آمد
-  status         SettlementStatus  @default(PENDING)
-  journalEntryId String?           @unique // سند قطعی — یک سند، یک بسته
+  grossAmount    BigInt           @default(0)
+  feeAmount      BigInt           @default(0)
+  netAmount      BigInt           @default(0)
+  status         String           @default("PENDING")
+  journalEntryId String?
   postedAt       DateTime?
   postedById     String?
   note           String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @default(now()) @updatedAt
+  attempts       PaymentAttempt[]
+  postedBy       User?            @relation("SettlementPostedBy", fields: [postedById], references: [id], onUpdate: NoAction)
+  provider       PaymentProvider  @relation(fields: [providerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  provider PaymentProvider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  journalEntry JournalEntry?  @relation("SettlementJournal", fields: [journalEntryId], references: [id], onDelete: SetNull)
-  postedBy User?             @relation("SettlementPostedBy", fields: [postedById], references: [id], onDelete: SetNull)
-  attempts PaymentAttempt[]
-
-  @@unique([providerId, reference])
+  @@unique([providerId, reference], map: "SettlementBatch_provider_reference_key")
   @@index([status])
-  @@index([settlementDate])
-}
-
-enum SettlementStatus {
-  PENDING
-  POSTED
-  VOID
 }
 
 model PaymentReconciliation {
@@ -864,21 +655,12 @@ model PaymentReconciliation {
   status           ReconciliationStatus @default(UNMATCHED)
   note             String?
   createdAt        DateTime             @default(now())
-
-  attempt PaymentAttempt? @relation(fields: [attemptId], references: [id])
-}
-
-enum PaymentAttemptStatus {
-  PENDING
-  REDIRECTED
-  VERIFIED
-  FAILED
+  attempt          PaymentAttempt?      @relation(fields: [attemptId], references: [id])
 }
 
 model Payment {
   id             String               @id @default(cuid())
   orderId        String
-  // Commerce Suite: روش نقد/کارت/چکِ POS از PosPayment؛ این مدل مخصوص درگاه آنلاین است
   gatewayId      String
   amount         BigInt
   authority      String?
@@ -887,21 +669,16 @@ model Payment {
   rawPayload     Json?
   idempotencyKey String?              @unique
   createdAt      DateTime             @default(now())
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order          Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
 }
 
-// ============================================================
-// کد تخفیف (بند ۳۸)
-// ============================================================
-
 model Coupon {
-  id               String    @id @default(cuid())
-  code             String    @unique
-  type             String // percent | fixed
-  amount           BigInt    @default(0)
+  id               String             @id @default(cuid())
+  code             String             @unique
+  type             String
+  amount           BigInt             @default(0)
   startsAt         DateTime?
   endsAt           DateTime?
   usageLimit       Int?
@@ -910,11 +687,10 @@ model Coupon {
   maxDiscount      BigInt?
   appliesTo        Json?
   excludes         Json?
-  active           Boolean   @default(true)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  redemptions CouponRedemption[]
+  active           Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  redemptions      CouponRedemption[]
 }
 
 model CouponRedemption {
@@ -924,22 +700,10 @@ model CouponRedemption {
   customerId String?
   mobile     String?
   createdAt  DateTime @default(now())
-
-  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
-  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  coupon     Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@unique([couponId, orderId])
-}
-
-// ============================================================
-// نظر و علاقه‌مندی (بند ۴۱ و ۴۲)
-// ============================================================
-
-enum ReviewStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  HIDDEN
 }
 
 model Review {
@@ -954,22 +718,18 @@ model Review {
   isVerifiedPurchase Boolean      @default(false)
   adminReply         String?
   createdAt          DateTime     @default(now())
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  user    User?   @relation(fields: [userId], references: [id])
+  product            Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user               User?        @relation(fields: [userId], references: [id])
 
   @@index([productId])
 }
 
-// تأیید موبایل مهمان (گام ۱۱): کد یک‌بارمصرف با انقضای کوتاه.
-// کد عمداً plaintext نگه داشته می‌شود چون عمرش ۵ دقیقه است و پس از مصرف
-// consumedAt ست می‌شود؛ token پس از تأیید صادر و فقط یک‌بار در ثبت نظر خرج می‌شود.
 model OtpCode {
   id         String    @id @default(cuid())
   mobile     String
   code       String
   purpose    String    @default("review")
-  token      String? // پس از verify صادر می‌شود؛ submit آن را یک‌بار مصرف می‌کند
+  token      String?
   expiresAt  DateTime
   consumedAt DateTime?
   attempts   Int       @default(0)
@@ -982,54 +742,28 @@ model OtpCode {
 model WishlistItem {
   id        String   @id @default(cuid())
   productId String
-  ownerKey  String // userId یا شناسه ناشناس مهمان (بند ۴۲)
+  ownerKey  String
   createdAt DateTime @default(now())
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([productId, ownerKey])
 }
 
-// ============================================================
-// CMS (بند ۱۴ تا ۱۶، ۴۳ تا ۴۹، ۷۰ تا ۷۲)
-// ============================================================
-
-enum ContentStatus {
-  DRAFT
-  PUBLISHED
-}
-
 model CmsPage {
-  id     String @id @default(cuid())
-  slug   String @unique
+  id               String        @id @default(cuid())
+  slug             String        @unique
   /// پیش‌نویس — همان چیزی که صفحه‌ساز ذخیره می‌کند (ممکن است منتشرنشده باشد)
-  payload Json
+  payload          Json
+  status           ContentStatus @default(DRAFT)
+  publishedAt      DateTime?
+  updatedBy        String?
+  updatedAt        DateTime      @updatedAt
   /// اسنپ‌شات منتشرشده — تنها چیزی که بازدیدکننده می‌بیند.
   /// چرا جدا شد؟ قبلاً «ذخیره» روی صفحهٔ منتشرشده بی‌درنگ سایت را عوض می‌کرد
   /// و دکمهٔ «انتشار» تشریفاتی بود؛ یعنی ویرایش نیمه‌کاره به چشم مشتری می‌رفت.
   /// `null` = صفحه هرگز از این نسخه منتشر نشده؛ در این حالت برای سازگاری
   /// با صفحه‌های قدیمی، همان `payload` سرو می‌شود.
   publishedPayload Json?
-  status           ContentStatus @default(DRAFT)
-  publishedAt      DateTime?
-  updatedBy        String?
-  updatedAt        DateTime      @updatedAt
-}
-
-enum HomeSectionType {
-  HERO
-  PRODUCT_CAROUSEL
-  PRODUCT_GRID
-  CATEGORY_GRID
-  BRAND_GRID
-  BANNER
-  GUIDE_CARDS
-  TRUST_CARDS
-  NEED_FINDER
-  RICH_TEXT
-  NEWSLETTER
-  IMAGE_TEXT
-  PROMOTIONAL
 }
 
 model HomeSection {
@@ -1049,8 +783,7 @@ model ContentRevision {
   payload   Json
   actorId   String?
   createdAt DateTime @default(now())
-
-  actor User? @relation(fields: [actorId], references: [id])
+  actor     User?    @relation(fields: [actorId], references: [id])
 
   @@index([entity, entityId])
 }
@@ -1064,36 +797,34 @@ model Hero {
   ctaHref        String?
   desktopImageId String?
   mobileImageId  String?
-  pins           Json? // [{x,y,slug,tip}] پین‌های کشو (بند ۱۴)
+  pins           Json?
   active         Boolean  @default(true)
   updatedAt      DateTime @updatedAt
 }
 
 model NeedFinderStep {
-  id        String  @id @default(cuid())
+  id        String             @id @default(cuid())
   question  String
-  sortOrder Int     @default(0)
-  active    Boolean @default(true)
-
-  options NeedFinderOption[]
+  sortOrder Int                @default(0)
+  active    Boolean            @default(true)
+  options   NeedFinderOption[]
 }
 
 model NeedFinderOption {
-  id        String  @id @default(cuid())
+  id        String         @id @default(cuid())
   stepId    String
   label     String
   icon      String?
   imageId   String?
-  sortOrder Int     @default(0)
-  active    Boolean @default(true)
-  rule      Json? // {categories?, attributeTerms?, priceMax?} (بند ۲۰)
-
-  step NeedFinderStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  sortOrder Int            @default(0)
+  active    Boolean        @default(true)
+  rule      Json?
+  step      NeedFinderStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
 }
 
 model Faq {
   id        String  @id @default(cuid())
-  scope     String // global | category | product
+  scope     String
   scopeId   String?
   question  String
   answer    String
@@ -1114,17 +845,16 @@ model SizeGuide {
 
 model Content {
   id        String   @id @default(cuid())
-  key       String   @unique // shipping | returns | exchange | care
+  key       String   @unique
   payload   Json
   updatedAt DateTime @updatedAt
 }
 
 model Menu {
-  id       String @id @default(cuid())
-  position String @unique // header | mobile | footer
+  id       String     @id @default(cuid())
+  position String     @unique
   name     String
-
-  items MenuItem[]
+  items    MenuItem[]
 }
 
 model MenuItem {
@@ -1137,15 +867,9 @@ model MenuItem {
   sortOrder Int     @default(0)
   active    Boolean @default(true)
   openIn    String  @default("same")
-
-  menu Menu @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  menu      Menu    @relation(fields: [menuId], references: [id], onDelete: Cascade)
 
   @@index([menuId])
-}
-
-enum BannerKind {
-  PROMO
-  HOMEPAGE
 }
 
 model Banner {
@@ -1165,24 +889,19 @@ model Banner {
   updatedAt      DateTime   @updatedAt
 }
 
-// ============================================================
-// سئو (بند ۴۶ و ۴۷)
-// ============================================================
-
 model SeoMeta {
-  id              String  @id @default(cuid())
+  id              String    @id @default(cuid())
   seoTitle        String?
   metaDescription String?
   canonical       String?
   ogTitle         String?
   ogDescription   String?
   ogImageId       String?
-  noindex         Boolean @default(false)
-  inSitemap       Boolean @default(true)
-
-  category Category? @relation("CategorySeo")
-  product  Product?  @relation("ProductSeo")
-  brand    Brand?    @relation("BrandSeo")
+  noindex         Boolean   @default(false)
+  inSitemap       Boolean   @default(true)
+  brand           Brand?    @relation("BrandSeo")
+  category        Category? @relation("CategorySeo")
+  product         Product?  @relation("ProductSeo")
 }
 
 model SlugRedirect {
@@ -1191,10 +910,6 @@ model SlugRedirect {
   newSlug   String
   createdAt DateTime @default(now())
 }
-
-// ============================================================
-// تنظیمات (بند ۵۰ و ۸۰)
-// ============================================================
 
 model Setting {
   key       String   @id
@@ -1208,34 +923,17 @@ model DesignToken {
   value String
 }
 
-// ============================================================
-// اعلان، رویداد، بازگشت کالا، لاگ (بند ۵۱، ۵۵، ۵۶، ۸۴)
-// ============================================================
-
-enum NotificationChannel {
-  EMAIL
-  SMS
-  IN_APP
-  ADMIN
-}
-
-enum NotificationStatus {
-  QUEUED
-  SENT
-  FAILED
-}
-
 model Notification {
-  id          String             @id @default(cuid())
+  id          String              @id @default(cuid())
   channel     NotificationChannel
   templateKey String
   to          String
   payload     Json?
-  status      NotificationStatus @default(QUEUED)
+  status      NotificationStatus  @default(QUEUED)
   sentAt      DateTime?
-  lastError   String? // فاز ۱۱ (P2-B): آخرین خطای dispatch — NOT_CONFIGURED/PROVIDER/...
-  attempts    Int                @default(0) // فاز ۱۱ (P2-B): شمار تلاش‌های dispatch
-  createdAt   DateTime           @default(now())
+  createdAt   DateTime            @default(now())
+  lastError   String?
+  attempts    Int                 @default(0)
 }
 
 model SmsTemplate {
@@ -1261,6 +959,1596 @@ model Event {
   createdAt  DateTime @default(now())
 
   @@index([name])
+}
+
+model ReturnRequest {
+  id           String        @id @default(cuid())
+  number       String        @unique
+  orderId      String?
+  posInvoiceId String?
+  policyId     String?
+  reason       ReturnReason  @default(OTHER)
+  status       ReturnStatus  @default(REQUESTED)
+  refundId     String?
+  notes        String?
+  actorId      String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  refund       Refund?
+  items        ReturnItem[]
+  order        Order?        @relation(fields: [orderId], references: [id])
+  policy       ReturnPolicy? @relation(fields: [policyId], references: [id])
+  posInvoice   PosInvoice?   @relation(fields: [posInvoiceId], references: [id])
+
+  @@index([status, createdAt])
+}
+
+model ReturnItem {
+  id               String          @id @default(cuid())
+  returnId         String
+  orderItemId      String?
+  posInvoiceItemId String?
+  variantSku       String
+  qty              Int
+  condition        ReturnCondition @default(SELLABLE)
+  reason           ReturnReason    @default(OTHER)
+  return           ReturnRequest   @relation(fields: [returnId], references: [id], onDelete: Cascade)
+}
+
+/// سیاست برگشت — داده قابل مدیریت، نه کد (بند ۸۳)
+model ReturnPolicy {
+  id                String          @id @default(cuid())
+  name              String
+  windowDays        Int             @default(7)
+  requiresApproval  Boolean         @default(true)
+  hygieneRestricted Boolean         @default(true)
+  appliesTo         Json?
+  active            Boolean         @default(true)
+  returns           ReturnRequest[]
+}
+
+/// بازپرداخت — تراکنش مالی واقعی و مستقل از سفارش (بند ۲۹)
+model Refund {
+  id             String          @id @default(cuid())
+  number         String          @unique
+  refundType     String          @default("partial")
+  method         RefundMethod
+  amount         BigInt
+  state          RefundState     @default(PENDING)
+  sourceType     String
+  sourceId       String
+  attemptId      String?
+  returnId       String?         @unique
+  idempotencyKey String          @unique
+  actorId        String?
+  createdAt      DateTime        @default(now())
+  orderId        String?
+  attempt        PaymentAttempt? @relation(fields: [attemptId], references: [id])
+  order          Order?          @relation(fields: [orderId], references: [id])
+  return         ReturnRequest?  @relation(fields: [returnId], references: [id])
+  items          RefundItem[]
+}
+
+model RefundItem {
+  id          String  @id @default(cuid())
+  refundId    String
+  orderItemId String?
+  variantSku  String?
+  qty         Int
+  amount      BigInt
+  refund      Refund  @relation(fields: [refundId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String?
+  oldValues Json?
+  newValues Json?
+  ip        String?
+  createdAt DateTime @default(now())
+  actor     User?    @relation(fields: [actorId], references: [id])
+
+  @@index([entity, entityId])
+}
+
+/// یک دستهٔ ورود فایل — نگه‌دارندهٔ پیش‌نمایش تا Rollback.
+///
+/// چرا ردیف‌ها در DB می‌مانند: Rollback بر پایهٔ `before/after` همان ردیف‌ها
+/// انجام می‌شود و بدون آن، بازگردانی یعنی «حدس زدن مقدار قبلی» — که در
+/// پروژهٔ مالی پذیرفتنی نیست.
+model ImportBatch {
+  id          String            @id @default(cuid())
+  kind        String            @default("PRODUCTS")
+  filename    String
+  actorId     String?
+  status      ImportBatchStatus @default(PREVIEWED)
+  rowCount    Int               @default(0)
+  createCount Int               @default(0)
+  updateCount Int               @default(0)
+  skipCount   Int               @default(0)
+  errorCount  Int               @default(0)
+  /// هش محتوای نرمال‌شدهٔ پیش‌نمایش — جلوگیری از اعمال دستهٔ دست‌کاری‌شده
+  previewHash String
+  appliedAt   DateTime?
+  revertedAt  DateTime?
+  createdAt   DateTime          @default(now())
+  actor       User?             @relation(fields: [actorId], references: [id])
+  rows        ImportBatchRow[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// یک ردیف پیش‌نمایش/اعمال — `before` فقط برای UPDATE و `after` برای
+/// CREATE/UPDATE معنا دارد؛ SKIP/ERROR هر دو را ندارند.
+model ImportBatchRow {
+  id         String          @id @default(cuid())
+  batchId    String
+  rowNo      Int
+  action     ImportRowAction
+  entityType String          @default("Product")
+  entityId   String?
+  sku        String
+  before     Json?
+  after      Json?
+  message    String?
+  appliedAt  DateTime?
+  batch      ImportBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId, rowNo])
+  @@index([sku])
+}
+
+model Warehouse {
+  id                String             @id @default(cuid())
+  code              String             @unique
+  name              String
+  type              String             @default("main")
+  address           String?
+  phone             String?
+  contact           String?
+  isDefault         Boolean            @default(false)
+  note              String?
+  priority          Int                @default(0)
+  active            Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  /// *
+  ///    * حساب دفتری اختصاصی این انبار (فاز ۶).
+  ///    *
+  ///    * قبلاً همهٔ انبارها روی `1200` جمع می‌شدند، پس گزارش ارزش‌گذاری انبار با
+  ///    * ترازنامه نمی‌خواند. با این فیلد هر انبار زیرحساب خودش را می‌گیرد
+  ///    * (`1200-01`، `1200-02`، …) و مقدار `null` یعنی «فعلاً به گروه ۱۲۰۰ می‌رود».
+  glAccountId       String?
+  costLayers        CostLayer[]
+  damageRecords     DamageRecord[]
+  goodsReceipts     GoodsReceipt[]
+  journalLines      JournalLine[]
+  orders            Order[]
+  posInvoices       PosInvoice[]
+  quarantineRecords QuarantineRecord[]
+  channels          SalesChannel[]
+  ledgerEntries     StockLedgerEntry[]
+  reservations      StockReservation[]
+  transfersFrom     StockTransfer[]    @relation("TransferFrom")
+  transfersTo       StockTransfer[]    @relation("TransferTo")
+  stocktakes        Stocktake[]
+  glAccount         Account?           @relation("WarehouseGlAccount", fields: [glAccountId], references: [id], onUpdate: NoAction)
+
+  @@index([glAccountId])
+}
+
+model StockLedgerEntry {
+  id             String         @id @default(cuid())
+  warehouseId    String
+  variantSku     String
+  type           LedgerType
+  qtyIn          Int            @default(0)
+  qtyOut         Int            @default(0)
+  balanceBefore  Int
+  balanceAfter   Int
+  unitCost       BigInt?
+  refType        String?
+  refId          String?
+  idempotencyKey String         @unique
+  actorId        String?
+  note           String?
+  createdAt      DateTime       @default(now())
+  actor          User?          @relation(fields: [actorId], references: [id])
+  variant        ProductVariant @relation(fields: [variantSku], references: [sku])
+  warehouse      Warehouse      @relation(fields: [warehouseId], references: [id])
+
+  @@index([variantSku, warehouseId, createdAt])
+  @@index([refType, refId])
+}
+
+model StockReservation {
+  id          String           @id @default(cuid())
+  warehouseId String
+  variantSku  String
+  qty         Int
+  state       ReservationState @default(ACTIVE)
+  refType     String?
+  refId       String?
+  expiresAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  order       Order?           @relation(fields: [refId], references: [id], map: "ReservationOrderRef")
+  variant     ProductVariant   @relation(fields: [variantSku], references: [sku])
+  warehouse   Warehouse        @relation(fields: [warehouseId], references: [id])
+
+  @@index([variantSku, warehouseId, state])
+}
+
+model CostLayer {
+  id              String         @id @default(cuid())
+  warehouseId     String
+  variantSku      String
+  quantity        Int            @default(0)
+  totalCost       BigInt         @default(0)
+  avgUnitCost     BigInt         @default(0)
+  lastCost        BigInt         @default(0)
+  costingVersion  Int            @default(1)
+  costingStrategy String         @default("WAC")
+  updatedAt       DateTime       @updatedAt
+  variant         ProductVariant @relation(fields: [variantSku], references: [sku])
+  warehouse       Warehouse      @relation(fields: [warehouseId], references: [id])
+
+  @@unique([warehouseId, variantSku])
+}
+
+model StockTransfer {
+  id              String              @id @default(cuid())
+  number          String              @unique
+  fromWarehouseId String
+  toWarehouseId   String
+  state           TransferState       @default(DRAFT)
+  note            String?
+  requestedById   String?
+  confirmedById   String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  confirmedBy     User?               @relation("TransferConfirmedBy", fields: [confirmedById], references: [id])
+  fromWarehouse   Warehouse           @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
+  requestedBy     User?               @relation("TransferRequestedBy", fields: [requestedById], references: [id])
+  toWarehouse     Warehouse           @relation("TransferTo", fields: [toWarehouseId], references: [id])
+  items           StockTransferItem[]
+}
+
+model StockTransferItem {
+  id         String         @id @default(cuid())
+  transferId String
+  variantSku String
+  qty        Int
+  transfer   StockTransfer  @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  variant    ProductVariant @relation(fields: [variantSku], references: [sku])
+}
+
+model Stocktake {
+  id           String          @id @default(cuid())
+  number       String          @unique
+  warehouseId  String
+  state        StocktakeState  @default(OPEN)
+  countMode    String          @default("ALL")
+  toleranceQty Int             @default(0)
+  note         String?
+  actorId      String?
+  approvedById String?
+  approvedAt   DateTime?
+  createdAt    DateTime        @default(now())
+  closedAt     DateTime?
+  actor        User?           @relation(fields: [actorId], references: [id])
+  approvedBy   User?           @relation("StocktakeApprovedBy", fields: [approvedById], references: [id])
+  warehouse    Warehouse       @relation(fields: [warehouseId], references: [id])
+  items        StocktakeItem[]
+}
+
+model StocktakeItem {
+  id          String         @id @default(cuid())
+  stocktakeId String
+  variantSku  String
+  systemQty   Int
+  countedQty  Int?
+  difference  Int?
+  stocktake   Stocktake      @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  variant     ProductVariant @relation(fields: [variantSku], references: [sku])
+}
+
+model ReorderPolicy {
+  id           String         @id @default(cuid())
+  variantSku   String         @unique
+  minStock     Int            @default(0)
+  reorderPoint Int            @default(0)
+  targetStock  Int?
+  variant      ProductVariant @relation(fields: [variantSku], references: [sku])
+}
+
+model QuarantineRecord {
+  id          String          @id @default(cuid())
+  number      String          @unique
+  warehouseId String
+  variantSku  String
+  qty         Int
+  reason      String
+  state       QuarantineState @default(HELD)
+  refType     String?
+  refId       String?
+  actorId     String?
+  releasedAt  DateTime?
+  note        String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  variant     ProductVariant  @relation(fields: [variantSku], references: [sku])
+  warehouse   Warehouse       @relation(fields: [warehouseId], references: [id])
+
+  @@index([state])
+  @@index([variantSku])
+}
+
+model DamageRecord {
+  id          String         @id @default(cuid())
+  number      String         @unique
+  warehouseId String
+  variantSku  String
+  qty         Int
+  kind        String
+  reason      String?
+  unitCost    BigInt         @default(0)
+  state       DamageState    @default(POSTED)
+  refType     String?
+  refId       String?
+  actorId     String?
+  note        String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  variant     ProductVariant @relation(fields: [variantSku], references: [sku])
+  warehouse   Warehouse      @relation(fields: [warehouseId], references: [id])
+
+  @@index([state])
+  @@index([variantSku])
+}
+
+/// تنظیمات انبار — هر کلید: type/default/validation/description + Permission + UI + Audit (قانون ۶)
+model InventorySetting {
+  key          String   @id
+  value        Json
+  valueType    String   @default("number")
+  defaultValue Json
+  description  String
+  updatedBy    String?
+  updatedAt    DateTime @updatedAt
+}
+
+model SalesChannel {
+  id                 String       @id @default(cuid())
+  slug               String       @unique
+  name               String
+  type               String       @default("other")
+  active             Boolean      @default(true)
+  priceLevelId       String
+  inventoryPolicy    String       @default("sell")
+  orderSource        String       @default("native")
+  mapping            Json?
+  integration        Json?
+  paymentMethodIds   String[]
+  defaultWarehouseId String
+  commissionRules    Json?
+  accountingMapping  Json?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  orders             Order[]
+  posInvoices        PosInvoice[]
+  defaultWarehouse   Warehouse    @relation(fields: [defaultWarehouseId], references: [id])
+  priceLevel         PriceLevel   @relation(fields: [priceLevelId], references: [id])
+}
+
+/// سطح قیمت — قابل مدیریت توسط ادمین (بند ۱۰: «دقیقاً ۵» هاردکد نمی‌شود)
+model PriceLevel {
+  id          String         @id @default(cuid())
+  code        String         @unique
+  name        String
+  sortOrder   Int            @default(0)
+  active      Boolean        @default(true)
+  currency    String         @default("IRT")
+  taxBehavior String         @default("default")
+  startsAt    DateTime?
+  endsAt      DateTime?
+  restriction Json?
+  history     PriceHistory[]
+  channels    SalesChannel[]
+  prices      VariantPrice[]
+}
+
+/// قیمت هر واریانت به تفکیک سطح — جایگزین VariantChannelPrice (بند ۱۰/۱۳)
+model VariantPrice {
+  id           String         @id @default(cuid())
+  variantSku   String
+  priceLevelId String
+  price        BigInt
+  salePrice    BigInt?
+  saleStartsAt DateTime?
+  saleEndsAt   DateTime?
+  level        PriceLevel     @relation(fields: [priceLevelId], references: [id])
+  variant      ProductVariant @relation(fields: [variantSku], references: [sku])
+
+  @@unique([variantSku, priceLevelId])
+}
+
+/// تاریخچه تغییر قیمت — فقط رکورد؛ هیچ محاسبه‌ای از آن نمی‌خواند (بند ۱۳)
+model PriceHistory {
+  id           String         @id @default(cuid())
+  variantSku   String
+  priceLevelId String
+  oldPrice     BigInt
+  newPrice     BigInt
+  reason       String?
+  actorId      String?
+  createdAt    DateTime       @default(now())
+  level        PriceLevel     @relation(fields: [priceLevelId], references: [id])
+  variant      ProductVariant @relation(fields: [variantSku], references: [sku])
+
+  @@index([variantSku, createdAt])
+}
+
+model VariantBarcode {
+  id         String         @id @default(cuid())
+  variantSku String
+  barcode    String         @unique
+  kind       String         @default("manufacturer")
+  variant    ProductVariant @relation(fields: [variantSku], references: [sku])
+}
+
+/// *
+///  * سال مالی — دورهٔ حسابداری.
+///  *
+///  * قید `onlyOneOpenFiscalYear` (مهاجرت phase12) تضمین می‌کند در هر لحظه
+///  * **دقیقاً یک** سال باز وجود داشته باشد.
+///  *
+///  * چرا این قید حیاتی است: کد ساخت سند، سال باز را با
+///  * `findFirst({ where: { state: "OPEN" } })` پیدا می‌کند. اگر چند سال باز
+///  * وجود داشته باشد، سندها بین آن‌ها **پخش می‌شوند** و شمارهٔ سند (که فقط
+///  * در محدودهٔ سال یکتاست) دیگر قابل استناد نیست. قبلاً ۵ سال باز هم‌زمان
+///  * روی دیتابیس بود.
+///  *
+///  * وضعیت‌ها:
+///  *  • `OPEN`   — سال جاری، سند جدید پذیرفته می‌شود
+///  *  • `LOCKED`  — بسته شد ولی قابل بازگشایی است (اشتباه سند قابل اصلاح)
+///  *  • `CLOSED` — بستهٔ نهایی؛ تنها با بازگشایی صریح مدیر ارشد باز می‌شود
+model FiscalYear {
+  id              String         @id @default(cuid())
+  title           String
+  startsAt        DateTime
+  endsAt          DateTime
+  state           FiscalState    @default(OPEN)
+  closedAt        DateTime?
+  closedById      String?
+  reopenedAt      DateTime?
+  reopenedById    String?
+  closingSnapshot Json?
+  createdAt       DateTime?      @default(now())
+  updatedAt       DateTime?      @updatedAt
+  entries         JournalEntry[]
+
+  @@index([state])
+  @@index([startsAt])
+}
+
+model Account {
+  id              String        @id @default(cuid())
+  code            String        @unique
+  name            String
+  type            AccountType
+  parentAccountId String?
+  level           Int           @default(1)
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  parent          Account?      @relation("AccountTree", fields: [parentAccountId], references: [id])
+  children        Account[]     @relation("AccountTree")
+  bankAccounts    BankAccount[]
+  cashAccounts    CashAccount[]
+  journalLines    JournalLine[]
+  warehouses      Warehouse[]   @relation("WarehouseGlAccount")
+
+  @@index([parentAccountId])
+  @@index([type])
+}
+
+model JournalEntry {
+  id               String            @id @default(cuid())
+  number           String
+  fiscalYearId     String
+  date             DateTime
+  description      String?
+  sourceType       String?
+  sourceId         String?
+  state            JournalState      @default(DRAFT)
+  isReversalOfId   String?
+  actorId          String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  checkTransitions CheckTransition[]
+  actor            User?             @relation(fields: [actorId], references: [id])
+  fiscalYear       FiscalYear        @relation(fields: [fiscalYearId], references: [id])
+  isReversalOf     JournalEntry?     @relation("JournalReversal", fields: [isReversalOfId], references: [id])
+  reversals        JournalEntry[]    @relation("JournalReversal")
+  lines            JournalLine[]
+
+  @@unique([fiscalYearId, number])
+  @@index([sourceType, sourceId])
+  @@index([date])
+}
+
+model JournalLine {
+  id           String       @id @default(cuid())
+  entryId      String
+  accountId    String
+  debit        BigInt       @default(0)
+  credit       BigInt       @default(0)
+  costCenterId String?
+  partyType    String?
+  partyId      String?
+  /// *
+  ///    * انباری که این خط به آن مربوط است (فاز ۶).
+  ///    *
+  ///    * برای سندهای موجود `null` است و رفتار را خراب نمی‌کند — فقط یعنی آن خط
+  ///    * به انبار خاصی نسبت داده نشده. با پر شدنش، گزارش «سود هر انبار» ممکن می‌شود.
+  warehouseId  String?
+  account      Account      @relation(fields: [accountId], references: [id])
+  entry        JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  warehouse    Warehouse?   @relation(fields: [warehouseId], references: [id], onUpdate: NoAction)
+
+  @@index([accountId])
+  @@index([partyType, partyId])
+  @@index([entryId])
+  @@index([warehouseId])
+  @@index([entryId, debit, credit])
+}
+
+/// *
+///  * قرارداد حقوق یک کارمند — گام ۷ فاز ۲.
+///  *
+///  * حقوق ماهانه چیزی است که هر ماه **تکرار** می‌شود، پس داده‌اش باید نگهداری
+///  * شود نه اینکه هر ماه دستی سند زده شود. یک کارمند فقط یک قرارداد فعال دارد
+///  * (قید دیتابیسی) تا حقوق دو بار پرداخت نشود.
+model PayrollContract {
+  id                 String    @id @default(cuid())
+  userId             String
+  baseSalary         BigInt    @default(0)
+  housingAllowance   BigInt    @default(0)
+  childAllowance     BigInt    @default(0)
+  transportAllowance BigInt    @default(0)
+  otherAllowance     BigInt    @default(0)
+  deduction          BigInt    @default(0)
+  insuranceDeduction BigInt    @default(0)
+  startDate          DateTime
+  endDate            DateTime?
+  active             Boolean   @default(true)
+  note               String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// *
+///  * لیست حقوق یک ماه — گام ۷ فاز ۲.
+///  *
+///  * چرخه: DRAFT (محاسبه و بازبینی) → POSTED (سند حسابداری زده شد).
+///  * پس از POSTED دیگر قابل تغییر نیست، وگرنه حقوق پرداخت‌شده بازنویسی می‌شد.
+model PayrollRun {
+  id             String        @id @default(cuid())
+  period         String        @unique
+  title          String
+  state          PayrollState  @default(DRAFT)
+  totalGross     BigInt        @default(0)
+  totalDeduction BigInt        @default(0)
+  totalNet       BigInt        @default(0)
+  journalEntryId String?
+  postedAt       DateTime?
+  postedById     String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @default(now()) @updatedAt
+  items          PayrollItem[]
+}
+
+/// * ردیف حقوق یک کارمند در یک ماه
+model PayrollItem {
+  id        String     @id @default(cuid())
+  runId     String
+  userId    String
+  period    String
+  gross     BigInt     @default(0)
+  deduction BigInt     @default(0)
+  net       BigInt     @default(0)
+  createdAt DateTime   @default(now())
+  run       PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, period], map: "PayrollItem_one_per_user_month")
+  @@index([runId])
+}
+
+model NumberSeries {
+  id         String @id @default(cuid())
+  scope      String @unique
+  prefix     String
+  nextNumber Int    @default(1)
+  padding    Int    @default(5)
+}
+
+model Supplier {
+  id               String            @id @default(cuid())
+  name             String
+  phone            String?
+  email            String?
+  address          String?
+  taxId            String?
+  bankInfo         Json?
+  creditLimit      BigInt?
+  notes            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  deletedAt        DateTime?
+  checks           Check[]
+  goodsReceipts    GoodsReceipt[]
+  purchaseInvoices PurchaseInvoice[]
+  purchaseOrders   PurchaseOrder[]
+  purchaseReturns  PurchaseReturn[]
+}
+
+model PurchaseOrder {
+  id         String              @id @default(cuid())
+  number     String              @unique
+  supplierId String
+  status     PurchaseState       @default(DRAFT)
+  note       String?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  receipts   GoodsReceipt[]
+  supplier   Supplier            @relation(fields: [supplierId], references: [id])
+  items      PurchaseOrderItem[]
+}
+
+model PurchaseOrderItem {
+  id         String         @id @default(cuid())
+  orderId    String
+  variantSku String
+  qty        Int
+  unitCost   BigInt
+  po         PurchaseOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant    ProductVariant @relation(fields: [variantSku], references: [sku])
+}
+
+model GoodsReceipt {
+  id               String             @id @default(cuid())
+  number           String             @unique
+  supplierId       String
+  warehouseId      String
+  poId             String?
+  receivedAt       DateTime           @default(now())
+  note             String?
+  po               PurchaseOrder?     @relation(fields: [poId], references: [id])
+  supplier         Supplier           @relation(fields: [supplierId], references: [id])
+  warehouse        Warehouse          @relation(fields: [warehouseId], references: [id])
+  items            GoodsReceiptItem[]
+  purchaseInvoices PurchaseInvoice[]
+}
+
+model GoodsReceiptItem {
+  id         String         @id @default(cuid())
+  receiptId  String
+  variantSku String
+  qty        Int
+  unitCost   BigInt
+  landedCost BigInt         @default(0)
+  receipt    GoodsReceipt   @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  variant    ProductVariant @relation(fields: [variantSku], references: [sku])
+}
+
+model PurchaseInvoice {
+  id            String                    @id @default(cuid())
+  number        String                    @unique
+  supplierId    String
+  grId          String?
+  state         PurchaseInvoiceState      @default(DRAFT)
+  subtotal      BigInt
+  discountTotal BigInt                    @default(0)
+  shippingTotal BigInt                    @default(0)
+  taxableAmount BigInt                    @default(0)
+  taxTotal      BigInt                    @default(0)
+  grandTotal    BigInt
+  dueDate       DateTime?
+  note          String?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  receipt       GoodsReceipt?             @relation(fields: [grId], references: [id])
+  supplier      Supplier                  @relation(fields: [supplierId], references: [id])
+  items         PurchaseInvoiceItem[]
+  payments      PurchasePayment[]
+  deliveries    SupplierInvoiceDelivery[]
+}
+
+model PurchaseInvoiceItem {
+  id         String          @id @default(cuid())
+  invoiceId  String
+  variantSku String
+  qty        Int
+  unitCost   BigInt
+  invoice    PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  variant    ProductVariant  @relation(fields: [variantSku], references: [sku])
+}
+
+model PurchasePayment {
+  id             String          @id @default(cuid())
+  invoiceId      String
+  method         String
+  amount         BigInt
+  cashAccountId  String?
+  checkId        String?         @unique
+  paidAt         DateTime        @default(now())
+  idempotencyKey String?         @unique
+  check          Check?          @relation(fields: [checkId], references: [id])
+  invoice        PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model PurchaseReturn {
+  id         String               @id @default(cuid())
+  number     String               @unique
+  supplierId String
+  reason     String?
+  createdAt  DateTime             @default(now())
+  supplier   Supplier             @relation(fields: [supplierId], references: [id])
+  items      PurchaseReturnItem[]
+}
+
+model PurchaseReturnItem {
+  id             String         @id @default(cuid())
+  returnId       String
+  variantSku     String
+  qty            Int
+  unitCost       BigInt
+  purchaseReturn PurchaseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  variant        ProductVariant @relation(fields: [variantSku], references: [sku])
+}
+
+model PosInvoice {
+  id             String           @id @default(cuid())
+  number         String           @unique
+  channelId      String
+  warehouseId    String
+  shiftId        String?
+  cashierId      String?
+  customerId     String?
+  customerName   String?
+  customerMobile String?
+  priceLevel     Int              @default(1)
+  state          PosInvoiceState  @default(DRAFT)
+  subtotal       BigInt           @default(0)
+  discountTotal  BigInt           @default(0)
+  extraCharges   Json?
+  taxableAmount  BigInt           @default(0)
+  taxTotal       BigInt           @default(0)
+  grandTotal     BigInt           @default(0)
+  notes          String?
+  idempotencyKey String           @unique
+  finalizedAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  revision       Int              @default(1)
+  correctsId     String?
+  attempts       PaymentAttempt[]
+  cashier        User?            @relation(fields: [cashierId], references: [id])
+  channel        SalesChannel     @relation(fields: [channelId], references: [id])
+  corrects       PosInvoice?      @relation("PosInvoiceCorrection", fields: [correctsId], references: [id])
+  corrections    PosInvoice[]     @relation("PosInvoiceCorrection")
+  shift          CashierShift?    @relation(fields: [shiftId], references: [id])
+  warehouse      Warehouse        @relation(fields: [warehouseId], references: [id])
+  items          PosInvoiceItem[]
+  payments       PosPayment[]
+  returnRequests ReturnRequest[]
+
+  @@index([shiftId])
+  @@index([correctsId])
+}
+
+model PosInvoiceItem {
+  id                String         @id @default(cuid())
+  invoiceId         String
+  variantSku        String
+  qty               Int
+  unitPriceSnapshot BigInt
+  discount          BigInt         @default(0)
+  lineTotal         BigInt
+  invoice           PosInvoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  variant           ProductVariant @relation(fields: [variantSku], references: [sku])
+}
+
+model PosPayment {
+  id             String           @id @default(cuid())
+  invoiceId      String
+  method         PosPaymentMethod
+  amount         BigInt
+  cashRegisterId String?
+  checkId        String?          @unique
+  ref            String?
+  paidAt         DateTime         @default(now())
+  cashRegister   CashRegister?    @relation(fields: [cashRegisterId], references: [id])
+  check          Check?           @relation(fields: [checkId], references: [id])
+  invoice        PosInvoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model CashRegister {
+  id             String         @id @default(cuid())
+  name           String
+  location       String?
+  openingBalance BigInt         @default(0)
+  currentBalance BigInt         @default(0)
+  glAccountId    String?
+  active         Boolean        @default(true)
+  shifts         CashierShift[]
+  payments       PosPayment[]
+}
+
+model PosTicket {
+  id             String   @id @default(cuid())
+  userId         String
+  shiftId        String?
+  status         String   @default("OPEN")
+  customerMobile String?
+  customerName   String?
+  items          Json
+  discountTotal  Int      @default(0)
+  version        Int      @default(1)
+  audit          Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, userId])
+  @@index([shiftId])
+}
+
+model CashierShift {
+  id           String       @id @default(cuid())
+  registerId   String
+  userId       String
+  openingCash  BigInt       @default(0)
+  expectedCash BigInt?
+  actualCash   BigInt?
+  difference   BigInt?
+  cardTotal    BigInt       @default(0)
+  onlineTotal  BigInt       @default(0)
+  refundTotal  BigInt       @default(0)
+  expenseTotal BigInt       @default(0)
+  state        ShiftState   @default(OPEN)
+  openedAt     DateTime     @default(now())
+  closedAt     DateTime?
+  register     CashRegister @relation(fields: [registerId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+  invoices     PosInvoice[]
+}
+
+model CashAccount {
+  id             String  @id @default(cuid())
+  name           String
+  kind           String  @default("cash")
+  glAccountId    String
+  openingBalance BigInt  @default(0)
+  currentBalance BigInt  @default(0)
+  active         Boolean @default(true)
+  account        Account @relation(fields: [glAccountId], references: [id])
+}
+
+model BankAccount {
+  id             String          @id @default(cuid())
+  name           String
+  bankName       String
+  accountNumber  String
+  iban           String?
+  glAccountId    String
+  openingBalance BigInt          @default(0)
+  currentBalance BigInt          @default(0)
+  active         Boolean         @default(true)
+  account        Account         @relation(fields: [glAccountId], references: [id])
+  statements     BankStatement[]
+  checks         Check[]
+}
+
+model BankStatement {
+  id               String               @id @default(cuid())
+  bankAccountId    String
+  date             DateTime
+  amount           BigInt
+  description      String?
+  matchedPaymentId String?
+  bankAccount      BankAccount          @relation(fields: [bankAccountId], references: [id])
+  matches          BankStatementMatch[]
+}
+
+/// تخصیص/تطبیق reconciliation بانک؛ تطبیق هرگز به‌تنهایی Check را clear نمی‌کند.
+model BankStatementMatch {
+  id              String                  @id @default(cuid())
+  statementId     String
+  sourceType      String
+  sourceId        String
+  allocatedAmount BigInt                  @default(0)
+  state           BankStatementMatchState @default(MANUAL_REVIEW)
+  note            String?
+  actorId         String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  checkId         String?
+  check           Check?                  @relation("CheckStatementMatches", fields: [checkId], references: [id], onDelete: Restrict)
+  statement       BankStatement           @relation(fields: [statementId], references: [id], onDelete: Cascade)
+
+  @@unique([statementId, sourceType, sourceId])
+  @@index([sourceType, sourceId, state])
+  @@index([statementId, state])
+  @@index([checkId])
+}
+
+model Check {
+  id                    String               @id @default(cuid())
+  direction             CheckDirection
+  status                CheckStatus          @default(RECEIVED)
+  number                String
+  bankName              String
+  branch                String?
+  accountNo             String?
+  amount                BigInt
+  issueDate             DateTime
+  dueDate               DateTime
+  drawer                String?
+  payee                 String?
+  sourceType            String?
+  sourceId              String?
+  notes                 String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  customerId            String?
+  supplierId            String?
+  accountsReceivableId  String?
+  treasuryBankAccountId String?
+  idempotencyKey        String?              @unique
+  lifecycleVersion      Int                  @default(0)
+  statementMatches      BankStatementMatch[] @relation("CheckStatementMatches")
+  receivable            AccountsReceivable?  @relation(fields: [accountsReceivableId], references: [id], onDelete: Restrict)
+  customer              Customer?            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  supplier              Supplier?            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  treasuryBank          BankAccount?         @relation(fields: [treasuryBankAccountId], references: [id], onDelete: Restrict)
+  transitions           CheckTransition[]
+  settlement            PaymentSettlement?
+  posPayment            PosPayment?
+  purchasePayment       PurchasePayment?
+
+  @@index([dueDate])
+  @@index([direction, status])
+  @@index([customerId, dueDate])
+  @@index([supplierId, dueDate])
+  @@index([sourceType, sourceId])
+}
+
+model CheckTransition {
+  id             String        @id @default(cuid())
+  checkId        String
+  version        Int
+  fromStatus     CheckStatus?
+  toStatus       CheckStatus
+  idempotencyKey String        @unique
+  actorId        String?
+  reason         String?
+  requestId      String?
+  journalEntryId String?
+  createdAt      DateTime      @default(now())
+  check          Check         @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
+
+  @@unique([checkId, version])
+  @@index([checkId, createdAt])
+}
+
+model Expense {
+  id            String          @id @default(cuid())
+  number        String
+  date          DateTime
+  categoryId    String
+  amount        BigInt
+  cashAccountId String
+  description   String?
+  attachmentId  String?
+  vendor        String?
+  costCenterId  String?
+  isRecurring   Boolean         @default(false)
+  recurrence    Json?
+  state         ExpenseState    @default(POSTED)
+  actorId       String?
+  createdAt     DateTime        @default(now())
+  actor         User?           @relation(fields: [actorId], references: [id])
+  category      ExpenseCategory @relation(fields: [categoryId], references: [id])
+}
+
+model ExpenseCategory {
+  id          String    @id @default(cuid())
+  name        String
+  glAccountId String
+  expenses    Expense[]
+}
+
+model CustomerAccount {
+  id                 String               @id @default(cuid())
+  customerId         String               @unique
+  creditLimit        BigInt               @default(0)
+  outstanding        BigInt               @default(0)
+  dueDays            Int                  @default(0)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  receivables        AccountsReceivable[]
+  creditTransactions CreditTransaction[]
+}
+
+model AccountsReceivable {
+  id              String              @id @default(cuid())
+  accountPId      String
+  refType         String
+  refId           String
+  amount          BigInt
+  paidAmount      BigInt              @default(0)
+  dueDate         DateTime?
+  state           ArState             @default(OPEN)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  exposureType    ArExposureType      @default(TRADE)
+  customerAccount CustomerAccount     @relation(fields: [accountPId], references: [id])
+  checks          Check[]
+  settlements     PaymentSettlement[]
+
+  @@index([refType, refId])
+  @@index([accountPId, exposureType, state])
+}
+
+model PaymentSettlement {
+  id      String             @id @default(cuid())
+  arId    String
+  method  String
+  amount  BigInt
+  paidAt  DateTime           @default(now())
+  checkId String?            @unique
+  ar      AccountsReceivable @relation(fields: [arId], references: [id], onDelete: Cascade)
+  check   Check?             @relation(fields: [checkId], references: [id])
+}
+
+model CreditTransaction {
+  id        String          @id @default(cuid())
+  accountId String
+  type      CreditTxType
+  amount    BigInt
+  note      String?
+  actorId   String?
+  createdAt DateTime        @default(now())
+  account   CustomerAccount @relation(fields: [accountId], references: [id])
+}
+
+model SupplierAccount {
+  id          String            @id @default(cuid())
+  supplierId  String            @unique
+  outstanding BigInt            @default(0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  payables    AccountsPayable[]
+}
+
+/// تحویل فاکتور خرید به تامین‌کننده (بند ۲۷) — ردیف در دامنه؛ ارسال واقعی با آداپتور
+/// (SMTP/Kavenegar) فقط با credential؛ بدون credential صف می‌ماند و جعل «ارسال شد» ممنوع (بند ۱۱۱)
+model SupplierInvoiceDelivery {
+  id        String          @id @default(cuid())
+  invoiceId String
+  channel   String
+  to        String
+  state     String          @default("QUEUED")
+  mediaKind String?
+  attempts  Int             @default(0)
+  lastError String?
+  sentAt    DateTime?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  invoice   PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([state])
+}
+
+model AccountsPayable {
+  id              String          @id @default(cuid())
+  accountPId      String
+  refType         String
+  refId           String
+  amount          BigInt
+  paidAmount      BigInt          @default(0)
+  dueDate         DateTime?
+  state           ApState         @default(OPEN)
+  createdAt       DateTime        @default(now())
+  supplierAccount SupplierAccount @relation(fields: [accountPId], references: [id])
+
+  @@index([refType, refId])
+}
+
+model TaxRate {
+  id            String    @id @default(cuid())
+  name          String
+  code          String    @unique
+  rate          Int
+  taxType       String    @default("vat")
+  jurisdiction  String    @default("IR")
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+  active        Boolean   @default(true)
+  rules         TaxRule[]
+}
+
+model TaxRule {
+  id        String  @id @default(cuid())
+  taxRateId String
+  appliesTo Json
+  priority  Int     @default(0)
+  taxRate   TaxRate @relation(fields: [taxRateId], references: [id])
+}
+
+model TaxTransaction {
+  id            String   @id @default(cuid())
+  refType       String
+  refId         String
+  taxableAmount BigInt
+  taxAmount     BigInt
+  snapshot      Json?
+  createdAt     DateTime @default(now())
+
+  @@unique([refType, refId])
+}
+
+model Shipment {
+  id           String        @id @default(cuid())
+  orderId      String
+  methodId     String?
+  provider     String?
+  trackingCode String?
+  status       ShipmentState @default(PENDING)
+  shippedAt    DateTime?
+  deliveredAt  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([trackingCode])
+}
+
+/// رویداد ورودی همه providerهای خارجی — verify + idempotent + retry (بند ۶۴)
+model WebhookEvent {
+  id             String    @id @default(cuid())
+  provider       String
+  eventType      String
+  externalId     String?
+  signatureValid Boolean   @default(false)
+  status         String    @default("PENDING")
+  retries        Int       @default(0)
+  payload        Json?
+  error          String?
+  processedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@unique([provider, externalId])
+  @@index([status])
+}
+
+/// وبهوک خروجی — endpoint ثبت‌شدهٔ مشترک رویدادهای دامنه (گام ۱۸)
+model WebhookEndpoint {
+  id          String            @id @default(cuid())
+  url         String
+  secret      String
+  events      String[]
+  description String?
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  deliveries  WebhookDelivery[]
+
+  @@index([active])
+}
+
+/// تحویل وبهوک خروجی — هر رویداد×endpoint یک ردیف؛ شکست با backoff دوباره تلاش می‌شود
+model WebhookDelivery {
+  id            String          @id @default(cuid())
+  endpointId    String
+  eventName     String
+  payload       Json
+  state         String          @default("PENDING")
+  attempts      Int             @default(0)
+  responseCode  Int?
+  lastError     String?
+  nextAttemptAt DateTime        @default(now())
+  deliveredAt   DateTime?
+  createdAt     DateTime        @default(now())
+  endpoint      WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([state, nextAttemptAt])
+  @@index([endpointId, createdAt])
+}
+
+/// صف ارسال به سامانه مالیاتی — بدون ادعای انطباق (بند ۴۴)
+model TaxSubmission {
+  id               String    @id @default(cuid())
+  taxTransactionId String    @unique
+  status           String    @default("QUEUED")
+  attempts         Int       @default(0)
+  lastError        String?
+  submittedAt      DateTime?
+  response         Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+/// ضمیمه اسناد — purchase/expense/check/accounting/customer (بند ۵۸)
+model Attachment {
+  id        String   @id @default(cuid())
+  mediaId   String
+  ownerType String
+  ownerId   String
+  title     String?
+  createdAt DateTime @default(now())
+  media     Media    @relation(fields: [mediaId], references: [id])
+
+  @@index([ownerType, ownerId])
+}
+
+/// شعبه — نرم؛ در V1 یک شعبه فعال (بند ۵۰)
+model Branch {
+  id     String  @id @default(cuid())
+  code   String  @unique
+  name   String
+  active Boolean @default(true)
+}
+
+/// بج اعتماد/مجوز — کاملاً داینامیک؛ فرانت generic رندر می‌کند (بند ۳۳–۴۶)
+model TrustBadge {
+  id              String   @id @default(cuid())
+  internalName    String
+  displayTitle    String?
+  description     String?
+  imageMediaId    String?
+  icon            String?
+  verificationUrl String
+  altText         String?
+  active          Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  openInNewTab    Boolean  @default(true)
+  rel             String?
+  placement       String   @default("footer_trust")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+/// پکیج/ست — مصرف اجزا در Ledger هنگام فروش (بند ۶۹؛ فعال‌سازی فاز آینده)
+model ProductBundle {
+  id        String              @id @default(cuid())
+  productId String              @unique
+  active    Boolean             @default(true)
+  product   Product             @relation(fields: [productId], references: [id])
+  items     ProductBundleItem[]
+}
+
+model ProductBundleItem {
+  id         String         @id @default(cuid())
+  bundleId   String
+  variantSku String
+  qty        Int
+  bundle     ProductBundle  @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  variant    ProductVariant @relation(fields: [variantSku], references: [sku])
+}
+
+model ApprovalRequest {
+  id            String        @id @default(cuid())
+  type          String
+  payload       Json
+  state         ApprovalState @default(PENDING)
+  requestedById String
+  decidedById   String?
+  decidedAt     DateTime?
+  note          String?
+  createdAt     DateTime      @default(now())
+  decidedBy     User?         @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
+  requestedBy   User          @relation("ApprovalRequestedBy", fields: [requestedById], references: [id])
+}
+
+model Reminder {
+  id                String        @id @default(cuid())
+  title             String
+  dueAt             DateTime
+  repeat            String?
+  relatedEntityType String?
+  relatedEntityId   String?
+  priority          Int           @default(0)
+  status            ReminderState @default(PENDING)
+  channels          String[]      @default(["in_app"])
+  createdAt         DateTime      @default(now())
+  idempotencyKey    String?       @unique
+}
+
+/// Feature Flag — بند ۸۱: بدون حذف کد قابل خاموش/روشن؛ super admin کنترل می‌کند
+model FeatureFlag {
+  key       String   @id
+  enabled   Boolean  @default(false)
+  audience  String   @default("all")
+  note      String?
+  updatedAt DateTime @updatedAt
+}
+
+model ConsentRecord {
+  id        String      @id @default(cuid())
+  ownerType String      @default("customer")
+  ownerKey  String
+  kind      ConsentKind
+  granted   Boolean
+  source    String?
+  createdAt DateTime    @default(now())
+
+  @@unique([ownerKey, kind])
+  @@index([ownerKey])
+}
+
+/// آمار بازدید روزانهٔ فروشگاه (گام ۱۵-۶، first-party) — همیشه‌روشن (D-5)،
+/// رضایت فقط دروازهٔ GA4 است نه این جدول. «روز» = روز تهران (آفست ثابت +۳:۳۰).
+/// views پس از D-6 پنجره‌ای است: هر (روز، نشست، مسیر) در بازهٔ ۳۰ دقیقه یک‌بار.
+model DailyVisit {
+  day       DateTime @id
+  views     Int      @default(0)
+  sessions  Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+/// بازدیدکنندهٔ یکتای هر روز — با unique([day, sessionKey]) هر session
+/// روزی فقط یک‌بار در شمارش sessions می‌نشیند؛ رشدش با DailyVisit هم‌پایه است.
+model DailyVisitSession {
+  day        DateTime
+  sessionKey String
+  createdAt  DateTime @default(now())
+
+  @@id([day, sessionKey])
+  @@index([sessionKey])
+}
+
+/// پنجرهٔ یکتاییِ بازدید (گام ۱۵-۶، D-6) — هر (روز، نشست، مسیر) فقط وقتی
+/// views را بالا می‌برد که آخرین پینگش دست‌کم ۳۰ دقیقه قبل بوده باشد؛
+/// refresh و برگشتِ سریع به همان صفحه دوباره‌شماری نمی‌کند (از هر دو سمت:
+/// sessionStorage کلاینت + این جدول سرور — سرور مرز حقیقت است).
+/// updatedMany/createMany اتمیک‌اند؛ ردیف‌های قدیمی‌تر از ۲ روز پاک می‌شوند.
+model DailyVisitPath {
+  day        DateTime
+  sessionKey String
+  path       String
+  updatedAt  DateTime @default(now())
+
+  @@id([day, sessionKey, path])
+  @@index([day])
+}
+
+model DomainEventOutbox {
+  id          String      @id @default(cuid())
+  name        String
+  payload     Json
+  state       OutboxState @default(PENDING)
+  attempts    Int         @default(0)
+  availableAt DateTime    @default(now())
+  processedAt DateTime?
+  lastError   String?
+  createdAt   DateTime    @default(now())
+
+  @@unique([name, payload])
+  @@index([state, availableAt])
+}
+
+model StockAlert {
+  id         String          @id @default(cuid())
+  variantSku String
+  channel    String          @default("sms")
+  target     String
+  state      StockAlertState @default(PENDING)
+  notifiedAt DateTime?
+  createdAt  DateTime        @default(now())
+  variant    ProductVariant  @relation(fields: [variantSku], references: [sku])
+
+  @@unique([variantSku, channel, target])
+  @@index([state])
+}
+
+model InventoryMovement {
+  id        String         @id @default(cuid())
+  variantId String
+  delta     Int
+  reason    MovementReason
+  refId     String?
+  actorId   String?
+  note      String?
+  createdAt DateTime       @default(now())
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([variantId])
+}
+
+enum UserRole {
+  CUSTOMER
+  SUPER_ADMIN
+  STORE_MANAGER
+  PRODUCT_MANAGER
+  ORDER_MANAGER
+  CONTENT_MANAGER
+  SUPPORT_AGENT
+  MARKETING_MANAGER
+  ACCOUNTANT
+  CASHIER
+  INVENTORY_MANAGER
+  SALES_MANAGER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum EntityStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AttributeType {
+  TEXT
+  SELECT
+  MULTI_SELECT
+  COLOR
+  IMAGE
+  NUMBER
+  BOOLEAN
+}
+
+/// یک کارِ عکاسی — «برای این محصول، این کادر گرفته شده یا نه».
+///
+/// چرا مدل جدا و نه یک فلگ روی محصول؟ چون برنامهٔ عکاسی چندکادری است:
+/// هر محصول چند کادر دارد و هر کادر چرخهٔ خودش را دارد (عکس گرفته شد → تأیید شد
+/// → یا نیاز به عکسِ دوباره). یک رکورد = یک «محصول × کادر»؛ یکتایی همین
+/// ترکیب در DB تضمین شده تا یک کادر دو بار ثبت نشود.
+enum PhotoTaskStatus {
+  PENDING
+  SHOT
+  NEEDS_RETAKE
+  APPROVED
+}
+
+enum MovementReason {
+  PURCHASE
+  ORDER
+  MANUAL
+  RETURN
+  ADJUST
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  PARTIALLY_RETURNED
+  REFUNDED
+  FAILED
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  PAID
+  FAILED
+  REFUNDED
+}
+
+/// * کارمزد درگاه از چه جیبی پرداخت می‌شود
+enum GatewayFeeBearer {
+  MERCHANT
+  CUSTOMER
+}
+
+enum PayState {
+  CREATED
+  PENDING
+  REDIRECTED
+  CALLBACK_RECEIVED
+  VERIFYING
+  PAID
+  FAILED
+  CANCELLED
+  EXPIRED
+  REQUIRES_REVIEW
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum C2cState {
+  PENDING_VERIFICATION
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CORRECTION_REQUIRED
+  EXPIRED
+  CANCELLED
+}
+
+enum ReconciliationStatus {
+  UNMATCHED
+  MATCHED
+  PARTIALLY_MATCHED
+  RECONCILED
+  DISPUTED
+}
+
+enum SettlementStatus {
+  PENDING
+  POSTED
+  VOID
+}
+
+enum PaymentAttemptStatus {
+  PENDING
+  REDIRECTED
+  VERIFIED
+  FAILED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  HIDDEN
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum HomeSectionType {
+  HERO
+  PRODUCT_CAROUSEL
+  PRODUCT_GRID
+  CATEGORY_GRID
+  BRAND_GRID
+  BANNER
+  GUIDE_CARDS
+  TRUST_CARDS
+  NEED_FINDER
+  RICH_TEXT
+  NEWSLETTER
+  IMAGE_TEXT
+  PROMOTIONAL
+}
+
+enum BannerKind {
+  PROMO
+  HOMEPAGE
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  IN_APP
+  ADMIN
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
 }
 
 enum ReturnStatus {
@@ -1289,56 +2577,6 @@ enum ReturnReason {
   OTHER
 }
 
-model ReturnRequest {
-  id           String       @id @default(cuid())
-  number       String       @unique
-  // مبدأ: سفارش آنلاین یا فاکتور POS
-  orderId      String?
-  posInvoiceId String?
-  items        ReturnItem[]
-  policyId     String? // ReturnPolicy — بند ۸۳
-  reason       ReturnReason @default(OTHER)
-  status       ReturnStatus @default(REQUESTED)
-  refundId     String? // پس از تسویه (بند ۲۹)
-  notes        String?
-  actorId      String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-
-  order      Order?        @relation(fields: [orderId], references: [id])
-  posInvoice PosInvoice?   @relation(fields: [posInvoiceId], references: [id])
-  policy     ReturnPolicy? @relation(fields: [policyId], references: [id])
-  refund     Refund?
-
-  @@index([status, createdAt])
-}
-
-model ReturnItem {
-  id               String          @id @default(cuid())
-  returnId         String
-  orderItemId      String? // خط سفارش/فاکتور مبدأ
-  posInvoiceItemId String?
-  variantSku       String
-  qty              Int
-  condition        ReturnCondition @default(SELLABLE)
-  reason           ReturnReason    @default(OTHER)
-
-  return ReturnRequest @relation(fields: [returnId], references: [id], onDelete: Cascade)
-}
-
-/// سیاست برگشت — داده قابل مدیریت، نه کد (بند ۸۳)
-model ReturnPolicy {
-  id                String  @id @default(cuid())
-  name              String
-  windowDays        Int     @default(7)
-  requiresApproval  Boolean @default(true)
-  hygieneRestricted Boolean @default(true) // لباس زیر: بازگشت فقط در شرایط خاص
-  appliesTo         Json? // {categoryIds?, productIds?}
-  active            Boolean @default(true)
-
-  returns ReturnRequest[]
-}
-
 enum RefundMethod {
   CASH
   BANK
@@ -1353,58 +2591,6 @@ enum RefundState {
   CANCELLED
 }
 
-/// بازپرداخت — تراکنش مالی واقعی و مستقل از سفارش (بند ۲۹)
-model Refund {
-  id             String       @id @default(cuid())
-  number         String       @unique
-  refundType     String       @default("partial") // full|partial
-  method         RefundMethod
-  amount         BigInt
-  state          RefundState  @default(PENDING)
-  sourceType     String // order|pos_invoice
-  sourceId       String
-  attemptId      String? // اتصال به تلاش پرداخت مبدأ (بند ۲۵)
-  returnId       String?      @unique
-  idempotencyKey String       @unique
-  actorId        String?
-  createdAt      DateTime     @default(now())
-
-  return  ReturnRequest?  @relation(fields: [returnId], references: [id])
-  attempt PaymentAttempt? @relation(fields: [attemptId], references: [id])
-  items   RefundItem[]
-  order   Order?          @relation(fields: [orderId], references: [id])
-  orderId String?
-}
-
-model RefundItem {
-  id          String  @id @default(cuid())
-  refundId    String
-  orderItemId String?
-  variantSku  String?
-  qty         Int
-  amount      BigInt
-
-  refund Refund @relation(fields: [refundId], references: [id], onDelete: Cascade)
-}
-
-model AuditLog {
-  id        String   @id @default(cuid())
-  actorId   String?
-  action    String
-  entity    String
-  entityId  String?
-  oldValues Json?
-  newValues Json?
-  ip        String?
-  createdAt DateTime @default(now())
-
-  actor User? @relation(fields: [actorId], references: [id])
-
-  @@index([entity, entityId])
-}
-
-// ------------------------------------------------ ورود گروهی (گام ۱۳ · F1-3)
-
 enum ImportBatchStatus {
   PREVIEWED
   APPLIED
@@ -1417,105 +2603,6 @@ enum ImportRowAction {
   UPDATE
   SKIP
   ERROR
-}
-
-/// یک دستهٔ ورود فایل — نگه‌دارندهٔ پیش‌نمایش تا Rollback.
-///
-/// چرا ردیف‌ها در DB می‌مانند: Rollback بر پایهٔ `before/after` همان ردیف‌ها
-/// انجام می‌شود و بدون آن، بازگردانی یعنی «حدس زدن مقدار قبلی» — که در
-/// پروژهٔ مالی پذیرفتنی نیست.
-model ImportBatch {
-  id           String            @id @default(cuid())
-  kind         String            @default("PRODUCTS")
-  filename     String
-  actorId      String?
-  status       ImportBatchStatus @default(PREVIEWED)
-  rowCount     Int               @default(0)
-  createCount  Int               @default(0)
-  updateCount  Int               @default(0)
-  skipCount    Int               @default(0)
-  errorCount   Int               @default(0)
-  /// هش محتوای نرمال‌شدهٔ پیش‌نمایش — جلوگیری از اعمال دستهٔ دست‌کاری‌شده
-  previewHash  String
-  appliedAt    DateTime?
-  revertedAt   DateTime?
-  createdAt    DateTime          @default(now())
-
-  actor User?            @relation(fields: [actorId], references: [id])
-  rows  ImportBatchRow[]
-
-  @@index([status])
-  @@index([createdAt])
-}
-
-/// یک ردیف پیش‌نمایش/اعمال — `before` فقط برای UPDATE و `after` برای
-/// CREATE/UPDATE معنا دارد؛ SKIP/ERROR هر دو را ندارند.
-model ImportBatchRow {
-  id         String          @id @default(cuid())
-  batchId    String
-  rowNo      Int
-  action     ImportRowAction
-  entityType String          @default("Product")
-  entityId   String?
-  sku        String
-  before     Json?
-  after      Json?
-  message    String?
-  appliedAt  DateTime?
-
-  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-
-  @@index([batchId, rowNo])
-  @@index([sku])
-}
-
-// ============================================================
-// ═══════════ COMMERCE SUITE (POS + انبار + حسابداری) ═══════════
-// منبع حقیقت: بند ۱۳۳–۱۳۹ — یک Product/Inventory/Accounting Core
-// ============================================================
-
-// ------------------------------------------------ انبار (بند ۳۰–۴۰)
-
-model Warehouse {
-  id        String   @id @default(cuid())
-  code      String   @unique // MAIN، SALE، RET…
-  name      String
-  type      String   @default("main") // main|store|branch|transit|quarantine|returns|other
-  address   String?
-  phone     String?
-  contact   String?
-  isDefault Boolean  @default(false) // انبار پیش‌فرض فروش — در محاسبات خوانده می‌شود
-  note      String?
-  priority  Int      @default(0)
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  /**
-   * حساب دفتری اختصاصی این انبار (فاز ۶).
-   *
-   * قبلاً همهٔ انبارها روی `1200` جمع می‌شدند، پس گزارش ارزش‌گذاری انبار با
-   * ترازنامه نمی‌خواند. با این فیلد هر انبار زیرحساب خودش را می‌گیرد
-   * (`1200-01`، `1200-02`، …) و مقدار `null` یعنی «فعلاً به گروه ۱۲۰۰ می‌رود».
-   */
-  glAccountId String?
-
-  ledgerEntries     StockLedgerEntry[]
-  reservations      StockReservation[]
-  costLayers        CostLayer[]
-  channels          SalesChannel[]
-  orders            Order[]
-  posInvoices       PosInvoice[]
-  transfersFrom     StockTransfer[]    @relation("TransferFrom")
-  transfersTo       StockTransfer[]    @relation("TransferTo")
-  stocktakes        Stocktake[]
-  goodsReceipts     GoodsReceipt[]
-  quarantineRecords QuarantineRecord[]
-  damageRecords     DamageRecord[]
-  /** حساب دفتری اختصاصی انبار (فاز ۶) */
-  glAccount        Account?      @relation("WarehouseGlAccount", fields: [glAccountId], references: [id])
-  /** خطوط سندی که به این انبار مربوط‌اند */
-  journalLines     JournalLine[]
 }
 
 enum LedgerType {
@@ -1532,73 +2619,10 @@ enum LedgerType {
   OPENING
 }
 
-model StockLedgerEntry {
-  id             String     @id @default(cuid())
-  warehouseId    String
-  variantSku     String
-  type           LedgerType
-  qtyIn          Int        @default(0)
-  qtyOut         Int        @default(0)
-  balanceBefore  Int // تراز پیش از این حرکت — بند ۱۹ (بازسازی/رصد پرش غیرعادی)
-  balanceAfter   Int // تراز پس از این حرکت
-  unitCost       BigInt? // بهای ورودی برای valuation — روی INهای بهایی
-  refType        String? // order|pos_invoice|purchase|transfer|adjustment|stocktake|opening|damage
-  refId          String?
-  idempotencyKey String     @unique
-  actorId        String?
-  note           String?
-  createdAt      DateTime   @default(now())
-
-  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
-  variant   ProductVariant @relation(fields: [variantSku], references: [sku])
-  actor     User?          @relation(fields: [actorId], references: [id])
-
-  @@index([variantSku, warehouseId, createdAt])
-  @@index([refType, refId])
-}
-
 enum ReservationState {
   ACTIVE
   RELEASED
   CONSUMED
-}
-
-model StockReservation {
-  id          String           @id @default(cuid())
-  warehouseId String
-  variantSku  String
-  qty         Int
-  state       ReservationState @default(ACTIVE)
-  refType     String? // order|pos_draft
-  refId       String?
-  expiresAt   DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-
-  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
-  variant   ProductVariant @relation(fields: [variantSku], references: [sku])
-  order     Order?         @relation(fields: [refId], references: [id], map: "ReservationOrderRef")
-
-  @@index([variantSku, warehouseId, state])
-}
-
-// Cost Layer — تصمیم تاییدشده: WAC با معماری Strategy-based (بند ۳۲)
-model CostLayer {
-  id              String   @id @default(cuid())
-  warehouseId     String
-  variantSku      String
-  quantity        Int      @default(0)
-  totalCost       BigInt   @default(0)
-  avgUnitCost     BigInt   @default(0)
-  lastCost        BigInt   @default(0)
-  costingVersion  Int      @default(1)
-  costingStrategy String   @default("WAC")
-  updatedAt       DateTime @updatedAt
-
-  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
-  variant   ProductVariant @relation(fields: [variantSku], references: [sku])
-
-  @@unique([warehouseId, variantSku])
 }
 
 enum TransferState {
@@ -1608,81 +2632,10 @@ enum TransferState {
   CANCELLED
 }
 
-model StockTransfer {
-  id              String        @id @default(cuid())
-  number          String        @unique
-  fromWarehouseId String
-  toWarehouseId   String
-  state           TransferState @default(DRAFT)
-  note            String?
-  requestedById   String?
-  confirmedById   String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  fromWarehouse Warehouse           @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
-  toWarehouse   Warehouse           @relation("TransferTo", fields: [toWarehouseId], references: [id])
-  requestedBy   User?               @relation("TransferRequestedBy", fields: [requestedById], references: [id])
-  confirmedBy   User?               @relation("TransferConfirmedBy", fields: [confirmedById], references: [id])
-  items         StockTransferItem[]
-}
-
-model StockTransferItem {
-  id         String @id @default(cuid())
-  transferId String
-  variantSku String
-  qty        Int
-
-  transfer StockTransfer  @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  variant  ProductVariant @relation(fields: [variantSku], references: [sku])
-}
-
 enum StocktakeState {
   OPEN
   COUNTED
   CLOSED
-}
-
-model Stocktake {
-  id           String         @id @default(cuid())
-  number       String         @unique
-  warehouseId  String
-  state        StocktakeState @default(OPEN)
-  countMode    String         @default("ALL") // ALL|SELECTED — قانون ۶: قابل تنظیم، نه هاردکد
-  toleranceQty Int            @default(0) // اختلاف کمتر/مساوی این مقدار بدون نیاز به تایید ثبت می‌شود
-  note         String?
-  actorId      String?
-  approvedById String? // تاییدکننده تعدیل‌های بالای تحمل (Approval System — بند ۱۰۱)
-  approvedAt   DateTime?
-  createdAt    DateTime       @default(now())
-  closedAt     DateTime?
-
-  warehouse  Warehouse       @relation(fields: [warehouseId], references: [id])
-  items      StocktakeItem[]
-  actor      User?           @relation(fields: [actorId], references: [id])
-  approvedBy User?           @relation("StocktakeApprovedBy", fields: [approvedById], references: [id])
-}
-
-model StocktakeItem {
-  id          String @id @default(cuid())
-  stocktakeId String
-  variantSku  String
-  systemQty   Int
-  countedQty  Int?
-  difference  Int?
-
-  stocktake Stocktake      @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
-  variant   ProductVariant @relation(fields: [variantSku], references: [sku])
-}
-
-model ReorderPolicy {
-  id           String @id @default(cuid())
-  variantSku   String @unique
-  minStock     Int    @default(0)
-  reorderPoint Int    @default(0)
-  targetStock  Int?
-
-  variant ProductVariant @relation(fields: [variantSku], references: [sku])
 }
 
 /// قرنطینه — جداسازی فیزیکی/منطقی کالای مشکوک؛ حقیقت موجودی در Ledger با نوع CORRECTION (بند ۳۵)
@@ -1692,29 +2645,6 @@ enum QuarantineState {
   DESTROYED
 }
 
-model QuarantineRecord {
-  id          String          @id @default(cuid())
-  number      String          @unique
-  warehouseId String // انبار مبدأ — کسر موجودی از همین‌جا
-  variantSku  String
-  qty         Int
-  reason      String
-  state       QuarantineState @default(HELD)
-  refType     String? // sale_return|damage_review|manual
-  refId       String?
-  actorId     String?
-  releasedAt  DateTime?
-  note        String?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-
-  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
-  variant   ProductVariant @relation(fields: [variantSku], references: [sku])
-
-  @@index([state])
-  @@index([variantSku])
-}
-
 /// خرابی/مفقودی — سندDamage/LOSS؛ قابل تعلیق تا تایید (Approval) — بند ۳۶
 enum DamageState {
   DRAFT
@@ -1722,174 +2652,10 @@ enum DamageState {
   CANCELLED
 }
 
-model DamageRecord {
-  id          String      @id @default(cuid())
-  number      String      @unique
-  warehouseId String
-  variantSku  String
-  qty         Int
-  kind        String // damage|loss
-  reason      String?
-  unitCost    BigInt      @default(0)
-  state       DamageState @default(POSTED)
-  refType     String? // quarantine|stocktake|manual
-  refId       String?
-  actorId     String?
-  note        String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
-  variant   ProductVariant @relation(fields: [variantSku], references: [sku])
-
-  @@index([state])
-  @@index([variantSku])
-}
-
-/// تنظیمات انبار — هر کلید: type/default/validation/description + Permission + UI + Audit (قانون ۶)
-model InventorySetting {
-  key          String   @id
-  value        Json
-  valueType    String   @default("number") // number|boolean|string
-  defaultValue Json
-  description  String
-  updatedBy    String?
-  updatedAt    DateTime @updatedAt
-}
-
-// ------------------------------------------------ کانال و قیمت (بند ۲–۷)
-
-model SalesChannel {
-  id                 String   @id @default(cuid())
-  slug               String   @unique // pos|website|torob|snapp-pay|instagram|other
-  name               String
-  type               String   @default("other") // pos|online|marketplace|other
-  active             Boolean  @default(true)
-  priceLevelId       String // ← مفهوم سطح قیمت entity شد (بند ۱۰)
-  inventoryPolicy    String   @default("sell")
-  orderSource        String   @default("native") // native|marketplace_api
-  mapping            Json? // نقشه externalSku ↔ variantSku (بند ۶۵)
-  integration        Json? // تنظیمات provider غیر core (بند ۶۵/۶۶)
-  paymentMethodIds   String[]
-  defaultWarehouseId String
-  commissionRules    Json?
-  accountingMapping  Json?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  priceLevel       PriceLevel   @relation(fields: [priceLevelId], references: [id])
-  defaultWarehouse Warehouse    @relation(fields: [defaultWarehouseId], references: [id])
-  orders           Order[]
-  posInvoices      PosInvoice[]
-}
-
-/// سطح قیمت — قابل مدیریت توسط ادمین (بند ۱۰: «دقیقاً ۵» هاردکد نمی‌شود)
-model PriceLevel {
-  id          String    @id @default(cuid())
-  code        String    @unique // POS|WEB|TOROB|SNAPP|WHOLESALE…
-  name        String
-  sortOrder   Int       @default(0)
-  active      Boolean   @default(true)
-  currency    String    @default("IRT")
-  taxBehavior String    @default("default") // default|exempt
-  startsAt    DateTime?
-  endsAt      DateTime?
-  restriction Json? // {channelIds?, customerTagIds?}
-
-  prices   VariantPrice[]
-  channels SalesChannel[]
-  history  PriceHistory[]
-}
-
-/// قیمت هر واریانت به تفکیک سطح — جایگزین VariantChannelPrice (بند ۱۰/۱۳)
-model VariantPrice {
-  id           String    @id @default(cuid())
-  variantSku   String
-  priceLevelId String
-  price        BigInt
-  salePrice    BigInt?
-  saleStartsAt DateTime?
-  saleEndsAt   DateTime?
-
-  variant ProductVariant @relation(fields: [variantSku], references: [sku])
-  level   PriceLevel     @relation(fields: [priceLevelId], references: [id])
-
-  @@unique([variantSku, priceLevelId])
-}
-
-/// تاریخچه تغییر قیمت — فقط رکورد؛ هیچ محاسبه‌ای از آن نمی‌خواند (بند ۱۳)
-model PriceHistory {
-  id           String   @id @default(cuid())
-  variantSku   String
-  priceLevelId String
-  oldPrice     BigInt
-  newPrice     BigInt
-  reason       String?
-  actorId      String?
-  createdAt    DateTime @default(now())
-
-  variant ProductVariant @relation(fields: [variantSku], references: [sku])
-  level   PriceLevel     @relation(fields: [priceLevelId], references: [id])
-
-  @@index([variantSku, createdAt])
-}
-
-model VariantBarcode {
-  id         String @id @default(cuid())
-  variantSku String
-  barcode    String @unique
-  kind       String @default("manufacturer") // manufacturer|internal|alternate
-
-  variant ProductVariant @relation(fields: [variantSku], references: [sku])
-}
-
-// ------------------------------------------------ حسابداری (بند ۴۴–۵۸)
-
 enum FiscalState {
   OPEN
   LOCKED
   CLOSED
-}
-
-/**
- * سال مالی — دورهٔ حسابداری.
- *
- * قید `onlyOneOpenFiscalYear` (مهاجرت phase12) تضمین می‌کند در هر لحظه
- * **دقیقاً یک** سال باز وجود داشته باشد.
- *
- * چرا این قید حیاتی است: کد ساخت سند، سال باز را با
- * `findFirst({ where: { state: "OPEN" } })` پیدا می‌کند. اگر چند سال باز
- * وجود داشته باشد، سندها بین آن‌ها **پخش می‌شوند** و شمارهٔ سند (که فقط
- * در محدودهٔ سال یکتاست) دیگر قابل استناد نیست. قبلاً ۵ سال باز هم‌زمان
- * روی دیتابیس بود.
- *
- * وضعیت‌ها:
- *  • `OPEN`   — سال جاری، سند جدید پذیرفته می‌شود
- *  • `LOCKED`  — بسته شد ولی قابل بازگشایی است (اشتباه سند قابل اصلاح)
- *  • `CLOSED` — بستهٔ نهایی؛ تنها با بازگشایی صریح مدیر ارشد باز می‌شود
- */
-model FiscalYear {
-  id       String      @id @default(cuid())
-  title    String
-  startsAt DateTime
-  endsAt   DateTime
-  state    FiscalState @default(OPEN)
-
-  // ممیزی بستن/بازکردن — بدون این‌ها معلوم نمی‌شود چه کسی و کِی سال را بست
-  closedAt      DateTime?
-  closedById    String?
-  reopenedAt    DateTime?
-  reopenedById  String?
-  // ماندهٔ حساب‌ها در لحظهٔ بستن — پایهٔ تراز اختتامیه
-  closingSnapshot Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  entries JournalEntry[]
-
-  @@index([state])
-  @@index([startsAt])
 }
 
 enum AccountType {
@@ -1901,197 +2667,14 @@ enum AccountType {
   EXPENSE
 }
 
-model Account {
-  id              String      @id @default(cuid())
-  code            String      @unique
-  name            String
-  type            AccountType
-  parentAccountId String?
-  level           Int         @default(1)
-  isActive        Boolean     @default(true)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-
-  parent       Account?      @relation("AccountTree", fields: [parentAccountId], references: [id])
-  children     Account[]     @relation("AccountTree")
-  journalLines JournalLine[]
-  cashAccounts CashAccount[]
-  bankAccounts BankAccount[]
-  /** انبارهایی که این حساب دفتری‌شان است (فاز ۶) */
-  warehouses   Warehouse[]   @relation("WarehouseGlAccount")
-}
-
 enum JournalState {
   DRAFT
   FINAL
 }
 
-model JournalEntry {
-  id             String         @id @default(cuid())
-  number         String
-  fiscalYearId   String
-  date           DateTime
-  description    String?
-  sourceType     String? // order|pos_invoice|purchase|expense|check|opening|closing|manual
-  sourceId       String?
-  state          JournalState   @default(DRAFT)
-  isReversalOf   JournalEntry?  @relation("JournalReversal", fields: [isReversalOfId], references: [id])
-  isReversalOfId String?
-  reversals      JournalEntry[] @relation("JournalReversal")
-  actorId        String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-
-  fiscalYear       FiscalYear         @relation(fields: [fiscalYearId], references: [id])
-  actor            User?              @relation(fields: [actorId], references: [id])
-  lines            JournalLine[]
-  settlementBatches SettlementBatch[] @relation("SettlementJournal")
-  checkTransitions CheckTransition[]
-
-  @@unique([fiscalYearId, number])
-  @@index([sourceType, sourceId])
-  @@index([date])
-}
-
-model JournalLine {
-  id           String  @id @default(cuid())
-  entryId      String
-  accountId    String
-  debit        BigInt  @default(0)
-  credit       BigInt  @default(0)
-  costCenterId String?
-  partyType    String? // customer|supplier
-  partyId      String?
-  /**
-   * انباری که این خط به آن مربوط است (فاز ۶).
-   *
-   * برای سندهای موجود `null` است و رفتار را خراب نمی‌کند — فقط یعنی آن خط
-   * به انبار خاصی نسبت داده نشده. با پر شدنش، گزارش «سود هر انبار» ممکن می‌شود.
-   */
-  warehouseId  String?
-
-  entry     JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  account   Account      @relation(fields: [accountId], references: [id])
-  warehouse Warehouse?   @relation(fields: [warehouseId], references: [id])
-
-  @@index([accountId])
-  // گزارش معین اشخاص (فاز ۵): «فروش به تفکیک مشتری» و «بدهکاران»
-  @@index([partyType, partyId])
-  @@index([entryId])
-  // گزارش سود هر انبار (فاز ۶)
-  @@index([warehouseId])
-}
-
-/**
- * قرارداد حقوق یک کارمند — گام ۷ فاز ۲.
- *
- * حقوق ماهانه چیزی است که هر ماه **تکرار** می‌شود، پس داده‌اش باید نگهداری
- * شود نه اینکه هر ماه دستی سند زده شود. یک کارمند فقط یک قرارداد فعال دارد
- * (قید دیتابیسی) تا حقوق دو بار پرداخت نشود.
- */
-model PayrollContract {
-  id                 String    @id @default(cuid())
-  userId             String
-  baseSalary         BigInt    @default(0)
-  housingAllowance   BigInt    @default(0)
-  childAllowance     BigInt    @default(0)
-  transportAllowance BigInt    @default(0)
-  otherAllowance     BigInt    @default(0)
-  deduction          BigInt    @default(0)
-  insuranceDeduction BigInt    @default(0)
-  startDate          DateTime
-  endDate            DateTime?
-  active             Boolean   @default(true)
-  note               String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-
-  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([active])
-}
-
-/**
- * لیست حقوق یک ماه — گام ۷ فاز ۲.
- *
- * چرخه: DRAFT (محاسبه و بازبینی) → POSTED (سند حسابداری زده شد).
- * پس از POSTED دیگر قابل تغییر نیست، وگرنه حقوق پرداخت‌شده بازنویسی می‌شد.
- */
-model PayrollRun {
-  id              String    @id @default(cuid())
-  period          String // مثال: ۱۴۰۴/۰۵
-  title           String
-  state           PayrollState @default(DRAFT)
-  totalGross      BigInt    @default(0)
-  totalDeduction  BigInt    @default(0)
-  totalNet        BigInt    @default(0)
-  journalEntryId  String? // سند قطعی حقوق
-  postedAt        DateTime?
-  postedById      String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  items PayrollItem[]
-
-  @@unique([period])
-  @@index([state])
-}
-
 enum PayrollState {
   DRAFT
   POSTED
-}
-
-/** ردیف حقوق یک کارمند در یک ماه */
-model PayrollItem {
-  id         String   @id @default(cuid())
-  runId      String
-  userId     String
-  period     String
-  gross      BigInt   @default(0)
-  deduction  BigInt   @default(0)
-  net        BigInt   @default(0)
-  createdAt  DateTime @default(now())
-
-  run  PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, period]) // یک ماه، یک پرداخت برای هر کارمند
-  @@index([runId])
-}
-
-model NumberSeries {
-  id         String @id @default(cuid())
-  scope      String @unique // pos_invoice|online_order|purchase|payment|receipt|journal|stock_transfer|return
-  prefix     String
-  nextNumber Int    @default(1)
-  padding    Int    @default(5)
-}
-
-// ------------------------------------------------ خرید (بند ۲۷–۲۹، ۴۳)
-
-model Supplier {
-  id          String    @id @default(cuid())
-  name        String
-  phone       String?
-  email       String? // برای ارسال خودکار/دستی فاکتور خرید (آداپتور واقعی؛ بدون credential فیک)
-  address     String?
-  taxId       String?
-  bankInfo    Json?
-  creditLimit BigInt?
-  notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
-
-  purchaseOrders   PurchaseOrder[]
-  goodsReceipts    GoodsReceipt[]
-  // ارسال فاکتور به تامین‌کننده — بدون رکورد در SupplierAccount (بند ۲۹)
-  // فیلد email برای آداپتور EMAIL
-  purchaseInvoices PurchaseInvoice[]
-  purchaseReturns  PurchaseReturn[]
-  checks           Check[]
 }
 
 enum PurchaseState {
@@ -2102,31 +2685,6 @@ enum PurchaseState {
   CANCELLED
 }
 
-model PurchaseOrder {
-  id         String        @id @default(cuid())
-  number     String        @unique
-  supplierId String
-  status     PurchaseState @default(DRAFT)
-  note       String?
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-
-  supplier Supplier            @relation(fields: [supplierId], references: [id])
-  items    PurchaseOrderItem[]
-  receipts GoodsReceipt[]
-}
-
-model PurchaseOrderItem {
-  id         String @id @default(cuid())
-  orderId    String
-  variantSku String
-  qty        Int
-  unitCost   BigInt
-
-  po      PurchaseOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant ProductVariant @relation(fields: [variantSku], references: [sku])
-}
-
 enum PurchaseInvoiceState {
   DRAFT
   POSTED
@@ -2135,168 +2693,11 @@ enum PurchaseInvoiceState {
   CANCELLED
 }
 
-model GoodsReceipt {
-  id          String   @id @default(cuid())
-  number      String   @unique
-  supplierId  String
-  warehouseId String
-  poId        String?
-  receivedAt  DateTime @default(now())
-  note        String?
-
-  supplier         Supplier           @relation(fields: [supplierId], references: [id])
-  warehouse        Warehouse          @relation(fields: [warehouseId], references: [id])
-  po               PurchaseOrder?     @relation(fields: [poId], references: [id])
-  items            GoodsReceiptItem[]
-  purchaseInvoices PurchaseInvoice[]
-}
-
-model GoodsReceiptItem {
-  id         String @id @default(cuid())
-  receiptId  String
-  variantSku String
-  qty        Int
-  unitCost   BigInt
-  landedCost BigInt @default(0) // تخصیص بند ۴۳
-
-  receipt GoodsReceipt   @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  variant ProductVariant @relation(fields: [variantSku], references: [sku])
-}
-
-model PurchaseInvoice {
-  id            String               @id @default(cuid())
-  number        String               @unique
-  supplierId    String
-  grId          String?
-  state         PurchaseInvoiceState @default(DRAFT)
-  subtotal      BigInt
-  discountTotal BigInt               @default(0)
-  shippingTotal BigInt               @default(0)
-  taxableAmount BigInt               @default(0)
-  taxTotal      BigInt               @default(0)
-  grandTotal    BigInt
-  dueDate       DateTime?
-  note          String?
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-
-  supplier   Supplier                  @relation(fields: [supplierId], references: [id])
-  receipt    GoodsReceipt?             @relation(fields: [grId], references: [id])
-  items      PurchaseInvoiceItem[]
-  payments   PurchasePayment[]
-  deliveries SupplierInvoiceDelivery[]
-}
-
-model PurchaseInvoiceItem {
-  id         String @id @default(cuid())
-  invoiceId  String
-  variantSku String
-  qty        Int
-  unitCost   BigInt
-
-  invoice PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  variant ProductVariant  @relation(fields: [variantSku], references: [sku])
-}
-
-model PurchasePayment {
-  id             String   @id @default(cuid())
-  invoiceId      String
-  method         String // cash|card|transfer|check
-  amount         BigInt
-  cashAccountId  String?
-  checkId        String?  @unique
-  idempotencyKey String?  @unique
-  paidAt         DateTime @default(now())
-
-  invoice PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  check   Check?          @relation(fields: [checkId], references: [id])
-}
-
-model PurchaseReturn {
-  id         String   @id @default(cuid())
-  number     String   @unique
-  supplierId String
-  reason     String?
-  createdAt  DateTime @default(now())
-
-  supplier Supplier             @relation(fields: [supplierId], references: [id])
-  items    PurchaseReturnItem[]
-}
-
-model PurchaseReturnItem {
-  id         String @id @default(cuid())
-  returnId   String
-  variantSku String
-  qty        Int
-  unitCost   BigInt
-
-  purchaseReturn PurchaseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
-  variant        ProductVariant @relation(fields: [variantSku], references: [sku])
-}
-
-// ------------------------------------------------ POS (بند ۸–۲۳)
-
 enum PosInvoiceState {
   DRAFT
   HELD
   FINALIZED
   CANCELLED
-}
-
-model PosInvoice {
-  id             String          @id @default(cuid())
-  number         String          @unique
-  channelId      String
-  warehouseId    String
-  shiftId        String? // بند ۱۹: اتصال فاکتور به شیفت صندوق
-  cashierId      String?
-  customerId     String?
-  customerName   String?
-  customerMobile String?
-  priceLevel     Int             @default(1) // 1..5 با Permission (بند ۱۵)
-  state          PosInvoiceState @default(DRAFT)
-  subtotal       BigInt          @default(0)
-  discountTotal  BigInt          @default(0)
-  extraCharges   Json? // [{name, amount, account}] بند ۱۷
-  taxableAmount  BigInt          @default(0)
-  taxTotal       BigInt          @default(0)
-  grandTotal     BigInt          @default(0)
-  notes          String?
-  idempotencyKey String          @unique
-  finalizedAt    DateTime?
-  // فاز ۱۰ — اصلاحیهٔ کنترل‌شده: FINALIZED هرگز overwrite نمی‌شود؛
-  // هر اصلاح یک سند جدید revision+1 با ارجاع به فاکتور مبدأ است.
-  revision       Int             @default(1)
-  correctsId     String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-
-  channel        SalesChannel     @relation(fields: [channelId], references: [id])
-  warehouse      Warehouse        @relation(fields: [warehouseId], references: [id])
-  shift          CashierShift?    @relation(fields: [shiftId], references: [id])
-  cashier        User?            @relation(fields: [cashierId], references: [id])
-  items          PosInvoiceItem[]
-  payments       PosPayment[]
-  attempts       PaymentAttempt[]
-  returnRequests ReturnRequest[]
-  corrects       PosInvoice?      @relation("PosInvoiceCorrection", fields: [correctsId], references: [id])
-  corrections    PosInvoice[]     @relation("PosInvoiceCorrection")
-
-  @@index([shiftId])
-  @@index([correctsId])
-}
-
-model PosInvoiceItem {
-  id                String @id @default(cuid())
-  invoiceId         String
-  variantSku        String
-  qty               Int
-  unitPriceSnapshot BigInt // بند ۱۱۴/۱۱۵
-  discount          BigInt @default(0)
-  lineTotal         BigInt
-
-  invoice PosInvoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  variant ProductVariant @relation(fields: [variantSku], references: [sku])
 }
 
 enum PosPaymentMethod {
@@ -2309,148 +2710,15 @@ enum PosPaymentMethod {
   WALLET
 }
 
-model PosPayment {
-  id             String           @id @default(cuid())
-  invoiceId      String
-  method         PosPaymentMethod
-  amount         BigInt
-  cashRegisterId String?
-  checkId        String?          @unique
-  ref            String?
-  paidAt         DateTime         @default(now())
-
-  invoice      PosInvoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  cashRegister CashRegister? @relation(fields: [cashRegisterId], references: [id])
-  check        Check?         @relation(fields: [checkId], references: [id])
-}
-
-model CashRegister {
-  id             String  @id @default(cuid())
-  name           String
-  location       String?
-  openingBalance BigInt  @default(0)
-  currentBalance BigInt  @default(0)
-  glAccountId    String?
-  active         Boolean @default(true)
-
-  shifts   CashierShift[]
-  payments PosPayment[]
-}
-
 enum ShiftState {
   OPEN
   CLOSED
-}
-
-// فاز ۱۱ (P2-A): تیکت POS ماندگار — hold/resume بین رفرش/ترمینال‌ها؛ هیچ V2 workflow نیست
-model PosTicket {
-  id             String   @id @default(cuid())
-  userId         String   // صندوقدار مالک تیکت
-  shiftId        String?  // شیفت مرتبط در لحظهٔ hold
-  status         String   @default("OPEN") // OPEN|HELD|COMPLETED|CANCELLED
-  customerMobile String?
-  customerName   String?
-  items          Json     // [{sku, qty}] — snapshot خطوط تیکت
-  discountTotal  Int      @default(0)
-  version        Int      @default(1) // optimistic locking — بند ۱۱
-  audit          Json?    // [{at, actorId, action}] — trace مختصر
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@index([status, userId])
-  @@index([shiftId])
-}
-
-model CashierShift {
-  id           String     @id @default(cuid())
-  registerId   String
-  userId       String
-  openingCash  BigInt     @default(0)
-  expectedCash BigInt?
-  actualCash   BigInt?
-  difference   BigInt?
-  cardTotal    BigInt     @default(0)
-  onlineTotal  BigInt     @default(0)
-  refundTotal  BigInt     @default(0)
-  expenseTotal BigInt     @default(0)
-  state        ShiftState @default(OPEN)
-  openedAt     DateTime   @default(now())
-  closedAt     DateTime?
-
-  register CashRegister @relation(fields: [registerId], references: [id])
-  user     User         @relation(fields: [userId], references: [id])
-  invoices PosInvoice[]
-}
-
-// ------------------------------------------------ نقد/بانک/چک/هزینه (بند ۵۹–۷۲)
-
-model CashAccount {
-  id             String  @id @default(cuid())
-  name           String
-  kind           String  @default("cash") // cash|bank|card_settlement|online_gateway|petty
-  glAccountId    String
-  openingBalance BigInt  @default(0)
-  currentBalance BigInt  @default(0)
-  active         Boolean @default(true)
-
-  account Account @relation(fields: [glAccountId], references: [id])
-}
-
-model BankAccount {
-  id             String  @id @default(cuid())
-  name           String
-  bankName       String
-  accountNumber  String
-  iban           String?
-  glAccountId    String
-  openingBalance BigInt  @default(0)
-  currentBalance BigInt  @default(0)
-  active         Boolean @default(true)
-
-  account    Account         @relation(fields: [glAccountId], references: [id])
-  statements BankStatement[]
-  checks     Check[]
-}
-
-model BankStatement {
-  id               String   @id @default(cuid())
-  bankAccountId    String
-  date             DateTime
-  amount           BigInt
-  description      String?
-  matchedPaymentId String? // سازگاری با تطبیق قدیمی PaymentAttempt
-
-  bankAccount BankAccount          @relation(fields: [bankAccountId], references: [id])
-  matches     BankStatementMatch[]
 }
 
 enum BankStatementMatchState {
   MANUAL_REVIEW
   MATCHED
   REJECTED
-}
-
-/// تخصیص/تطبیق reconciliation بانک؛ تطبیق هرگز به‌تنهایی Check را clear نمی‌کند.
-model BankStatementMatch {
-  id               String                   @id @default(cuid())
-  statementId      String
-  sourceType       String // check|payment_attempt|journal_entry|manual_review
-  sourceId         String
-  allocatedAmount  BigInt                   @default(0) // قدرمطلق allocation؛ علامت از source/statement می‌آید
-  state            BankStatementMatchState  @default(MANUAL_REVIEW)
-  note             String?
-  actorId          String?
-  createdAt        DateTime                 @default(now())
-  updatedAt        DateTime                 @updatedAt
-
-  statement BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
-  check     Check?        @relation("CheckStatementMatches", fields: [checkId], references: [id], onDelete: Restrict)
-  checkId   String?
-
-  @@unique([statementId, sourceType, sourceId])
-  @@index([sourceType, sourceId, state])
-  @@index([statementId, state])
-  @@index([checkId])
 }
 
 enum CheckDirection {
@@ -2470,115 +2738,9 @@ enum CheckStatus {
   PRESENTED
 }
 
-model Check {
-  id                    String          @id @default(cuid())
-  direction             CheckDirection
-  status                CheckStatus     @default(RECEIVED)
-  number                String
-  bankName              String
-  branch                String?
-  accountNo             String?
-  amount                BigInt
-  issueDate             DateTime
-  dueDate               DateTime
-  drawer                String?
-  payee                 String?
-  sourceType            String? // pos_invoice|purchase_payment|accounts_receivable
-  sourceId              String?
-  customerId            String?
-  supplierId            String?
-  accountsReceivableId  String?
-  treasuryBankAccountId String?
-  idempotencyKey        String?         @unique
-  lifecycleVersion      Int             @default(0)
-  notes                 String?
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
-
-  customer         Customer?           @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  supplier         Supplier?           @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  receivable       AccountsReceivable? @relation(fields: [accountsReceivableId], references: [id], onDelete: Restrict)
-  treasuryBank     BankAccount?        @relation(fields: [treasuryBankAccountId], references: [id], onDelete: Restrict)
-  posPayment       PosPayment?
-  purchasePayment  PurchasePayment?
-  settlement       PaymentSettlement?
-  transitions      CheckTransition[]
-  statementMatches BankStatementMatch[] @relation("CheckStatementMatches")
-
-  @@index([dueDate])
-  @@index([direction, status])
-  @@index([customerId, dueDate])
-  @@index([supplierId, dueDate])
-  @@index([sourceType, sourceId])
-}
-
-model CheckTransition {
-  id             String      @id @default(cuid())
-  checkId        String
-  version        Int
-  fromStatus     CheckStatus?
-  toStatus       CheckStatus
-  idempotencyKey String      @unique
-  actorId        String?
-  reason         String?
-  requestId      String?
-  journalEntryId String?
-  createdAt      DateTime    @default(now())
-
-  check        Check         @relation(fields: [checkId], references: [id], onDelete: Cascade)
-  journalEntry JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
-
-  @@unique([checkId, version])
-  @@index([checkId, createdAt])
-}
-
 enum ExpenseState {
   DRAFT
   POSTED
-}
-
-model Expense {
-  id            String       @id @default(cuid())
-  number        String
-  date          DateTime
-  categoryId    String
-  amount        BigInt
-  cashAccountId String
-  description   String?
-  attachmentId  String?
-  vendor        String?
-  costCenterId  String?
-  isRecurring   Boolean      @default(false)
-  recurrence    Json? // {freq: monthly, day: 1}
-  state         ExpenseState @default(POSTED)
-  actorId       String?
-  createdAt     DateTime     @default(now())
-
-  category ExpenseCategory @relation(fields: [categoryId], references: [id])
-  actor    User?           @relation(fields: [actorId], references: [id])
-}
-
-model ExpenseCategory {
-  id          String @id @default(cuid())
-  name        String
-  glAccountId String
-
-  expenses Expense[]
-}
-
-// ------------------------------------------------ مشتری/تامین‌کننده مالی (بند ۷۳–۷۵، ۹۴–۹۵)
-
-model CustomerAccount {
-  id          String   @id @default(cuid())
-  customerId  String   @unique
-  creditLimit BigInt   @default(0)
-  outstanding BigInt   @default(0)
-  dueDays     Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  receivables        AccountsReceivable[]
-  creditTransactions CreditTransaction[]
 }
 
 enum ArState {
@@ -2593,39 +2755,6 @@ enum ArExposureType {
   CHECK
 }
 
-model AccountsReceivable {
-  id            String         @id @default(cuid())
-  accountPId    String
-  refType       String // pos_invoice|order|check
-  refId         String
-  exposureType  ArExposureType @default(TRADE)
-  amount        BigInt
-  paidAmount    BigInt         @default(0)
-  dueDate       DateTime?
-  state         ArState        @default(OPEN)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-
-  customerAccount CustomerAccount     @relation(fields: [accountPId], references: [id])
-  settlements     PaymentSettlement[]
-  checks          Check[]
-
-  @@index([refType, refId])
-  @@index([accountPId, exposureType, state])
-}
-
-model PaymentSettlement {
-  id      String   @id @default(cuid())
-  arId    String
-  method  String
-  amount  BigInt
-  paidAt  DateTime @default(now())
-  checkId String?  @unique
-
-  ar    AccountsReceivable @relation(fields: [arId], references: [id], onDelete: Cascade)
-  check Check?             @relation(fields: [checkId], references: [id])
-}
-
 enum CreditTxType {
   LIMIT_CHANGE
   SALE
@@ -2633,109 +2762,11 @@ enum CreditTxType {
   ADJUSTMENT
 }
 
-model CreditTransaction {
-  id        String       @id @default(cuid())
-  accountId String
-  type      CreditTxType
-  amount    BigInt
-  note      String?
-  actorId   String?
-  createdAt DateTime     @default(now())
-
-  account CustomerAccount @relation(fields: [accountId], references: [id])
-}
-
-model SupplierAccount {
-  id          String   @id @default(cuid())
-  supplierId  String   @unique
-  outstanding BigInt   @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  payables AccountsPayable[]
-}
-
-/// تحویل فاکتور خرید به تامین‌کننده (بند ۲۷) — ردیف در دامنه؛ ارسال واقعی با آداپتور
-/// (SMTP/Kavenegar) فقط با credential؛ بدون credential صف می‌ماند و جعل «ارسال شد» ممنوع (بند ۱۱۱)
-model SupplierInvoiceDelivery {
-  id        String    @id @default(cuid())
-  invoiceId String
-  channel   String // EMAIL | SMS
-  to        String // ایمیل/موبایل تامین‌کننده در لحظه ارسال
-  state     String    @default("QUEUED") // QUEUED|SENT|FAILED
-  mediaKind String? // PDF | TEXT — PDF فقط با SMTP/ایمیل؛ SMS همیشه متن
-  attempts  Int       @default(0)
-  lastError String?
-  sentAt    DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  invoice PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-
-  @@index([invoiceId])
-  @@index([state])
-}
-
 enum ApState {
   OPEN
   PARTIAL
   SETTLED
 }
-
-model AccountsPayable {
-  id         String    @id @default(cuid())
-  accountPId String
-  refType    String
-  refId      String
-  amount     BigInt
-  paidAmount BigInt    @default(0)
-  dueDate    DateTime?
-  state      ApState   @default(OPEN)
-  createdAt  DateTime  @default(now())
-
-  supplierAccount SupplierAccount @relation(fields: [accountPId], references: [id])
-
-  @@index([refType, refId])
-}
-
-// ------------------------------------------------ مالیات (بند ۷۸–۸۰)
-
-model TaxRate {
-  id            String    @id @default(cuid())
-  name          String
-  code          String    @unique
-  rate          Int // basis points ×100 → ۱۸٪ = 1800
-  taxType       String    @default("vat")
-  jurisdiction  String    @default("IR")
-  effectiveFrom DateTime?
-  effectiveTo   DateTime?
-  active        Boolean   @default(true)
-
-  rules TaxRule[]
-}
-
-model TaxRule {
-  id        String @id @default(cuid())
-  taxRateId String
-  appliesTo Json // {productIds?, categoryIds?, channelIds?, customerTypes?, txTypes?}
-  priority  Int    @default(0)
-
-  taxRate TaxRate @relation(fields: [taxRateId], references: [id])
-}
-
-model TaxTransaction {
-  id            String   @id @default(cuid())
-  refType       String // order|pos_invoice|purchase
-  refId         String
-  taxableAmount BigInt
-  taxAmount     BigInt
-  snapshot      Json? // نرخ و تفکیک لحظه محاسبه
-  createdAt     DateTime @default(now())
-
-  @@unique([refType, refId])
-}
-
-// ------------------------------------------------ ارسال، وبوک، مالیات، ضمیمه، شعبه (بند ۳۰، ۶۴، ۴۴، ۵۸، ۵۰، ۶۹)
 
 enum ShipmentState {
   PENDING
@@ -2746,204 +2777,16 @@ enum ShipmentState {
   FAILED
 }
 
-model Shipment {
-  id           String        @id @default(cuid())
-  orderId      String
-  methodId     String?
-  provider     String?
-  trackingCode String?
-  status       ShipmentState @default(PENDING)
-  shippedAt    DateTime?
-  deliveredAt  DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@index([orderId])
-  @@index([trackingCode])
-}
-
-/// رویداد ورودی همه providerهای خارجی — verify + idempotent + retry (بند ۶۴)
-model WebhookEvent {
-  id             String    @id @default(cuid())
-  provider       String // payment_gateway|marketplace|shipping|tax
-  eventType      String
-  externalId     String?
-  signatureValid Boolean   @default(false)
-  status         String    @default("PENDING") // PENDING|OK|FAILED
-  retries        Int       @default(0)
-  payload        Json?
-  error          String?
-  processedAt    DateTime?
-  createdAt      DateTime  @default(now())
-
-  @@unique([provider, externalId])
-  @@index([status])
-}
-
-/// وبهوک خروجی — endpoint ثبت‌شدهٔ مشترک رویدادهای دامنه (گام ۱۸)
-model WebhookEndpoint {
-  id          String   @id @default(cuid())
-  url         String
-  secret      String // HMAC-SHA256 — فقط هنگام ساخت/چرخش کامل نمایش داده می‌شود
-  events      String[] // ["*"] یا نام رویدادها مثل OrderPaid
-  description String?
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  deliveries WebhookDelivery[]
-
-  @@index([active])
-}
-
-/// تحویل وبهوک خروجی — هر رویداد×endpoint یک ردیف؛ شکست با backoff دوباره تلاش می‌شود
-model WebhookDelivery {
-  id            String    @id @default(cuid())
-  endpointId    String
-  eventName     String
-  payload       Json
-  state         String    @default("PENDING") // PENDING|OK|FAILED
-  attempts      Int       @default(0)
-  responseCode  Int?
-  lastError     String?
-  nextAttemptAt DateTime  @default(now())
-  deliveredAt   DateTime?
-  createdAt     DateTime  @default(now())
-
-  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
-
-  @@index([state, nextAttemptAt])
-  @@index([endpointId, createdAt])
-}
-
-/// صف ارسال به سامانه مالیاتی — بدون ادعای انطباق (بند ۴۴)
-model TaxSubmission {
-  id               String    @id @default(cuid())
-  taxTransactionId String    @unique
-  status           String    @default("QUEUED") // QUEUED|SUBMITTED|ACCEPTED|REJECTED|ERROR
-  attempts         Int       @default(0)
-  lastError        String?
-  submittedAt      DateTime?
-  response         Json?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-}
-
-/// ضمیمه اسناد — purchase/expense/check/accounting/customer (بند ۵۸)
-model Attachment {
-  id        String   @id @default(cuid())
-  mediaId   String
-  ownerType String // purchase_invoice|expense|check|journal|supplier|customer
-  ownerId   String
-  title     String?
-  createdAt DateTime @default(now())
-
-  media Media @relation(fields: [mediaId], references: [id])
-
-  @@index([ownerType, ownerId])
-}
-
-/// شعبه — نرم؛ در V1 یک شعبه فعال (بند ۵۰)
-model Branch {
-  id     String  @id @default(cuid())
-  code   String  @unique
-  name   String
-  active Boolean @default(true)
-}
-
-/// بج اعتماد/مجوز — کاملاً داینامیک؛ فرانت generic رندر می‌کند (بند ۳۳–۴۶)
-model TrustBadge {
-  id              String   @id @default(cuid())
-  internalName    String
-  displayTitle    String?
-  description     String?
-  imageMediaId    String?
-  icon            String?
-  verificationUrl String // فقط http/https — sanitize در سرویس
-  altText         String?
-  active          Boolean  @default(true)
-  sortOrder       Int      @default(0)
-  openInNewTab    Boolean  @default(true)
-  rel             String? // پیش‌فرض noopener noreferrer برای _blank
-  placement       String   @default("footer_trust") // footer_trust|checkout
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-}
-
-/// پکیج/ست — مصرف اجزا در Ledger هنگام فروش (بند ۶۹؛ فعال‌سازی فاز آینده)
-model ProductBundle {
-  id        String  @id @default(cuid())
-  productId String  @unique
-  active    Boolean @default(true)
-
-  product Product             @relation(fields: [productId], references: [id])
-  items   ProductBundleItem[]
-}
-
-model ProductBundleItem {
-  id         String @id @default(cuid())
-  bundleId   String
-  variantSku String
-  qty        Int
-
-  bundle  ProductBundle  @relation(fields: [bundleId], references: [id], onDelete: Cascade)
-  variant ProductVariant @relation(fields: [variantSku], references: [sku])
-}
-
-// ------------------------------------------------ تایید و یادآور (بند ۱۰۱، ۶۷، ۹۲)
-
 enum ApprovalState {
   PENDING
   APPROVED
   REJECTED
 }
 
-model ApprovalRequest {
-  id            String        @id @default(cuid())
-  type          String // large_discount|cancel_invoice|refund|stock_adjust|price_change|expense_delete
-  payload       Json
-  state         ApprovalState @default(PENDING)
-  requestedById String
-  decidedById   String?
-  decidedAt     DateTime?
-  note          String?
-  createdAt     DateTime      @default(now())
-
-  requestedBy User? @relation("ApprovalRequestedBy", fields: [requestedById], references: [id])
-  decidedBy   User? @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
-}
-
 enum ReminderState {
   PENDING
   DONE
   CANCELLED
-}
-
-model Reminder {
-  id                String        @id @default(cuid())
-  title             String
-  dueAt             DateTime
-  repeat            String? // daily|weekly|monthly|yearly
-  relatedEntityType String?
-  relatedEntityId   String?
-  idempotencyKey    String?       @unique
-  priority          Int           @default(0)
-  status            ReminderState @default(PENDING)
-  channels          String[]      @default(["in_app"])
-  createdAt         DateTime      @default(now())
-}
-
-// ------------------------------------------------ قابلیت‌سازهای زیرساختی (Checklist زیرساخت)
-
-/// Feature Flag — بند ۸۱: بدون حذف کد قابل خاموش/روشن؛ super admin کنترل می‌کند
-model FeatureFlag {
-  key       String   @id
-  enabled   Boolean  @default(false)
-  audience  String   @default("all") // all|admin|beta
-  note      String?
-  updatedAt DateTime @updatedAt
 }
 
 /// رضایت/حریم خصوصی — بند ۷۵ و Checklist#20: منبع حقیقت رضایت‌ها با تاریخچه
@@ -2955,55 +2798,6 @@ enum ConsentKind {
   WHATSAPP
 }
 
-model ConsentRecord {
-  id        String      @id @default(cuid())
-  ownerType String      @default("customer") // customer|guest_session
-  ownerKey  String // customerId یا sessionKey
-  kind      ConsentKind
-  granted   Boolean
-  source    String? // checkout|footer|account|admin
-  createdAt DateTime    @default(now())
-
-  @@unique([ownerKey, kind])
-  @@index([ownerKey])
-}
-
-/// آمار بازدید روزانهٔ فروشگاه (گام ۱۵-۶، first-party) — همیشه‌روشن (D-5)،
-/// رضایت فقط دروازهٔ GA4 است نه این جدول. «روز» = روز تهران (آفست ثابت +۳:۳۰).
-/// views پس از D-6 پنجره‌ای است: هر (روز، نشست، مسیر) در بازهٔ ۳۰ دقیقه یک‌بار.
-model DailyVisit {
-  day      DateTime  @id // آغاز روز به وقت تهران (به‌صورت UTC ذخیره می‌شود)
-  views    Int       @default(0) // بازدید صفحه — پنجرهٔ ۳۰ دقیقه‌ای (D-6)، نه هر پینگ
-  sessions Int       @default(0) // بازدیدکنندهٔ یکتا (توکن سبد) — روزی حداکثر یک‌بار
-  updatedAt DateTime @updatedAt
-}
-
-/// بازدیدکنندهٔ یکتای هر روز — با unique([day, sessionKey]) هر session
-/// روزی فقط یک‌بار در شمارش sessions می‌نشیند؛ رشدش با DailyVisit هم‌پایه است.
-model DailyVisitSession {
-  day        DateTime
-  sessionKey String
-  createdAt  DateTime @default(now())
-
-  @@id([day, sessionKey])
-  @@index([sessionKey])
-}
-
-/// پنجرهٔ یکتاییِ بازدید (گام ۱۵-۶، D-6) — هر (روز، نشست، مسیر) فقط وقتی
-/// views را بالا می‌برد که آخرین پینگش دست‌کم ۳۰ دقیقه قبل بوده باشد؛
-/// refresh و برگشتِ سریع به همان صفحه دوباره‌شماری نمی‌کند (از هر دو سمت:
-/// sessionStorage کلاینت + این جدول سرور — سرور مرز حقیقت است).
-/// updatedMany/createMany اتمیک‌اند؛ ردیف‌های قدیمی‌تر از ۲ روز پاک می‌شوند.
-model DailyVisitPath {
-  day        DateTime // آغاز روز تهران (UTC)
-  sessionKey String // همان توکن سبد
-  path       String // مسیر صفحه (سقف ۲۰۰)
-  updatedAt  DateTime @default(now()) // آخرین پینگِ شمرده — لغزنده
-
-  @@id([day, sessionKey, path])
-  @@index([day])
-}
-
 /// Event Outbox — Checklist (Event Bus): رویداد دامنه در همان تراکنش ثبت، worker توزیع می‌کند؛ idempotent
 enum OutboxState {
   PENDING
@@ -3011,56 +2805,9 @@ enum OutboxState {
   FAILED
 }
 
-model DomainEventOutbox {
-  id          String      @id @default(cuid())
-  name        String // OrderPaid | InventoryConsumed | ...
-  payload     Json
-  state       OutboxState @default(PENDING)
-  attempts    Int         @default(0)
-  availableAt DateTime    @default(now())
-  processedAt DateTime?
-  lastError   String?
-  createdAt   DateTime    @default(now())
-
-  @@unique([name, payload]) // دو رویداد یکسان با payload یکسان → یک اثر
-  @@index([state, availableAt])
-}
-
 /// اطلاع‌رسانی موجود شدن (Restock) — Checklist#16: فقط وقتی موجودی فعال شود ارسال می‌شود
 enum StockAlertState {
   PENDING
   NOTIFIED
   CANCELLED
-}
-
-model StockAlert {
-  id         String          @id @default(cuid())
-  variantSku String
-  channel    String          @default("sms")
-  target     String // موبایل/ایمیل
-  state      StockAlertState @default(PENDING)
-  notifiedAt DateTime?
-  createdAt  DateTime        @default(now())
-
-  variant ProductVariant @relation(fields: [variantSku], references: [sku])
-
-  @@unique([variantSku, channel, target])
-  @@index([state])
-}
-
-// -------------------------------- legacy — بعد از migration داده حذف
-
-model InventoryMovement {
-  id        String         @id @default(cuid())
-  variantId String
-  delta     Int
-  reason    MovementReason
-  refId     String?
-  actorId   String?
-  note      String?
-  createdAt DateTime       @default(now())
-
-  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
-
-  @@index([variantId])
 }

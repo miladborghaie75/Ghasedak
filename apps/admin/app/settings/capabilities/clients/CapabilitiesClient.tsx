@@ -16,9 +16,11 @@ interface CredStatus { items: Record<string, CredItem> }
 interface SmsProviderRow { id: string; name: string; envKey: string; docsUrl: string; configured: boolean; masked: string | null }
 interface SmsProvidersStatus { providers: SmsProviderRow[]; active: string }
 interface PayStatus { gateway: "zarinpal"; sandbox: boolean; configured: boolean; merchantValid: boolean; masked: string | null; adapterActive: boolean }
+interface AiKeyItem { configured: boolean; masked: string | null; source: string }
+interface AiStatus { configured: boolean; baseUrl: string; model: string; key: AiKeyItem | null }
 
-/** کلیدهایی که کارت‌های اختصاصی (درگاه/پیامک) مالک‌اند — از جدول عمومی حذف می‌شوند */
-const OWNED_BY_CARDS = new Set(["ZARINPAL_MERCHANT_ID", "KAVENEGAR_API_KEY", "GHASEDAKSMS_API_KEY", "MELIPAYAMAK_USERNAME", "MEDIANA_API_KEY", "IPPANEL_API_KEY", "SMSIR_API_KEY"]);
+/** کلیدهایی که کارت‌های اختصاصی (درگاه/پیامک/چت‌بات) مالک‌اند — از جدول عمومی حذف می‌شوند */
+const OWNED_BY_CARDS = new Set(["ZARINPAL_MERCHANT_ID", "KAVENEGAR_API_KEY", "GHASEDAKSMS_API_KEY", "MELIPAYAMAK_USERNAME", "MEDIANA_API_KEY", "IPPANEL_API_KEY", "SMSIR_API_KEY", "AI_BASE_URL", "AI_API_KEY", "AI_MODEL"]);
 
 /** تنظیمات قابلیت‌ها — کلاینتِ صفحهٔ سرور (بند ۷/۴۵)؛ پیامک در یک کارت واحد */
 export default function CapabilitiesClient() {
@@ -35,6 +37,12 @@ export default function CapabilitiesClient() {
   const [payTest, setPayTest] = useState<{ ok: boolean; text: string } | null>(null);
   const [payBusy, setPayBusy] = useState(false);
   const [merchantDraft, setMerchantDraft] = useState("");
+  const [aiSt, setAiSt] = useState<AiStatus | null>(null);
+  const [aiBase, setAiBase] = useState("");
+  const [aiModel, setAiModel] = useState("");
+  const [aiKey, setAiKey] = useState("");
+  const [aiTest, setAiTest] = useState<{ ok: boolean; text: string } | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
 
   const load = async () => {
     const r = await call<CapabilityStatus>("/admin/capabilities/status");
@@ -45,6 +53,12 @@ export default function CapabilitiesClient() {
     if (sp.ok && sp.data) setSmsProv(sp.data);
     const ps = await call<PayStatus>("/admin/capabilities/payment-gateway/status");
     if (ps.ok && ps.data) setPaySt(ps.data);
+    const ai = await call<AiStatus>("/admin/capabilities/ai");
+    if (ai.ok && ai.data) {
+      setAiSt(ai.data);
+      setAiBase(ai.data.baseUrl ?? "");
+      setAiModel(ai.data.model ?? "");
+    }
   };
   useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -113,6 +127,35 @@ export default function CapabilitiesClient() {
     if (r.ok) { setMerchantDraft(""); setMsg("Merchant ID ذخیره شد ✅ — حالا تست اتصال را بزن."); await load(); }
     else setMsg(r.error?.message ?? "خطا در ذخیره");
     setTimeout(() => setMsg(""), 5000);
+  };
+
+  /** ذخیرهٔ تنظیمات چت‌بات — کلید خالی ارسال نمی‌شود تا مقدار قبلی پاک نشود */
+  const saveAi = async () => {
+    const payload: { baseUrl: string; model: string; apiKey?: string } = {
+      baseUrl: aiBase.trim(),
+      model: aiModel.trim(),
+    };
+    const key = aiKey.trim();
+    if (key) payload.apiKey = key;
+    const r = await call<{ written: string[] }>("/admin/capabilities/ai/settings", { method: "POST", body: JSON.stringify(payload) });
+    if (r.ok) {
+      setAiKey("");
+      setMsg("تنظیمات چت‌بات ذخیره شد ✅ — حالا تست اتصال را بزن.");
+      await load();
+    } else {
+      setMsg(r.error?.message ?? "خطا در ذخیرهٔ تنظیمات چت‌بات");
+    }
+    setTimeout(() => setMsg(""), 5000);
+  };
+
+  /** تست واقعی اتصال — یک فراخوانی کوچک با همان کلید/مدل ذخیره‌شده (بدون فیک) */
+  const testAi = async () => {
+    setAiTest(null);
+    setAiBusy(true);
+    const r = await call<{ ok?: boolean; reply?: string }>("/admin/capabilities/ai/test", { method: "POST" });
+    if (!r.ok) setAiTest({ ok: false, text: r.error?.message ?? "خطا" });
+    else setAiTest({ ok: true, text: `اتصال موفق ✅ — پاسخ مدل: ${r.data?.reply ?? "—"}` });
+    setAiBusy(false);
   };
 
   const testGateway = async () => {
@@ -343,6 +386,78 @@ export default function CapabilitiesClient() {
         ) : null}
         <p className="mt-3 text-[11px] text-muted">
           درگاه آزمایشی (mock) فقط در محیط توسعه برای تستِ مسیر پرداخت در دسترس است و هرگز در production بالا نمی‌آید.
+        </p>
+      </section>
+
+      {/* چت‌بات هوشمند — گام ۱۸-۳: نشانی/کلید/مدل ارائه‌دهندهٔ AI + تست واقعی (بدون فیک، بند ۱۱۱) */}
+      <section className="rounded-card border border-line bg-surface p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <h3 className="font-display text-base font-bold text-ink">چت‌بات هوشمند</h3>
+          {aiSt ? (
+            aiSt.configured ? (
+              <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-ok">پیکربندی شده</span>
+            ) : (
+              <span className="rounded-full bg-app-primary-soft px-2 py-0.5 text-[11px] font-bold text-app-err">نیازمند credential</span>
+            )
+          ) : null}
+        </div>
+        <p className="mb-3 text-xs leading-6 text-muted">
+          ارائه‌دهندهٔ هر endpoint سازگار OpenAI (Falkor، OpenAI، OpenRouter، Groq و…) قابل استفاده است. مقادیر در فایل محلی
+          <code className="rounded bg-bg px-1">apps/api/.env.local</code> (خارج از git) ذخیره می‌شوند و کلید هرگز کامل نمایش داده نمی‌شود. تا وقتی هر سه مقدار ست نشده‌اند، چت‌بات به مشتری پاسخ «چت موقتاً در دسترس نیست» می‌دهد — هیچ پاسخ جعلی ساخته نمی‌شود.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-xs font-bold text-muted">
+            نشانی سرویس (Base URL)
+            <input
+              value={aiBase}
+              onChange={(e) => setAiBase(e.target.value)}
+              placeholder="https://api.falkor.ai/v1"
+              dir="ltr"
+              className="mt-1 block w-72 rounded-lg border border-line bg-bg px-3 py-2 font-mono text-xs"
+            />
+          </label>
+          <label className="text-xs font-bold text-muted">
+            کلید API {aiSt?.key?.masked ? <span className="font-mono text-[10px] text-app-ok">({aiSt.key.masked})</span> : null}
+            <input
+              type="password"
+              autoComplete="off"
+              value={aiKey}
+              onChange={(e) => setAiKey(e.target.value)}
+              placeholder={aiSt?.key?.configured ? "(بدون تغییر اگر خالی بماند)" : "sk-…"}
+              dir="ltr"
+              className="mt-1 block w-64 rounded-lg border border-line bg-bg px-3 py-2 font-mono text-xs"
+            />
+          </label>
+          <label className="text-xs font-bold text-muted">
+            مدل
+            <input
+              value={aiModel}
+              onChange={(e) => setAiModel(e.target.value)}
+              placeholder="مثلاً falkor-1"
+              dir="ltr"
+              className="mt-1 block w-44 rounded-lg border border-line bg-bg px-3 py-2 font-mono text-xs"
+            />
+          </label>
+          <button
+            onClick={() => void saveAi()}
+            disabled={loading}
+            className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-accent"
+          >
+            ذخیره
+          </button>
+          <button
+            onClick={() => void testAi()}
+            disabled={aiBusy}
+            className="rounded-full border border-line px-4 py-2 text-xs font-bold text-ink disabled:opacity-40"
+          >
+            {aiBusy ? "در حال تست…" : "تست اتصال"}
+          </button>
+        </div>
+        {aiTest ? (
+          <p className={`mt-2 text-xs font-bold ${aiTest.ok ? "text-app-ok" : "text-app-err"}`}>{aiTest.text}</p>
+        ) : null}
+        <p className="mt-3 text-[11px] text-muted">
+          «تست اتصال» یک فراخوانی واقعی و کوچک به مدل می‌زند؛ سبز یعنی ارائه‌دهنده، کلید و مدل همه سالم‌اند.
         </p>
       </section>
 

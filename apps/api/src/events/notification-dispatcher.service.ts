@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/commo
 import { PrismaService } from "../prisma/prisma.service";
 import { backgroundWorkersEnabled } from "../common/background-workers";
 import { SmsProvidersService } from "./sms-providers.service";
+import { emitAlert } from "../monitoring/alert-bus";
 
 /**
  * فاز ۱۱ (P2-B) — Notification Dispatcher
@@ -46,6 +47,9 @@ export class NotificationDispatcherService implements OnModuleInit, OnModuleDest
   async dispatchOnce(take = 20): Promise<{ sent: number; failed: number; notConfigured: number }> {
     if (this.running) return { sent: 0, failed: 0, notConfigured: 0 };
     this.running = true;
+    // heartbeat ساخت‌یافته (گام ۲۳): نتیجهٔ هر پاس با فیلدهای ثابت؛ خطای worker → رویداد هشدار
+    const started = Date.now();
+    let errorCount = 0;
     try {
       const rows = await this.prisma.notification.findMany({
         where: { status: "QUEUED", channel: { in: ["SMS", "EMAIL"] } },
@@ -60,6 +64,7 @@ export class NotificationDispatcherService implements OnModuleInit, OnModuleDest
           else if (state === "FAILED") failed++;
           else notConfigured++;
         } catch (e) {
+          errorCount++;
           this.logger.warn(`dispatch error for ${n.id}: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
@@ -67,7 +72,23 @@ export class NotificationDispatcherService implements OnModuleInit, OnModuleDest
         this.logger.log(`dispatch: sent=${sent} failed=${failed} notConfigured=${notConfigured}`);
       }
       return { sent, failed, notConfigured };
+    } catch (e) {
+      errorCount += 1;
+      emitAlert(
+        "WORKER_ERROR",
+        `worker اعلان‌ها (NotificationDispatcher) با خطا متوقف شد: ${e instanceof Error ? e.message : String(e)}`,
+        { component: "notification-dispatcher" },
+      );
+      throw e;
     } finally {
+      this.logger.log(
+        JSON.stringify({
+          component: "notification-dispatcher",
+          status: errorCount > 0 ? "error" : "ok",
+          durationMs: Date.now() - started,
+          errorCount,
+        }),
+      );
       this.running = false;
     }
   }

@@ -34,6 +34,7 @@ export interface Page<T> {
 /* ---------- سلامت سرویس (بند ۸۸) ---------- */
 
 export interface HealthStatus {
+  /** `ok` فقط وقتی چک الزامی (db) سبز باشد؛ redis/storage اطلاعاتی‌اند و verdict نمی‌سازند (گام ۲۳) */
   status: "ok" | "degraded";
   requestId: string;
   checks: {
@@ -42,6 +43,8 @@ export interface HealthStatus {
     redis: boolean;
     storage: boolean;
   };
+  /** نسخهٔ اپ — برای پایش استقرار */
+  version?: string;
   uptimeSeconds: number;
 }
 

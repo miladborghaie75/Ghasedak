@@ -11,7 +11,7 @@
  * Prisma اینجا stub می‌شود؛ تست‌های DB-محورِ ماژول از قبل پوشش داده شده‌اند.
  */
 import "reflect-metadata";
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { CmsService } from "../src/cms/cms.controller";
 import {
   ART_FRAME_COLORS,
@@ -250,9 +250,15 @@ describe("Phase 17 — الگوهای شروع صفحه", () => {
     expect(data.blocks).toHaveLength(0);
   });
 
-  it("ساخت صفحهٔ تکراری رد می‌شود", async () => {
+  it("ساخت صفحهٔ تکراری رد می‌شود (409 — تصمیم گام ۲۰: تکرارِ شناسهٔ دستی صریح و فارسی)", async () => {
     const svc = new CmsService(makePrisma([row("about", heroPage, "DRAFT")]) as never);
-    await expect(svc.create("about", "دوباره", "simple", "u1")).rejects.toThrow(BadRequestException);
+    await expect(svc.create("about", "دوباره", "simple", "u1")).rejects.toThrow(ConflictException);
+    await svc.create("about", "دوباره", "simple", "u1").catch((e: unknown) => {
+      expect((e as { getResponse?: () => unknown }).getResponse?.()).toMatchObject({
+        code: "PAGE_EXISTS",
+        message: "صفحه‌ای با این شناسه از قبل وجود دارد.",
+      });
+    });
   });
 });
 

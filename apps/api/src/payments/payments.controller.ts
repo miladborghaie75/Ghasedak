@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Get, Headers, Logger, NotFoundEx
 import { PaymentsService } from "./payments.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
+import { RequireCsrf } from "../auth/csrf.guard";
 
 interface StartBody {
   orderId: string;
@@ -11,7 +12,12 @@ interface StartBody {
   guestMobile?: string;
 }
 
-/** callback عمومی درگاه — هرگز تایید نیست؛ فقط ثبت و سپس verify سمت‌سرور (بند ۷) */
+/**
+ * callback عمومی درگاه — هرگز تایید نیست؛ فقط ثبت و سپس verify سمت‌سرور (بند ۷).
+ * مسیرهای درگاه سمت‌سرور فراخوانی می‌شوند (بدون Origin) و از گارد CSRF عبور می‌کنند؛
+ * اکشن‌های مینتِ مالیِ مرورگری بدون توکن/با Origin غریب ۴۰۳ می‌گیرند (گام ۲۲).
+ */
+@RequireCsrf()
 @Controller("payments")
 export class PaymentsController {
   constructor(

@@ -3,6 +3,7 @@
  * پارامتر مسیر = SKU (همان شناسه‌ای که کلاینت «variantId» می‌نامد).
  */
 import { COPY } from "@/lib/copy";
+import { csrfOk, csrfForbidden } from "@/lib/csrf";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ function cartHeaders(req: Request): Record<string, string> {
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ variantId: string }> }) {
+  if (!csrfOk(req)) return csrfForbidden();
   const { variantId } = await params;
   const upstream = await fetch(`${API}/api/v1/cart/items/${encodeURIComponent(variantId)}`, {
     method: "DELETE",

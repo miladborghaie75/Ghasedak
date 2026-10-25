@@ -2,9 +2,11 @@ import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Q
 import { JournalService, type PostEntryInput } from "./journal.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
+import { RequireCsrf } from "../auth/csrf.guard";
 import { Identity } from "../auth/identity.decorator";
 import { optionalDate } from "../common/query-date";
 
+@RequireCsrf() // حسابداری — اکشن مالی حساس (گام ۲۲)
 @Controller("admin/accounting")
 export class AccountingController {
   constructor(

@@ -14,6 +14,7 @@ import {
   type AttributeKey,
   type CategorySlug,
 } from "./attributes";
+import { searchDocs } from "./persian-search";
 import type { ProductV2 as ProductV2Type, VariantV2 } from "./catalog";
 import { resetTermLabels, putTermLabel } from "./term-labels";
 import { compareRating, type SortKey } from "./sort";
@@ -339,17 +340,13 @@ export function sortV2(list: ProductV2[], sort: SortKey): ProductV2[] {
   }
 }
 
+/* ── جست‌وجوی فارسی (گام ۲۰) — هسته در lib/persian-search.ts (تست‌واحد دارد) ── */
+
 export function searchV2(
   q: string,
   pool: ProductV2[] = getAllProductsV2(),
 ): ProductV2[] {
-  const term = q.trim().toLowerCase();
-  if (!term) return pool;
-  return pool.filter(
-    (p) =>
-      p.name.toLowerCase().includes(term) ||
-      p.short?.toLowerCase().includes(term),
-  );
+  return searchDocs(q, pool);
 }
 
 /** گزینه‌های فیلتر دسته‌آگاه — امضای اصلی repo حفظ شده */

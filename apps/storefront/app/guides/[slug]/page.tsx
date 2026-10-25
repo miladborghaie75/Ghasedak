@@ -10,7 +10,9 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const g = guides[slug];
-  return g ? { title: g.title, description: g.intro } : {};
+  return g
+    ? { title: g.title, description: g.intro, alternates: { canonical: `/guides/${slug}` } }
+    : {};
 }
 
 export default async function GuidePage({ params }: { params: Promise<{ slug: string }> }) {

@@ -1,7 +1,10 @@
 /**
  * پراکسی سبد سروری — کوکی cart_token را به API می‌فرستد (x-cart-token).
  * GET = خواندن سبد، DELETE = خالی‌کردن کل سبد.
+ * متد مینت (DELETE) گارد CSRF double-submit دارد؛ GET فقط خواندن است.
  */
+import { csrfOk, csrfForbidden } from "@/lib/csrf";
+
 export const dynamic = "force-dynamic";
 
 const API = process.env.API_ORIGIN ?? "http://localhost:4000";
@@ -29,6 +32,7 @@ export async function GET(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  if (!csrfOk(req)) return csrfForbidden();
   const upstream = await fetch(`${API}/api/v1/cart`, {
     method: "DELETE",
     headers: cartHeaders(req),

@@ -3,6 +3,7 @@
  * بدنه: { variantId, qty } — qty<=0 یعنی حذف قلم.
  */
 import { COPY } from "@/lib/copy";
+import { csrfOk, csrfForbidden } from "@/lib/csrf";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ function cartHeaders(req: Request): Record<string, string> {
 }
 
 export async function POST(req: Request) {
+  if (!csrfOk(req)) return csrfForbidden();
   let payload: { variantId?: string; qty?: number } | null = null;
   try {
     payload = (await req.json()) as { variantId?: string; qty?: number } | null;

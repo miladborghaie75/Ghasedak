@@ -76,6 +76,19 @@ const SHADOWS: Record<ArtKind, { cy: number; rx: number }> = {
   sleepwear: { cy: 94, rx: 28 },
 };
 
+/**
+ * پد آمان — نوعِ ناشناخته به فرم پیش‌فرض برمی‌گردد، نه کرش.
+ *
+ * چرا لازم است: `kind` در کارت محصول از اسلاگِ دسته می‌آید (`product.category`).
+ * هر دسته‌ای که در شش فرم آرت نیست (دسته‌های تست، دستهٔ تازه، دادهٔ واردشده)
+ * قبلاً `SHADOWS[kind]` را undefined می‌گذاشت و SSR کل صفحه را با
+ * «reading 'cy'» می‌انداخت. آرتِ دکوری نباید هیچ‌وقت مسیر خرید را بشکند.
+ */
+const DEFAULT_ART_KIND: ArtKind = "bra";
+function safeKind(kind: ArtKind): ArtKind {
+  return SHADOWS[kind] ? kind : DEFAULT_ART_KIND;
+}
+
 /* ────────────────────────── شکل‌های پایه ────────────────────────── */
 
 /**
@@ -238,14 +251,15 @@ export function ArtSilhouette({
   label?: string;
   className?: string;
 }) {
-  const g = gradientId(kind, color);
-  const shadow = SHADOWS[kind];
+  const k = safeKind(kind);
+  const g = gradientId(k, color);
+  const shadow = SHADOWS[k];
 
   return (
     <svg
       viewBox="0 0 100 100"
       role="img"
-      aria-label={label ?? ART_TITLES[kind]}
+      aria-label={label ?? ART_TITLES[k]}
       className={clsx("h-full w-full", className)}
     >
       <defs>
@@ -257,12 +271,12 @@ export function ArtSilhouette({
       {/* سایهٔ تماس — فرم روی سطح بایستد، نه در هوا معلق باشد */}
       <ellipse cx="50" cy={shadow.cy} rx={shadow.rx} ry={4} fill={color} opacity="0.12" />
 
-      {kind === "bra" && <BraShape g={g} />}
-      {kind === "panty" && <PantyShape g={g} />}
-      {kind === "set" && <SetShape g={g} />}
-      {kind === "shapewear" && <ShapewearShape g={g} />}
-      {kind === "sport" && <SportShape g={g} />}
-      {kind === "sleepwear" && <SleepwearShape g={g} />}
+      {k === "bra" && <BraShape g={g} />}
+      {k === "panty" && <PantyShape g={g} />}
+      {k === "set" && <SetShape g={g} />}
+      {k === "shapewear" && <ShapewearShape g={g} />}
+      {k === "sport" && <SportShape g={g} />}
+      {k === "sleepwear" && <SleepwearShape g={g} />}
     </svg>
   );
 }

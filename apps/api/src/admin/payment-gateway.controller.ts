@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Inject, Param, Patch, Post } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
+import { RequireCsrf } from "../auth/csrf.guard";
 import { ZarinpalProvider } from "../payments/zarinpal.provider";
 
 /**
@@ -28,6 +29,7 @@ function mask(v: string): string | null {
   return v.length <= 8 ? "••••" : `${v.slice(0, 6)}…${v.slice(-4)}`;
 }
 
+@RequireCsrf() // تنظیم درگاه/مرچنت — اکشن مالی حساس (گام ۲۲)
 @Controller("admin/capabilities/payment-gateway")
 export class PaymentGatewayController {
   constructor(

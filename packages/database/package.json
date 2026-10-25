@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@ghasedak/contracts": "workspace:*",
-    "@prisma/client": "^6.3.0"
+    "@prisma/client": "^6.3.0",
+    "argon2": "^0.45.1"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",

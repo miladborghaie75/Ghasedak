@@ -3,17 +3,9 @@
  * resolver سفارش (code → id) و ایجاد PaymentAttempt سمت API است (بند ۶/۱۰).
  */
 import { COPY } from "@/lib/copy";
+import { csrfOk } from "@/lib/csrf";
 
 export const dynamic = "force-dynamic";
-
-/** بررسی double-submit CSRF: هدر `x-csrf-token` باید با کوکی `csrf_token` یکی باشد */
-function csrfOk(req: Request): boolean {
-  const raw = req.headers.get("cookie") ?? "";
-  const m = raw.match(/(?:^|;\s*)csrf_token=([^;]+)/);
-  const cookieToken = m ? decodeURIComponent(m[1]) : "";
-  const headerToken = req.headers.get("x-csrf-token") ?? "";
-  return cookieToken !== "" && headerToken !== "" && cookieToken === headerToken;
-}
 
 export async function POST(req: Request) {
   if (!csrfOk(req)) {

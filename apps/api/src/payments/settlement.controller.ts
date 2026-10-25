@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
 import { SettlementService } from "./settlement.service";
 import { RequirePermission } from "../auth/permissions.guard";
+import { RequireCsrf } from "../auth/csrf.guard";
 import { Identity } from "../auth/identity.decorator";
 
 /**
@@ -15,6 +16,7 @@ import { Identity } from "../auth/identity.decorator";
  * تا قبل از گام ۳ هیچ تغییری در حساب بانک نمی‌افتد — یعنی یک ورودی اشتباه
  * قابل بی‌خطر بودن است.
  */
+@RequireCsrf() // تسویهٔ درگاه — اکشن مالی حساس (گام ۲۲)
 @Controller("admin/settlements")
 export class SettlementController {
   constructor(private readonly svc: SettlementService) {}

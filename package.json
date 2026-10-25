@@ -24,7 +24,8 @@
       "prisma",
       "sharp",
       "@tailwindcss/oxide",
-      "esbuild"
+      "esbuild",
+      "argon2"
     ]
   }
 }

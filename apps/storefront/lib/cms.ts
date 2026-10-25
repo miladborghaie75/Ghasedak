@@ -246,6 +246,30 @@ async function cookieHeader(): Promise<string> {
   }
 }
 
+/**
+ * فهرست صفحه‌های CMS منتشرشده برای سایت‌مپ — فقط اسلاگ + آخرین ویرایش.
+ * fail-open: اگر API در دسترس نبود، لیست خالی برمی‌گردد تا سایت‌مپ نشکند.
+ */
+export async function loadPublishedCmsPages(): Promise<Array<{ slug: string; lastModified: string }>> {
+  const api = process.env.API_ORIGIN ?? "http://localhost:4000";
+  try {
+    const r = await fetch(`${api}/api/v1/cms/pages`, {
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!r.ok) return [];
+    const body = (await r.json()) as {
+      items?: Array<{ slug: string; updatedAt?: string; publishedAt?: string | null }>;
+    };
+    return (body.items ?? []).map((p) => ({
+      slug: p.slug,
+      lastModified: p.updatedAt ?? p.publishedAt ?? new Date().toISOString(),
+    }));
+  } catch {
+    return [];
+  }
+}
+
 /** آیا صفحه‌ای برای این slug منتشر شده؟ — برای metadata و مسیرها */
 export async function hasPublishedPage(slug: string): Promise<boolean> {
   const api = process.env.API_ORIGIN ?? "http://localhost:4000";
@@ -292,6 +316,8 @@ export async function contentPageMetadata(opts: {
     // صفحه را می‌نویسد؛ نام فروشگاه از یک جا (قالب) می‌آید.
     title: base,
     description: seoDescription || opts.description,
+    // کانونیکال صفحهٔ محتوایی — بدون پایان‌اسلش؛ metadataBase در layout دامنهٔ www را می‌گذارد
+    alternates: { canonical: `/${opts.slug}` },
     ...(seo?.noIndex ? { robots: { index: false, follow: false } } : {}),
   };
 }

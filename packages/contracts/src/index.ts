@@ -10,3 +10,5 @@ export * from "./tracking";
 export * from "./account-codes";
 export * from "./analytics";
 export * from "./need-finder";
+export * from "./persian";
+export * from "./ai";

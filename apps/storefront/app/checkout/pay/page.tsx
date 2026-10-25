@@ -50,6 +50,48 @@ export default async function PayPage({
     items: Array<{ titleSnapshot: string; qty: number; lineTotal: string | number }>;
   };
 
+  // گام ۱۸-۱ — پیکربندی کارت‌به‌کارت و آخرین رسید سفارش (سمت سرور؛ سوییچ
+  // خاموش = تب اصلاً به مشتری نشان داده نمی‌شود)
+  const c2cRes = await fetch(`${API}/api/v1/payments/c2c/config`, {
+    cache: "no-store",
+  }).catch(() => null);
+  const c2c = (await c2cRes?.json().catch(() => null)) as {
+    enabled?: boolean;
+    expiryHours?: number;
+    accounts?: Array<{
+      id: string;
+      bankName: string;
+      displayTitle: string | null;
+      holderName: string | null;
+      cardNumber: string | null;
+      iban: string | null;
+      customerInstructions: string | null;
+    }>;
+  } | null;
+  let initialSubmission: {
+    state: string;
+    referenceNo: string | null;
+    decisionNote: string | null;
+  } | null = null;
+  if (c2c?.enabled) {
+    const subRes = await fetch(
+      `${API}/api/v1/payments/c2c/by-order/${encodeURIComponent(code)}`,
+      { cache: "no-store" },
+    ).catch(() => null);
+    const sub = (await subRes?.json().catch(() => null)) as {
+      state?: string;
+      referenceNo?: string | null;
+      decisionNote?: string | null;
+    } | null;
+    if (subRes?.ok && sub?.state) {
+      initialSubmission = {
+        state: sub.state,
+        referenceNo: sub.referenceNo ?? null,
+        decisionNote: sub.decisionNote ?? null,
+      };
+    }
+  }
+
   if (order.paymentStatus === "PAID") {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
@@ -78,7 +120,16 @@ export default async function PayPage({
           <span>مبلغ قابل پرداخت</span>
           <span className="tabular-nums">{fa(order.total)} تومان</span>
         </div>
-        <PayForm code={code} total={Number(order.total)} />
+        <PayForm
+          code={code}
+          total={Number(order.total)}
+          c2c={{
+            enabled: c2c?.enabled === true,
+            expiryHours: c2c?.expiryHours ?? 48,
+            accounts: c2c?.accounts ?? [],
+          }}
+          initialSubmission={initialSubmission}
+        />
       </div>
     </div>
   );

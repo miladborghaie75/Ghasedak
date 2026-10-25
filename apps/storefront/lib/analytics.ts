@@ -14,6 +14,8 @@
  * سمت مشتری را می‌فرستد: view_item, add_to_cart, begin_checkout, search.
  */
 
+import { csrfHeaders as csrfHeader } from "./csrf";
+
 const CONSENT_KEY = "ghasedak.consent.v1";
 const UTM_KEY = "ghasedak.utm.v1";
 const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"] as const;
@@ -40,13 +42,6 @@ export function saveConsentDecision(d: ConsentDecision): void {
     headers: { "content-type": "application/json", ...csrfHeader() },
     body: JSON.stringify({ kind: "ANALYTICS", granted: d === "granted", source: "banner" }),
   }).catch(() => undefined);
-}
-
-/** double-submit CSRF — همان الگوی CheckoutClient (کوکی csrf_token خواناست) */
-function csrfHeader(): Record<string, string> {
-  const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
-  const token = m ? decodeURIComponent(m[1]) : "";
-  return token ? { "x-csrf-token": token } : {};
 }
 
 type QueuedEvent = [name: string, params: Record<string, unknown>];

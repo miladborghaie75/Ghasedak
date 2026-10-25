@@ -741,6 +741,136 @@ export class CapabilitiesController {
     return { suggestion };
   }
 
+  /** چت‌بات مشتری — SSE streaming (گام ۱۸-۳) 
+   * درخواست: { messages: [{ role: 'user' | 'assistant', content: string }], stream?: boolean }
+   * پاسخ SSE: data: { chunk: string }\n\n (یا تمام متن اگر stream=false)
+   * خطاها: REQUIRES_CREDENTIAL (بدون تنظیمات)، VALIDATION_ERROR (بدنه نامعتبر)
+   */
+  @Post("ai/chat")
+  @RequirePermission("settings.view")
+  async aiChatStream(@Body() body: { messages?: Array<{ role: "user" | "assistant"; content: string }>; stream?: boolean }, @Res() res: Response) {
+    // اعتبارسنجی ورودی
+    const messages = Array.isArray(body?.messages) ? body.messages.slice(-10) : []; // حداکثر ۱۰ پیام اخیر
+    if (messages.length === 0 || messages.some((m) => !m?.content || typeof m.content !== "string" || m.content.length > 2000)) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "پیام‌ها نامعتبر هستند (خالی، بیش از ۲۰۰۰ کاراکتر، یا ساختار اشتباه)." });
+    }
+    // فقط user/assistant مجاز؛ system از سمت کلاینت ممنوع
+    const filtered = messages.filter((m) => m.role === "user" || m.role === "assistant");
+    if (filtered.length !== messages.length) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "فقط نقش user و assistant مجاز است." });
+    }
+    
+    const { baseUrl, apiKey, model } = this.aiConfig();
+    
+    // System prompt برای چت‌بات فروشگاهی
+    const systemPrompt = this.buildChatSystemPrompt();
+    
+    const payload = {
+      model,
+      messages: [{ role: "system", content: systemPrompt }, ...filtered],
+      temperature: 0.3,
+      max_tokens: 512,
+      stream: body.stream === true,
+    };
+    
+    if (!body.stream) {
+      // حالت non-streaming برای تست/سازگاری
+      const aiRes = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(30_000),
+      }).catch((e) => {
+        throw new BadRequestException({ code: "AI_PROVIDER_ERROR", message: `اتصال به سرویس AI برقرار نشد: ${String(e)}` });
+      });
+      if (!aiRes.ok) {
+        const text = await aiRes.text().catch(() => "");
+        throw new BadRequestException({ code: "AI_PROVIDER_ERROR", message: `پاسخ سرویس AI: ${aiRes.status} — ${text.slice(0, 200)}` });
+      }
+      const json = (await aiRes.json().catch(() => null)) as { choices?: Array<{ message?: { content?: string } }> } | null;
+      const content = (json?.choices?.[0]?.message?.content ?? "").trim();
+      if (!content) {
+        throw new BadRequestException({ code: "AI_EMPTY", message: "سرویس AI پاسخ خالی داد." });
+      }
+      return res.json({ content });
+    }
+    
+    // Streaming response
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+    
+    const send = (data: object) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+    
+    try {
+      const aiRes = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(60_000),
+      }).catch((e) => {
+        throw new BadRequestException({ code: "AI_PROVIDER_ERROR", message: `اتصال به سرویس AI برقرار نشد: ${String(e)}` });
+      });
+      
+      if (!aiRes.ok || !aiRes.body) {
+        const text = await aiRes.text().catch(() => "");
+        send({ error: `AI_PROVIDER_ERROR: ${aiRes.status} — ${text.slice(0, 200)}` });
+        res.end();
+        return;
+      }
+      
+      const reader = aiRes.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") {
+            send({ done: true });
+            res.end();
+            return;
+          }
+          try {
+            const parsed = JSON.parse(data);
+            const chunk = parsed.choices?.[0]?.delta?.content;
+            if (chunk) send({ chunk });
+          } catch {
+            // ignore parse errors on partial chunks
+          }
+        }
+      }
+      send({ done: true });
+      res.end();
+    } catch (e) {
+      send({ error: `AI_PROVIDER_ERROR: ${String(e)}` });
+      res.end();
+    }
+  }
+
+  /** تولید system prompt برای چت‌بات با کانتکست کاتالوگ */
+  private buildChatSystemPrompt(): string {
+    return "تو دستیار خرید فروشگاه اینترنتی قاصدک هستی. " +
+      "لحن صمیمی، کم‌کلام، و کاربردی (دوم‌شخص مفرد «تو»). " +
+      "قوانین: (۱) فقط درباره محصولات، سفارش، ارسال، مرجوعی، سایز، و راهنمای خرید پاسخ بده. " +
+      "(۲) اگر جواب قطعی نداری، به‌جای حدس بگو «مطمئن نیستم، می‌توانم در مورد … کمکتان کنم» و به بخش مربوطه راهنمایی کن. " +
+      "(۳) قیمت/موجودی دقیق فقط از API بگیر؛ اگر دادهٔ زنده نداری بگو «موجودی لحظه‌ای را در صفحه محصول ببینید». " +
+      "(۴) هیچ‌گاه اطلاعات حساس (رمز، کد پیگیری، توکن) نپرس و نده. " +
+      "(۵) پاسخ‌ها کوتاه، ساختاریافته، و قابل‌اسکن باشند؛ از لیست تک‌نقطه استفاده کن. " +
+      "(۶) برای موضوعات خارج از چارچوب (سیاست، اخبار، شرکتی) بگو «این موضوع در حوزه کمک من نیست» و به بخش مرتبط ارجاع بده.";
+  }
+
   // ================== فاز ۱۲ (گام ۴) — Outbox workspace ==================
 
   /** خلاصهٔ outbox + ردیف‌ها — PENDING/FAILED مانیتورینگ، DISPATCHED اختیاری */

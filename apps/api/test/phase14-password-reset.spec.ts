@@ -35,7 +35,7 @@ describe("Phase 14 item3 — password reset", () => {
     adminEmail = `reset-admin-${tag}@ghasedak.test`;
     adminPassword = `Old#Pass${tag}`;
     const u = await prisma.user.create({
-      data: { email: adminEmail, passwordHash: PasswordResetService.hashPassword(adminPassword), name: "Reset Admin (TEST)", role: "SUPER_ADMIN", status: "ACTIVE" },
+      data: { email: adminEmail, passwordHash: await PasswordResetService.hashPassword(adminPassword), name: "Reset Admin (TEST)", role: "SUPER_ADMIN", status: "ACTIVE" },
     });
     userId = u.id;
   });
@@ -102,7 +102,7 @@ describe("Phase 14 item3 — password reset", () => {
     await expect(svc.reset({ purpose: "admin", token, newPassword })).rejects.toThrow(UnauthorizedException);
 
     // رمز فعلی برای تست‌های بعدی به رمز اول برگردد
-    await prisma.user.update({ where: { id: userId }, data: { passwordHash: PasswordResetService.hashPassword(adminPassword) } });
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash: await PasswordResetService.hashPassword(adminPassword) } });
   });
 
   it("انقضا: توکن منقضی رد می‌شود و purgeExpired پاکش می‌کند", async () => {
@@ -118,7 +118,7 @@ describe("Phase 14 item3 — password reset", () => {
   it("مشتری: موبایل با رمز → توکن sms؛ مشتری بدون رمز → پاسخ یکسان بدون ردیف", async () => {
     // مشتری با گذرواژه
     const cu = await prisma.user.create({
-      data: { mobile: `0912${String(Date.now()).slice(-7)}`, passwordHash: PasswordResetService.hashPassword("Cust#Pass1"), name: "Reset Customer (TEST)", role: "CUSTOMER", status: "ACTIVE" },
+      data: { mobile: `0912${String(Date.now()).slice(-7)}`, passwordHash: await PasswordResetService.hashPassword("Cust#Pass1"), name: "Reset Customer (TEST)", role: "CUSTOMER", status: "ACTIVE" },
     });
     try {
       const r = await svc.request({ purpose: "customer", identifier: cu.mobile! });

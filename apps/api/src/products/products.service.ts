@@ -1,8 +1,8 @@
-import { BadRequestException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 // note: posSearch در پایین — جستجوی فارسی POS
 import { nextBarcodeForCategory } from "./barcode.util";
-import { GL, GL_EQUITY } from "@ghasedak/contracts";
+import { GL, GL_EQUITY, slugifyFa, isReservedSlug, ensureUniqueSlug } from "@ghasedak/contracts";
 import { JournalService } from "../accounting/journal.service";
 import { assertCleanFields } from "../common/text-guard";
 import type { Prisma } from "@prisma/client";
@@ -151,8 +151,30 @@ export class ProductsService {
     const category = await this.prisma.category.findUnique({ where: { id: data.categoryId } });
     if (!category) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "دسته یافت نشد." });
 
-    let slug = data.slug?.trim() || data.name.trim().toLowerCase().replace(/[\s\u200c]+/g, "-").replace(/[^a-z0-9\u0600-\u06FF-]/g, "").replace(/-+/g, "-") || `p-${Date.now().toString(36)}`;
-    if (await this.prisma.product.findUnique({ where: { slug } })) slug = `${slug}-${Date.now().toString(36)}`;
+    // اسلاگ از تک‌منبع مشترک (contracts/persian): نرمال‌سازی فارسی + رزرو + یکتایی.
+    // اسلاگ دستیِ مدیر: تکرار/رزرو → خطای 409 صریح فارسی (بدون سکوت و بدون پسوند عجیب)؛
+    // اسلاگ خودکار از نام: پس‌وند -۲/-۳ می‌گیرد تا ساخت محصول با تکرار نشکند.
+    let slug: string;
+    if (data.slug != null && String(data.slug).trim() !== "") {
+      slug = slugifyFa(data.slug);
+      if (!slug) {
+        throw new BadRequestException({ code: "VALIDATION_ERROR", message: "اسلاگ باید حداقل یک کاراکتر معتبر داشته باشد." });
+      }
+      if (isReservedSlug(slug)) {
+        throw new ConflictException({ code: "SLUG_RESERVED", message: `«${slug}» یک مسیر رزروی سایت است و نمی‌تواند اسلاگ باشد.` });
+      }
+      if (await this.prisma.product.findUnique({ where: { slug }, select: { id: true } })) {
+        throw new ConflictException({ code: "SLUG_DUPLICATE", message: `اسلاگ «${slug}» قبلاً برای محصول دیگری ثبت شده است.` });
+      }
+    } else {
+      const base = slugifyFa(data.name) || `p-${Date.now().toString(36)}`;
+      if (isReservedSlug(base)) {
+        throw new ConflictException({ code: "SLUG_RESERVED", message: `«${base}» یک مسیر رزروی سایت است و نمی‌تواند اسلاگ باشد.` });
+      }
+      slug = await ensureUniqueSlug(base, (candidate) =>
+        this.prisma.product.findUnique({ where: { slug: candidate }, select: { id: true } }).then((r) => r !== null),
+      );
+    }
 
     // بارکد خودکار بر اساس دسته (بند ۱۱۶: قابل ویرایش بعداً) —
     // به تعداد واریانت‌های بدون بارکد، پشت‌سرهم و یکتا (باگ قبلی: هر دو واریانت یک بارکد می‌گرفتند)

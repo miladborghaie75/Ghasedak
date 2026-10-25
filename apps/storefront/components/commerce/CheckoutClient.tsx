@@ -11,14 +11,8 @@ import { faNum } from "@/lib/format";
 import { COPY } from "@/lib/copy";
 import { ensureCatalogClient, type ProductV2 } from "@/lib/catalog-repo";
 import { getStoredUtm, track } from "@/lib/analytics";
+import { csrfHeaders as csrfHeader } from "@/lib/csrf";
 import type { VariantV2 } from "@/lib/catalog";
-
-/** خواندن توکن CSRF از کوکی (double-submit) و ساخت هدر */
-function csrfHeader(): Record<string, string> {
-  if (typeof document === "undefined") return {};
-  const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
-  return m ? { "x-csrf-token": decodeURIComponent(m[1]) } : {};
-}
 
 /**
  * Checkout مهمان — سه بلوک: اطلاعات تماس، آدرس (با پلاک/واحد — بند ۲۷)، ارسال.

@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { Prisma } from "@prisma/client";
 import { backgroundWorkersEnabled } from "../common/background-workers";
 import { WebhooksService } from "./webhooks.service";
+import { emitAlert } from "../monitoring/alert-bus";
 
 /**
  * Event Bus — بند ۴۳/۴۴: Outbox pattern؛ رویداد در همان تراکنش دامنه نوشته و
@@ -44,6 +45,34 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
   }
 
   async drain(): Promise<void> {
+    // heartbeat ساخت‌یافته (گام ۲۳): بعد از هر پاس، نتیجه با فیلدهای ثبت می‌شود؛
+    // اگر worker خطا دید، به‌جای log خام رویداد هشدار شلیک می‌شود (alert-bus).
+    const started = Date.now();
+    let errorCount = 0;
+    try {
+      await this.drainOnce(() => {
+        errorCount += 1;
+      });
+    } catch (e) {
+      errorCount += 1;
+      emitAlert(
+        "WORKER_ERROR",
+        `worker رویدادها (EventBus) با خطا متوقف شد: ${e instanceof Error ? e.message : String(e)}`,
+        { component: "event-bus" },
+      );
+    } finally {
+      this.logger.log(
+        JSON.stringify({
+          component: "event-bus",
+          status: errorCount > 0 ? "error" : "ok",
+          durationMs: Date.now() - started,
+          errorCount,
+        }),
+      );
+    }
+  }
+
+  private async drainOnce(onEventError: () => void): Promise<void> {
     const events = await this.prisma.domainEventOutbox.findMany({
       where: { state: "PENDING", availableAt: { lte: new Date() } },
       orderBy: { createdAt: "asc" },
@@ -60,6 +89,7 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
           data: { state: "DISPATCHED" as never, processedAt: new Date() },
         });
       } catch (e) {
+        onEventError();
         const msg = e instanceof Error ? e.message : "unknown";
         const attempts = ev.attempts + 1;
         await this.prisma.domainEventOutbox.update({
@@ -141,7 +171,8 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
         });
         if (dup) return;
         const productSlug = order.items[0]?.variant?.product?.slug ?? null;
-        const base = process.env.STOREFRONT_URL ?? "https://lebaszirghasedak.ir";
+        // کانونیکال www (تصمیم #۴) — لینک پیامک بدون www به ریدایرکت ۳۰۱ می‌خورد
+        const base = process.env.STOREFRONT_URL ?? "https://www.lebaszirghasedak.ir";
         await this.prisma.notification.create({
           data: {
             channel: "SMS",

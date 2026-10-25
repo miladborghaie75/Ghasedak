@@ -7,6 +7,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import type { Response } from "express";
+import { record5xx } from "../monitoring/http-5xx-counter";
 
 /**
  * همه خطاها با ساختار ثابت بند ۶۵ برگردانده می‌شوند:
@@ -46,6 +47,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
         `Unhandled: ${exception instanceof Error ? exception.stack : String(exception)}`,
       );
     }
+
+    // پایش ۵xx (گام ۲۳): پنجرهٔ لغزان → رویداد هشدار وقتی از آستانه بگذرد
+    if (status >= 500) record5xx();
 
     res.status(status).json({
       code,

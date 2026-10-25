@@ -2,24 +2,22 @@ import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req } f
 import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
+import { RequireCsrf } from "../auth/csrf.guard";
 import { InventoryService } from "../inventory/inventory.service";
 import { InventorySettingsService } from "../inventory/inventory-settings.service";
 import { JournalService } from "../accounting/journal.service";
 import { PricingService } from "../pricing/pricing.service";
 import { nextNumber } from "../common/number-series";
-import * as crypto from "crypto";
 import { GL, GL_EXPENSE } from "@ghasedak/contracts";
 import { warehouseGlCode } from "../inventory/inventory.service";
-
-function hashPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return `scrypt$${salt}$${hash}`;
-}
+// هش گذرواژه فقط از مسیر مرکزی (argon2id) — سازندهٔ محلی/تکراری حذف شد (گام ۲۲)
+import { hashPasswordArgon2id } from "../auth/auth.service";
 
 /**
  * مدیریت کاربران ادمین + audit + تنظیمات + موجودی — همه با RBAC سمت سرور (بند ۷).
+ * اکشن‌های مینت (کاربر/تنظیمات/اعتبارنامه) گارد CSRF دارند (گام ۲۲).
  */
+@RequireCsrf()
 @Controller("admin")
 export class AdminPanelController {
   constructor(
@@ -67,7 +65,7 @@ export class AdminPanelController {
         name: body.name?.trim() || null,
         role,
         mobile: body.mobile ?? null,
-        passwordHash: hashPassword(body.password),
+        passwordHash: await hashPasswordArgon2id(body.password),
       },
       select: { id: true, email: true, name: true, role: true, status: true, createdAt: true },
     });

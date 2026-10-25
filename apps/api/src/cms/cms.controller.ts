@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -26,6 +27,8 @@ import {
   sitePageBySlug,
   SITE_PAGES,
   sitePathForSlug,
+  RESERVED_SLUGS,
+  slugifyFa,
   type ContentNavConfigItem,
   type CmsPageData,
   type CmsPageSummary,
@@ -100,13 +103,41 @@ export interface SitePageItem {
 export class CmsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** slug معتبر: حروف کوچک، عدد، خط تیره — بدون فاصله و تزریق مسیر */
+  /**
+   * اسلاگهای رزروی که صفحه‌ساز حق ساختنشان را ندارد: مسیرهای ثابت فروشگاه،
+   * به‌جز صفحه‌های محتواییِ خودِ سایت (about/contact/…) که منبعشان همین CMS است.
+   */
+  private static readonly RESERVED_FOR_CMS = new Set(
+    RESERVED_SLUGS.filter((s) => !SITE_PAGES.some((d) => d.slug === s)),
+  );
+
+  /**
+   * اعتبارسنجی شناسهٔ **دریافتی از مسیر** — بدون نرمال‌سازی: ورودی باید از قبل
+   * امن باشد. تزریق مسیر (`../etc`) یا ورودی حاوی فاصله/بزرگ («About Us»)
+   * باید صریحاً ۴۰۰ بخورد، نه اینکه بی‌صدا به چیز دیگری تبدیل شود.
+   * حروف فارسی مجازند (تصمیم #۳ — اسلاگهای فارسی با نرمال‌سازی استاندارد).
+   */
   private assertSlug(slug: string): string {
-    const s = String(slug ?? "").trim().toLowerCase();
-    if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(s)) {
+    const s = String(slug ?? "").trim();
+    if (!/^[a-z0-9\u0600-\u06FF][a-z0-9\u0600-\u06FF-]{0,63}$/.test(s)) {
       throw new BadRequestException({
         code: "VALIDATION_ERROR",
-        message: "شناسهٔ صفحه معتبر نیست — فقط حروف کوچک انگلیسی، عدد و خط تیره.",
+        message: "شناسهٔ صفحه معتبر نیست — فقط حروف کوچک (انگلیسی/فارسی)، عدد و خط تیره.",
+      });
+    }
+    return s;
+  }
+
+  /**
+   * شناسهٔ **نوشته‌شده توسط مدیر** (فقط مسیر ساخت): نرمال‌سازی فارسی از تک‌منبع
+   * `contracts/persian` + الگوی معتبر + چک رزرو با خطای ۴۰۹ فارسی صریح.
+   */
+  private normalizeNewSlug(slug: string): string {
+    const s = this.assertSlug(slugifyFa(String(slug ?? "")));
+    if (CmsService.RESERVED_FOR_CMS.has(s)) {
+      throw new ConflictException({
+        code: "SLUG_RESERVED",
+        message: `«${s}» یک مسیر رزروی سایت است و نمی‌تواند شناسهٔ صفحه باشد.`,
       });
     }
     return s;
@@ -138,6 +169,22 @@ export class CmsService {
    * تنظیمِ ناوبریِ صفحه‌های محتوایی (`cms.contentNav`).
    * `null` یعنی هنوز چیزی ذخیره نشده → همه چیز پیش‌فرضِ `CONTENT_PAGE_NAV`.
    */
+  /**
+   * اسلاگ‌های منتشرشده + آخرین ویرایش — برای سایت‌مپ فروشگاه (فقط عمومی‌ها؛ read-only).
+   */
+  async publishedPages(): Promise<Array<{ slug: string; updatedAt: string; publishedAt: string | null }>> {
+    const rows = await this.prisma.cmsPage.findMany({
+      where: { status: "PUBLISHED" },
+      select: { slug: true, updatedAt: true, publishedAt: true },
+      orderBy: { slug: "asc" },
+    });
+    return rows.map((r) => ({
+      slug: r.slug,
+      updatedAt: r.updatedAt.toISOString(),
+      publishedAt: r.publishedAt?.toISOString() ?? null,
+    }));
+  }
+
   async contentNav(): Promise<unknown> {
     const row = await this.prisma.setting.findUnique({ where: { key: CONTENT_NAV_SETTING_KEY } });
     return row?.value ?? null;
@@ -282,10 +329,11 @@ export class CmsService {
     starter: "empty" | "landing" | "simple" | "site",
     actor: string | undefined,
   ): Promise<{ slug: string; data: CmsPageData }> {
-    const s = this.assertSlug(slug);
+    const s = this.normalizeNewSlug(slug);
     const exists = await this.prisma.cmsPage.findUnique({ where: { slug: s } });
     if (exists) {
-      throw new BadRequestException({
+      // تکرار شناسه هنگام ساخت → 409 صریح (تصمیم گام ۲۰ — نه سکوت و نه تغییر بی‌صدا)
+      throw new ConflictException({
         code: "PAGE_EXISTS",
         message: "صفحه‌ای با این شناسه از قبل وجود دارد.",
       });
@@ -726,6 +774,10 @@ export class CmsAdminController {
 export class CmsPublicController {
   constructor(private readonly cms: CmsService) {}
 
+  /**
+   * خواندن عمومی یک صفحه — مسیر `GET /api/v1/cms/page/:slug`.
+   * (فهرست صفحه‌های منتشرشده مسیر جدا دارد: `GET /api/v1/cms/pages`.)
+   */
   @Get(":slug")
   async read(
     @Param("slug") slug: string,
@@ -735,5 +787,19 @@ export class CmsPublicController {
     const result = await this.cms.getPublic(slug, preview === "1" || preview === "true", me);
     if (!result) return { found: false as const };
     return { found: true as const, ...result };
+  }
+}
+
+/**
+ * فهرست عمومی صفحه‌های منتشرشده — مسیر مستقل `GET /api/v1/cms/pages`
+ * که سایت‌مپ فروشگاه از آن می‌خواند (فقط slug/تاریخ؛ payload برنمی‌گردد).
+ */
+@Controller("cms/pages")
+export class CmsPublicPagesController {
+  constructor(private readonly cms: CmsService) {}
+
+  @Get()
+  async listPublished() {
+    return { items: await this.cms.publishedPages() };
   }
 }

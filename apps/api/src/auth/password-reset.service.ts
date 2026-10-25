@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
-import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
+import { randomBytes, createHash } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
+import { hashPasswordArgon2id } from "./auth.service";
 
 /**
  * بند ۳ — بازیابی رمز (ادمین + مشتری)
@@ -30,11 +31,12 @@ export class PasswordResetService {
     return createHash("sha256").update(`${token}:ghasedak-reset`).digest("hex");
   }
 
-  /** hash گذرواژهٔ جدید — همان قالب scrypt ورود (auth.service) */
-  static hashPassword(password: string): string {
-    const salt = randomBytes(16).toString("hex");
-    const hash = scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1 }).toString("hex");
-    return `scrypt$${salt}$${hash}`;
+  /**
+   * hash گذرواژهٔ جدید — همان مسیر مرکزی ورود (argon2id، گام ۲۲).
+   * async شد چون argon2id native است؛ فراخواننده باید await کند.
+   */
+  static hashPassword(password: string): Promise<string> {
+    return hashPasswordArgon2id(password);
   }
 
   /** درخواست بازیابی — پاسخ همیشه یکسان؛ پیام به صف Notification می‌رود */
@@ -134,10 +136,11 @@ export class PasswordResetService {
     if (!row || row.purpose !== purpose || row.usedAt || row.expiresAt < new Date()) {
       throw new UnauthorizedException({ code: "RESET_TOKEN_INVALID", message: "توکن نامعتبر یا منقضی است." });
     }
+    const passwordHash = await PasswordResetService.hashPassword(newPassword);
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: row.userId },
-        data: { passwordHash: PasswordResetService.hashPassword(newPassword) },
+        data: { passwordHash },
       }),
       this.prisma.passwordResetToken.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
       // logout همه‌جا — همهٔ sessionهای فعال این کاربر بی‌اعتبار می‌شوند

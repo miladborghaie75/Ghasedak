@@ -3,7 +3,7 @@
  * هیچ اعتبار/مجوز/مالیات/بج واقعی‌ای جعل نمی‌شود.
  */
 import { PrismaClient } from "@prisma/client";
-import { randomBytes, scryptSync } from "node:crypto";
+import * as argon2 from "argon2";
 import { FULL_CHART_OF_ACCOUNTS, SUB_ACCOUNTS, NEED_FINDER_FALLBACK } from "@ghasedak/contracts";
 
 /**
@@ -90,12 +90,13 @@ async function ledgerMove(
 
 const prisma = new PrismaClient();
 
-/** argon2id نیست — هش dev با scrypt (پارامترهای کم)؛ در API از argon2id استفاده می‌شود.
- *  برای seed dev این کافی و صراحتاً DEMO است. */
-function devHash(password: string): string {
-  const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1 }).toString("hex");
-  return `scrypt$${salt}$${hash}`;
+/**
+ * هش کاربران seed — argon2id با همان پارامترهای مرکزی API (گام ۲۲).
+ * قبلاً scryptِ با پارامترهای کم بود؛ حالا کاربر seed همان فرمتی را می‌گیرد
+ * که ورود واقعی تولید می‌کند (ورود بعد از seed بلافاصله کار می‌کند).
+ */
+function devHash(password: string): Promise<string> {
+  return argon2.hash(password, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 });
 }
 
 const PERMISSIONS = [
@@ -185,7 +186,7 @@ async function main(): Promise<void> {
         email: u.email,
         name: u.name,
         role: u.role as never,
-        passwordHash: devHash("Ghasedak#Demo1"),
+        passwordHash: await devHash("Ghasedak#Demo1"),
       },
     });
   }

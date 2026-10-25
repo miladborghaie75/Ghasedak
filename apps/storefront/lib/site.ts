@@ -10,8 +10,12 @@
  * (`import { site } from "@/lib/site"`) بدون تغییر کار می‌کنند.
  */
 
-/** دامنه رسمی — در metadataBase، sitemap و robots استفاده می‌شود */
-export const SITE_URL = "https://lebaszirghasedak.ir";
+/**
+ * دامنه رسمی — در metadataBase، sitemap و robots استفاده می‌شود.
+ * کانونیکال www است (تصمیم قطعی #۴): apex با ریدایرکت ۳۰۱ دائمی به www می‌رود
+ * (اعمال در middleware.ts و مستند در docs/deploy-guide.md برای reverse-proxy).
+ */
+export const SITE_URL = "https://www.lebaszirghasedak.ir";
 
 export { BRANCHES, RETURN_POLICY, site } from "@ghasedak/contracts";
 export type { Branch } from "@ghasedak/contracts";

@@ -21,6 +21,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fa" dir="rtl" suppressHydrationWarning>
       <body className="min-h-dvh overflow-x-hidden antialiased" suppressHydrationWarning>
         <ThemeInit />
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:start-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-app-primary focus:px-4 focus:py-2 focus:text-sm focus:text-app-on-accent"
+        >
+          پرش به محتوای اصلی
+        </a>
         {children}
       </body>
     </html>

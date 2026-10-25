@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Post } from "@nestjs/common";
 import { CredentialsService } from "./credentials.service";
+import { RequireCsrf } from "../auth/csrf.guard";
 
 /**
  * فاز پس از ۱۲ — جایگاه ورود credential ادمین (بند ۴۵/۱۱۱)
@@ -11,6 +12,7 @@ import { CredentialsService } from "./credentials.service";
  *
  * منطق فایل/اعمال در CredentialsService است (مشترک با اندپوینت کلید پیامک).
  */
+@RequireCsrf() // نوشتن credential — حساس‌ترین اکشن پنل (گام ۲۲)
 @Controller("admin/capabilities/credentials")
 export class CredentialsController {
   constructor(private readonly credentials: CredentialsService) {}

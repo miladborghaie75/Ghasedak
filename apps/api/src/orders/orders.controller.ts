@@ -1,9 +1,12 @@
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { OrdersService, type CheckoutInput } from "./orders.service";
 import { RequirePermission } from "../auth/permissions.guard";
+import { RequireCsrf } from "../auth/csrf.guard";
 import { Identity } from "../auth/identity.decorator";
 import { randomUUID } from "crypto";
 
+/** اکشن‌های مینتِ مالی (ثبت سفارش/وضعیت) گارد CSRF دارند — گام ۲۲ */
+@RequireCsrf()
 @Controller("orders")
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}

@@ -4,6 +4,8 @@
  * IP واقعی کلاینت در x-forwarded-for فوروارد می‌شود تا rate-limit سمت API
  * به‌جای «IPِ سرور Next» روی IP واقعی کاربر بنشیند.
  */
+import { csrfOk, csrfForbidden } from "@/lib/csrf";
+
 export const dynamic = "force-dynamic";
 
 type Action = "otp-request" | "otp-verify" | "submit";
@@ -15,6 +17,9 @@ const ENDPOINTS: Record<Action, string> = {
 };
 
 export async function POST(req: Request) {
+  if (!csrfOk(req)) {
+    return csrfForbidden("نشست این صفحه منقضی شده؛ صفحه را دوباره باز کن و نظرت را ثبت کن.");
+  }
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;

@@ -10,14 +10,7 @@
 export const dynamic = "force-dynamic";
 
 import { isBotUa } from "@ghasedak/contracts";
-
-function csrfOk(req: Request): boolean {
-  const raw = req.headers.get("cookie") ?? "";
-  const m = raw.match(/(?:^|;\s*)csrf_token=([^;]+)/);
-  const cookieToken = m ? decodeURIComponent(m[1]) : "";
-  const headerToken = req.headers.get("x-csrf-token") ?? "";
-  return cookieToken !== "" && headerToken !== "" && cookieToken === headerToken;
-}
+import { csrfOk } from "@/lib/csrf";
 
 export async function POST(req: Request) {
   if (!csrfOk(req)) {

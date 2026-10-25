@@ -96,7 +96,7 @@ export function Shell({ me, children }: { me: AdminMe; children: React.ReactNode
             </form>
           </div>
         </header>
-        <main className="flex-1 p-3 sm:p-4 lg:p-6">{children}</main>
+        <main id="main" className="flex-1 p-3 sm:p-4 lg:p-6">{children}</main>
       </div>
     </div>
   );
