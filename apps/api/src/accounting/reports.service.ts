@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 
 /**
@@ -12,6 +12,51 @@ import { PrismaService } from "../prisma/prisma.service";
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** خلاصهٔ سود و زیان فقط از اسناد قطعی دفتر کل؛ برای پاسخ‌گویی مدیریتی و تطبیق با گزارش P&L. */
+  async profitAndLoss(from?: string, to?: string) {
+    const dateFilter: { gte?: Date; lte?: Date } = {};
+    if (from) {
+      const start = new Date(from);
+      if (!Number.isFinite(start.getTime())) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "تاریخ شروع نامعتبر است." });
+      dateFilter.gte = start;
+    }
+    if (to) {
+      const end = new Date(`${to}T23:59:59.999Z`);
+      if (!Number.isFinite(end.getTime())) throw new BadRequestException({ code: "VALIDATION_ERROR", message: "تاریخ پایان نامعتبر است." });
+      dateFilter.lte = end;
+    }
+    if (dateFilter.gte && dateFilter.lte && dateFilter.gte > dateFilter.lte) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "تاریخ شروع بعد از تاریخ پایان است." });
+    }
+    const [accounts, rows] = await Promise.all([
+      this.prisma.account.findMany({ select: { id: true, type: true } }),
+      this.prisma.journalLine.groupBy({
+        by: ["accountId"],
+        where: { entry: { state: "FINAL", ...(Object.keys(dateFilter).length ? { date: dateFilter } : {}) } },
+        _sum: { debit: true, credit: true },
+      }),
+    ]);
+    const typeById = new Map(accounts.map((a) => [a.id, a.type]));
+    const totals = { revenue: 0n, cogs: 0n, expenses: 0n };
+    for (const row of rows) {
+      const type = typeById.get(row.accountId);
+      if (type !== "REVENUE" && type !== "COGS" && type !== "EXPENSE") continue;
+      const debit = row._sum.debit ?? 0n;
+      const credit = row._sum.credit ?? 0n;
+      totals[type === "REVENUE" ? "revenue" : type === "COGS" ? "cogs" : "expenses"] +=
+        type === "REVENUE" ? credit - debit : debit - credit;
+    }
+    return {
+      from: from ?? null,
+      to: to ?? null,
+      revenue: totals.revenue.toString(),
+      cogs: totals.cogs.toString(),
+      grossProfit: (totals.revenue - totals.cogs).toString(),
+      expenses: totals.expenses.toString(),
+      netProfit: (totals.revenue - totals.cogs - totals.expenses).toString(),
+    };
+  }
 
   /**
    * حساب‌های دریافتنی و پرداختنی + **سنی بدهکاران**.

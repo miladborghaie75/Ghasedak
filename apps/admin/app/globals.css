@@ -389,10 +389,10 @@ body {
   background: #fff;
   border: 1px dashed var(--app-line);
   border-radius: 6px;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   align-items: center;
-  justify-content: center;
+  justify-items: center;
   gap: 2px;
   text-align: center;
   overflow: hidden;

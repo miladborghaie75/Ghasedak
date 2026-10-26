@@ -214,13 +214,20 @@ export class PayrollService {
     const run = await this.prisma.payrollRun.findUnique({
       where: { id },
       include: {
-        items: {
-          orderBy: { net: "desc" },
-          include: { user: { select: { id: true, name: true, role: true } } },
-        },
+        items: { orderBy: { net: "desc" } },
       },
     });
     if (!run) throw new NotFoundException({ code: "NOT_FOUND", message: "لیست حقوق یافت نشد." });
+    // PayrollItem رابطهٔ Prisma با User ندارد (فقط ستون userId بدون FK)؛ پس نام کارمندان
+    // با یک کوئری جداگانه join می‌شود — شکل پاسخ همان قبلاً است و schema دست‌نخورده می‌ماند.
+    const userIds = [...new Set(run.items.map((i) => i.userId))];
+    const users = userIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, name: true, role: true },
+        })
+      : [];
+    const userById = new Map(users.map((u) => [u.id, u]));
     return {
       ...run,
       totalGross: Number(run.totalGross),
@@ -231,6 +238,7 @@ export class PayrollService {
         gross: Number(i.gross),
         deduction: Number(i.deduction),
         net: Number(i.net),
+        user: userById.get(i.userId) ?? null,
       })),
     };
   }

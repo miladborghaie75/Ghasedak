@@ -26,6 +26,6 @@ import { ProductsModule } from "../products/products.module";
   providers: [JournalService, CashFlowService, FiscalYearService, ReportsService, DashboardService],
   // FiscalYearService هم export می‌شود چون فازهای بعد (سند اختتامیه، کنترل
   // دسترسی سال مالی در مسیرهای فروش/خرید) به آن نیاز دارند.
-  exports: [JournalService, FiscalYearService],
+  exports: [JournalService, FiscalYearService, ReportsService, CashFlowService],
 })
 export class AccountingModule {}

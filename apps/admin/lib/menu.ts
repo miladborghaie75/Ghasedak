@@ -119,6 +119,7 @@ export const MENU: MenuGroup[] = [
         title: "گزارش‌ها",
         permission: "accounting.reports",
         items: [
+          { title: "دستیار مدیریت و حسابداری", href: "/assistant", permission: "accounting.reports" },
           { title: "گزارش‌های مدیریتی", href: "/reports", permission: "accounting.reports" },
           { title: "سود واقعی", href: "/reports/profit", permission: "accounting.reports" },
         ],

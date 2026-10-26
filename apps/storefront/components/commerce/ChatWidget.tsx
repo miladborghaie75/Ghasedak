@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
-import { aiChat, aiChatStream, toAPIMessages } from "@/lib/ai-client";
+import { aiChatStream, toAPIMessages } from "@/lib/ai-client";
 import { CHAT_ERROR_FALLBACK, resolveAssistantError } from "@/lib/chat-error";
-import { DEFAULT_SYSTEM_PROMPT } from "@/lib/chat-system-prompt";
+import { loadChatHistory, saveChatHistory, clearChatHistory } from "@/lib/chat-history";
+// System prompt سمت سرور (capabilities.controller) تزریق می‌شود؛ کلاینت فقط user/assistant می‌فرستد
 
 interface ChatMessage {
   id: string;
@@ -22,18 +24,17 @@ interface ChatWidgetProps {
   sessionId?: string;
 }
 
-const WELCOME_MESSAGE = "سلام! من دستیار خرید قاصدک هستم. چطور می‌تونم کمکت کنم؟";
+const WELCOME_MESSAGE = "سلام! من دستیار خرید قاصدک هستم. چطور می‌توانم کمکت کنم؟";
+// پاسخ‌های سریع — فقط دربارهٔ موضوعاتی که دستیار منبع واقعی برایشان دارد.
+// «وضعیت سفارش من» عمداً نیست: تا تکمیل احراز هویت امن، هیچ ادعایی از سفارش
+// پذیرفته نمی‌شود؛ کاربر به صفحهٔ رسمی پیگیری هدایت می‌شود (لینک جداگانهٔ پایین).
 const QUICK_REPLIES = [
   "قیمت و موجودی محصول",
-  "راهنماي سایز و فیت",
-  "وضعیت سفارش من",
+  "راهنمای سایز و فیت",
   "مرجوعی و استبدال",
   "روش‌های پرداخت",
   "هزینه و زمان ارسال",
 ];
-
-const STORAGE_KEY = "ghasedak-chat-session";
-const MAX_MESSAGES = 50;
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -46,22 +47,10 @@ function formatTime(date: Date): string {
 export function ChatWidget({ defaultOpen = false, sessionId }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    // بازیابی از localStorage (فقط سمت کلاینت)
-    if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed.messages) && parsed.messages.length > 0) {
-            return parsed.messages.map((m: { id: string; role: "user" | "assistant"; content: string; timestamp: string }) => ({
-              ...m,
-              timestamp: new Date(m.timestamp),
-            }));
-          }
-        }
-      } catch {
-        // ignore parse errors
-      }
+    // بازیابی امن از localStorage: اعتبارسنجی، انقضای ۷ روز و سقف‌ها در chat-history
+    const stored = loadChatHistory();
+    if (stored && stored.length > 0) {
+      return stored.map((m) => ({ ...m, timestamp: new Date(m.timestamp) }));
     }
     return [{ id: generateId(), role: "assistant", content: WELCOME_MESSAGE, timestamp: new Date() }];
   });
@@ -71,20 +60,15 @@ export function ChatWidget({ defaultOpen = false, sessionId }: ChatWidgetProps) 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const sessionIdRef = useRef<string>(sessionId || generateId());
 
-  // ذخیره در localStorage
+  // ذخیره در localStorage — سقف تعداد/اندازه و جذب خطای quota در chat-history
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          sessionId: sessionId || generateId(),
-          messages: messages.slice(-MAX_MESSAGES),
-          updatedAt: new Date().toISOString(),
-        })
-      );
-    }
-  }, [messages, sessionId]);
+    saveChatHistory(messages, sessionIdRef.current);
+  }, [messages]);
+
+  // لغو جریان هنگام ترک کامپوننت — loading و request باز نمی‌مانند
+  useEffect(() => () => abortControllerRef.current?.abort(), []);
 
   // اسکرول به پایین هنگام اضافه شدن پیام
   useEffect(() => {
@@ -104,8 +88,8 @@ export function ChatWidget({ defaultOpen = false, sessionId }: ChatWidgetProps) 
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
-  const sendMessage = useCallback(async () => {
-    const text = inputValue.trim();
+  const sendMessage = useCallback(async (messageText = inputValue) => {
+    const text = messageText.trim();
     if (!text || isStreaming) return;
 
     const userMessage: ChatMessage = {
@@ -130,6 +114,10 @@ export function ChatWidget({ defaultOpen = false, sessionId }: ChatWidgetProps) 
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, assistantMessage]);
+
+    // لغو سمت کاربر (دکمهٔ توقف) — سیگنال به client وصل می‌شود
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     try {
       const history = messages
@@ -156,21 +144,34 @@ export function ChatWidget({ defaultOpen = false, sessionId }: ChatWidgetProps) 
           const content = resolveAssistantError(err);
           setMessages((prev) =>
             prev.map((m) =>
-              m.id === assistantId ? { ...m, content } : m
+              m.id === assistantId
+                ? { ...m, content: accumulatedContent ? `${accumulatedContent}\n${content}` : content }
+                : m
             )
           );
-        }
+        },
+        { signal: controller.signal }
       );
-    } catch (e) {
-      setError(String(e));
+    } catch {
+      // متن exception خام هرگز به UI نمی‌رسد — فقط پیام عمومی در حباب
+      setError(null);
       setIsStreaming(false);
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantId ? { ...m, content: CHAT_ERROR_FALLBACK } : m
+          m.id === assistantId
+            ? { ...m, content: accumulatedContent || CHAT_ERROR_FALLBACK }
+            : m
         )
       );
+    } finally {
+      abortControllerRef.current = null;
     }
   }, [inputValue, isStreaming, messages]);
+
+  /** توقف جریان توسط کاربر — abort سیگنال، UI با پیام تمیز آزاد می‌شود */
+  const stopStreaming = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -181,13 +182,11 @@ export function ChatWidget({ defaultOpen = false, sessionId }: ChatWidgetProps) 
 
   const handleQuickReply = (text: string) => {
     setInputValue(text);
-    sendMessage();
+    void sendMessage(text);
   };
 
   const clearChat = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(STORAGE_KEY);
-    }
+    clearChatHistory(sessionIdRef.current);
     setMessages([{ id: generateId(), role: "assistant", content: WELCOME_MESSAGE, timestamp: new Date() }]);
     setError(null);
   };
@@ -250,7 +249,7 @@ export function ChatWidget({ defaultOpen = false, sessionId }: ChatWidgetProps) 
         <div id="chat-sheet" className="flex flex-col h-full" role="log" aria-live="polite" aria-label="مکالمه">
           {/* هدر اطلاعات */}
           <div className="mb-4 p-3 rounded-xl bg-primary-tint border border-line">
-            <p className="text-sm text-ink font-medium">سلام! چطور می‌تونم کمکت کنم؟</p>
+            <p className="text-sm text-ink font-medium">سلام! چطور می‌توانم کمکت کنم؟</p>
             <p className="text-xs text-muted mt-1">موضوعات: محصول، سایز، سفارش، مرجوعی، پرداخت، ارسال</p>
           </div>
 
@@ -306,7 +305,7 @@ export function ChatWidget({ defaultOpen = false, sessionId }: ChatWidgetProps) 
             </div>
           )}
 
-          {/* پاسخ‌های سریع (فقط وقتی پیام المساعد آخر باشد) */}
+          {/* پاسخ‌های سریع (فقط وقتی پیام دستیار آخر باشد) + هدایت پیگیری سفارش */}
           {messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && !isStreaming && (
             <div className="flex flex-wrap gap-2 mb-2" role="list" aria-label="پاسخ‌های سریع">
               {QUICK_REPLIES.map((reply) => (
@@ -321,6 +320,14 @@ export function ChatWidget({ defaultOpen = false, sessionId }: ChatWidgetProps) 
                   {reply}
                 </button>
               ))}
+              {/* وضعیت سفارش از چت پرسیده نمی‌شود — صفحهٔ رسمی پیگیری، مسیر معتبر آن است */}
+              <Link
+                href="/track"
+                className="px-3 py-1.5 text-xs rounded-full bg-surface text-ink border border-dashed border-line hover:bg-primary-hover transition-colors"
+                role="listitem"
+              >
+                پیگیری سفارش ↗
+              </Link>
             </div>
           )}
 
@@ -347,7 +354,7 @@ export function ChatWidget({ defaultOpen = false, sessionId }: ChatWidgetProps) 
               />
               <Button
                 type="button"
-                onClick={sendMessage}
+                onClick={() => void sendMessage()}
                 disabled={!inputValue.trim() || isStreaming}
                 loading={isStreaming}
                 size="md"
@@ -360,6 +367,23 @@ export function ChatWidget({ defaultOpen = false, sessionId }: ChatWidgetProps) 
                 </svg>
               </Button>
             </div>
+            {/* دکمهٔ توقف جریان — کاربر می‌تواند پاسخ در حال آمدن را لغو کند */}
+            {isStreaming && (
+              <div className="mt-2 flex justify-center">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={stopStreaming}
+                  aria-label="توقف دریافت پاسخ"
+                >
+                  <svg viewBox="0 0 24 24" className="size-3.5" fill="currentColor" aria-hidden="true">
+                    <rect x="6" y="6" width="12" height="12" rx="2" />
+                  </svg>
+                  توقف پاسخ
+                </Button>
+              </div>
+            )}
             <div className="flex items-center justify-between mt-2 text-[11px] text-muted">
               <span>{inputValue.length}/2000</span>
               <button

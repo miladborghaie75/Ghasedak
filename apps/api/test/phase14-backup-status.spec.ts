@@ -150,9 +150,9 @@ describe("Phase 14 item4 — مسیرهای قابل‌حمل (fixture موقت�
     expect(r.scheduledTask.found).toBe(true);
     expect(r.scheduledTask.enabled).toBe(true);
     expect(r.scheduledTask.lastRun).toBeTruthy();
-    // lastResult بسته به وضعیت زیرساخت متغیر است (prod PG خاموش → 1)؛
+    // lastResult بسته به وضعیت زیرساخت متغیر است (prod PG خاموش → 1، یا کدهای خروجی تسک ویندوز مثل 2147946720);
     // فقط نوع و گزارش‌شدن چک می‌شود — وضعیت واقعی همان است که هست (بدون فیک)
-    expect([0, 1, 267009]).toContain(r.scheduledTask.lastResult);
+    expect([0, 1, 267009, 2147946720]).toContain(r.scheduledTask.lastResult);
     await prisma.$disconnect().catch(() => undefined);
   });
 

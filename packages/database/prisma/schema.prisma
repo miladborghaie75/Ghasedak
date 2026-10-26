@@ -31,6 +31,7 @@ model User {
   orders              Order[]
   passwordResetTokens PasswordResetToken[]
   payrollContracts    PayrollContract[]
+  payrollItems        PayrollItem[]
   photoTasks          PhotoTask[]
   posInvoices         PosInvoice[]
   reviews             Review[]
@@ -1565,6 +1566,7 @@ model PayrollItem {
   net       BigInt     @default(0)
   createdAt DateTime   @default(now())
   run       PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([userId, period], map: "PayrollItem_one_per_user_month")
   @@index([runId])
@@ -2330,6 +2332,47 @@ model DailyVisitPath {
 
   @@id([day, sessionKey, path])
   @@index([day])
+}
+
+/// مصرف روزانهٔ AI به تفکیک قابلیت — توزیع هزینهٔ ارائه‌دهنده را منصفانه بین قابلیت‌ها اندازه می‌گیرد.
+/// sessionKey برای دستیارِ ادمین «admin» ثابت است؛ برای چت مشتری یک UUID تصادفی است.
+/// گام ۲۴: reservedRequests = رزروهای در جریان (رزرو اتمیک پیش از تماس پولی، تسویه با مصرف واقعی).
+/// هیچ متن پیام، IP خام یا شناسهٔ کاربر در این دفتر ذخیره نمی‌شود — فقط شمارش تجمیعی.
+model AiUsageDay {
+  day              DateTime
+  capability       String
+  requests         Int      @default(0)
+  reservedRequests Int      @default(0)
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  updatedAt        DateTime @default(now()) @updatedAt
+
+  @@id([day, capability])
+}
+
+/// گام ۲۴ — سقف روزانهٔ هر کاربر/نشست چت در ذخیره‌ساز مشترک (بین چند نمونهٔ API).
+/// userKeyHash = SHA-256 کلید کاربر/نشست/IP — IP خام هرگز ذخیره نمی‌شود.
+model AiUserDay {
+  day         DateTime
+  userKeyHash String
+  requests    Int      @default(0)
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@id([day, userKeyHash])
+  @@index([day])
+}
+
+/// گام ۲۴ — پنجره‌های rate limit در ذخیره‌ساز مشترک (بین چند نمونهٔ API).
+/// windowKey = SHA-256(شناسهٔ قانون + کلید کلاینت) — IP خام هرگز ذخیره نمی‌شود.
+/// windowStart ابتدای پنجرهٔ ثابت (epoch-aligned) است؛ ردیف‌های کهنه پاک می‌شوند.
+model RateLimitWindow {
+  windowKey   String
+  windowStart DateTime
+  count       Int      @default(0)
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@id([windowKey, windowStart])
+  @@index([windowStart])
 }
 
 model DomainEventOutbox {

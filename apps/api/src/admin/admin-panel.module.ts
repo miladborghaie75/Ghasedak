@@ -10,6 +10,7 @@ import { AdminPanelController } from "./admin-panel.controller";
 import { DashboardController } from "./dashboard.controller";
 import { PublicThemeController } from "./public-theme.controller";
 import { CapabilitiesController } from "./capabilities.controller";
+import { AdminAssistantController } from "./admin-assistant.controller";
 import { MediaServeController } from "./media-serve.controller";
 import { CredentialsController } from "./credentials.controller";
 import { CredentialsService } from "./credentials.service";
@@ -22,7 +23,7 @@ import { ZarinpalProvider } from "../payments/zarinpal.provider";
 
 @Module({
   imports: [PrismaModule, InventoryModule, AccountingModule, PricingModule, EventsModule, HealthModule, PaymentsModule],
-  controllers: [AdminPanelController, DashboardController, PublicThemeController, CapabilitiesController, MediaServeController, CredentialsController, BackupStatusController, DiagnosticsController, DataHealthController, PaymentGatewayController],
+  controllers: [AdminPanelController, DashboardController, PublicThemeController, CapabilitiesController, AdminAssistantController, MediaServeController, CredentialsController, BackupStatusController, DiagnosticsController, DataHealthController, PaymentGatewayController],
   providers: [CredentialsService, DataHealthService],
 })
 export class AdminPanelModule {}
