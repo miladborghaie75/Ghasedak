@@ -18,7 +18,10 @@ import { createRequire } from "node:module";
 import { pipeline } from "node:stream/promises";
 
 // pg خارج از ریپو نصب است (ابزار عملیاتی — پیش‌نیاز README همین پوشه)
-const toolsRequire = createRequire("C:/ghasedak-tools/pg-client/package.json");
+// GHASEDAK_PG_TOOLS: در سرور لینوکس مسیر package.json پکیج‌های pg/pg-copy-streams
+const TOOLS_PACKAGE =
+  process.env.GHASEDAK_PG_TOOLS ?? "C:/ghasedak-tools/pg-client/package.json";
+const toolsRequire = createRequire(TOOLS_PACKAGE);
 const { Client } = toolsRequire("pg");
 const { from } = toolsRequire("pg-copy-streams");
 import { createReadStream, readFileSync, writeFileSync, existsSync, mkdtempSync } from "node:fs";

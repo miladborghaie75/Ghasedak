@@ -17,7 +17,11 @@ import { createRequire } from "node:module";
 import { pipeline } from "node:stream/promises";
 
 // pg خارج از ریپو نصب است (ابزار عملیاتی — پیش‌نیاز README همین پوشه)
-const toolsRequire = createRequire("C:/ghasedak-tools/pg-client/package.json");
+// در ویندوز پیش‌فرض همان مسیر قدیمی است؛ روی سرور لینوکس (گام ۳۷) مسیر را با
+// GHASEDAK_PG_TOOLS می‌دهند، مثلاً /opt/ghasedak-tools/pg-client/package.json
+const TOOLS_PACKAGE =
+  process.env.GHASEDAK_PG_TOOLS ?? "C:/ghasedak-tools/pg-client/package.json";
+const toolsRequire = createRequire(TOOLS_PACKAGE);
 const { Client } = toolsRequire("pg");
 const { to } = toolsRequire("pg-copy-streams"); // COPY TO STDOUT
 import { createHash } from "node:crypto";

@@ -1,0 +1,27 @@
+[Unit]
+Description=Ghasedak Storefront (Next.js)
+Documentation=file:///opt/ghasedak/docs/deploy-guide.md
+After=network-online.target ghasedak-api.service
+Wants=ghasedak-api.service
+
+[Service]
+Type=simple
+User=ghasedak
+Group=ghasedak
+WorkingDirectory=/opt/ghasedak/apps/storefront
+EnvironmentFile=/opt/ghasedak/.env
+Environment=NODE_ENV=production
+Environment=PORT=3111
+# مسیر مطلق باینری next — مستقل از PATH و corepack
+ExecStart=/opt/ghasedak/apps/storefront/node_modules/.bin/next start -p 3111
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ghasedak-storefront
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

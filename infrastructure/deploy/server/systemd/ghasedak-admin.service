@@ -1,0 +1,26 @@
+[Unit]
+Description=Ghasedak Admin panel (Next.js)
+Documentation=file:///opt/ghasedak/docs/deploy-guide.md
+After=network-online.target ghasedak-api.service
+Wants=ghasedak-api.service
+
+[Service]
+Type=simple
+User=ghasedak
+Group=ghasedak
+WorkingDirectory=/opt/ghasedak/apps/admin
+EnvironmentFile=/opt/ghasedak/.env
+Environment=NODE_ENV=production
+Environment=PORT=3200
+ExecStart=/opt/ghasedak/apps/admin/node_modules/.bin/next start -p 3200
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ghasedak-admin
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

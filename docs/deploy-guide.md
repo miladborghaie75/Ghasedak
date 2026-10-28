@@ -256,3 +256,35 @@ GHASEDAK_API_KEY=<کلید تصادفی طولانی>     # کلید سرویس�
 | `AI_EMPTY` | ارائه‌دهنده reachable ولی پاسخ خالی داد | نام مدل را از `models.list` ارائه‌دهنده تأیید کنید |
 | SSE قطع می‌شود | Proxy/Load Balancer timeout | `proxy_read_timeout` (nginx) / `timeout` (caddy) ≥ ۶۰ ثانیه |
 | ویجت باز نمی‌شود | `localStorage` پر/خطای hydration | در DevTools → Application → LocalStorage → `ghasedak-chat-history` پاک کنید |
+
+## ۱۳. سرور لینوکس واقعی (گام ۳۳ — اجرا شد ۲۰۲۶-۱۰-۲۹)
+
+بخش‌های بالا (ویندوز / Task Scheduler) برای dev محلی‌اند. نسخهٔ واقعی روی VPS ایرانی با اسکریپت‌های `infrastructure/deploy/server/` بالا می‌رود:
+
+| مورد | مقدار |
+|---|---|
+| سرور | `79.127.11.91` — Ubuntu 24.04، ۲ vCPU / ۲گیگ رم / ۶۴گیگ (swap ۴گیگ) |
+| SSH | پورت **6579** (نه 22) + فقط کلید؛ رمز root غیرفعال است |
+| مسیر اپ | `/opt/ghasedak` (کاربر سیستمی `ghasedak`) |
+| env | `/opt/ghasedak/.env` (وضعیت 600؛ رمز DB را `bootstrap.sh` یک‌بار تولید می‌کند) |
+| سرویس‌ها | `ghasedak-api` (4000)، `ghasedak-storefront` (3111)، `ghasedak-admin` (3200) — هر سه `enabled` (با بوت بالا می‌آیند) |
+| reverse proxy | nginx: apex با **301** به `www`، HSTS روی هر دو دامنه، پنل با `X-Robots-Tag: noindex` |
+| SSL | Let's Encrypt (webroot) روی `www` + apex + `admin`؛ تمدید خودکار با certbot.timer |
+| دیتابیس | PostgreSQL محلی روی 5432؛ فقط `127.0.0.1` (از بیرون بسته) |
+
+**اجرا (روی سرور):**
+
+```bash
+bash /root/ghasedak-deploy/bootstrap.sh   # یک‌بار: پکیج‌ها، Node، DB، فایروال، env
+bash /root/ghasedak-deploy/deploy.sh     # هر بار: کد ← build ← سرویس ← SSL ← health
+```
+
+**به‌روزرسانی سایت بعد از هر commit:** همان `deploy.sh` را دوباره اجرا کنید — pull با `--ff-only` (اگر شعبه محلی جلو رفته باشد متوقف می‌شود)، `pnpm install`، migrate، seed فقط وقتی جدول `User` خالی باشد، build با turbo (کش‌خورده، چند ثانیه)، ری‌استارت سرویس‌ها و probe سلامت. خروجی در `/root/ghasedak-deploy/deploy.log`.
+
+**نکات عملیاتی:**
+
+- لاگ‌ها: `journalctl -u ghasedak-api -f` (یا `ghasedak-storefront` / `ghasedak-admin`).
+- گواهی: `certbot certificates` — تمدید خودکار است؛ پس از هر استقرار `nginx -t` و reload انجام می‌شود.
+- رسانه‌ها در `/opt/ghasedak/apps/data/media` می‌مانند (در git نیستند؛ `git pull` دست نمی‌زند).
+- فایروال: `ufw status` → فقط 6579/80/443 باز؛ API و پورت‌های Next عمداً از بیرون بسته‌اند.
+- رمز root اگر لازم شد از پنل آذرآنلاین reset می‌شود؛ کلید دسترسی `ghasedak_deploy_ed25519` جایگزین آن است.
