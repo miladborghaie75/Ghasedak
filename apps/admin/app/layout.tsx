@@ -8,11 +8,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/** فاز ۱۴ — ریسپانسیو پنل: ویوپورت صحیح موبایل + منع زوم دوبل-تپ فرم‌ها */
+/** فاز ۱۴ — ریسپانسیو پنل: ویوپورت صحیح موبایل.
+ * گام ۱۹: `maximumScale: 1` حذف شد — زوم WCAG 1.4.4 را می‌بست و axe آن را
+ * (serious) گزارش می‌کرد؛ دابل‌تپ-زوم فرم‌ها حالا با `touch-action: manipulation`
+ * در globals.css کنترل می‌شود (زوم دوچرخه‌ای/pinch آزاد می‌ماند). */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
   interactiveWidget: "resizes-content",
 };
 
@@ -27,7 +29,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           پرش به محتوای اصلی
         </a>
-        {children}
+        {/* گام ۱۹ — landmark اصلی صفحه (landmark-one-main) + مقصد skip-link */}
+        <main id="main">{children}</main>
       </body>
     </html>
   );

@@ -30,7 +30,8 @@ export default function PaymentsClient() {
 
   useEffect(() => {
     void (async () => {
-      const r = await call<{ items: PaymentRow[] }>("/admin/payments/list");
+      // مسیر واقعی API: @Controller("payments") + @Get("admin/list") → /api/v1/payments/admin/list
+      const r = await call<{ items: PaymentRow[] }>("/payments/admin/list");
       if (r.ok && r.data) setRows(r.data.items);
       else setError(r.error?.message ?? "خطا");
     })();

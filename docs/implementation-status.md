@@ -162,6 +162,37 @@
 
 **جمع‌بندی (به‌روزرسانی ۲۰۲۶-۱۰-۲۵):** MVP دو تجربه پیاده شد؛ دستیار ادمین endpoint/controller مستقل و فقط‌خواندنی با مجوز گزارش دارد؛ چت مشتری endpoint عمومی جداگانه دارد و proxy آن کوکی/کلید سرویس را حمل نمی‌کند. retrieval کاتالوگ فقط روی محصولات منتشرشده است. گیت‌های محلی این اجرا: typecheck هر سه اپ، ۳۳ تست API هدفمند، ۵۶ تست Storefront و ۴۰ تست Admin پاس شدند. لانچ هنوز تأیید نشده: مرورگر/E2E و full API suite اجرا نشده (provider واقعی و صحت اعداد دستیار در شاهد runtime تأیید شد)؛ دستیار به چهار خانواده گزارش محدود است و quota پایدار/هزینه‌محور یا audit مصرف نداریم؛ چت مشتری وضعیت سفارش/سبد/هویت را نمی‌بیند و rate limit حافظه‌ای با trust proxy تنظیم‌پذیر نیازمند آزمون روی استقرار است.
 
+## گیت نهایی ایستگاه ۶ + ترمیم زنجیرهٔ داده — ۲۰۲۶-۱۰-۲۸ — runtime-tested
+| مورد | نتیجه | شاهد |
+|---|---|---|
+| سوئیت کامل API | ✅ **۶۴/۶۴ مجموعه · ۵۳۷/۵۳۷ تست** روی `wave1rehearsal3` (بازساری baseline پیش از هر spec)، exit 0 | `docs/evidence/test-suite.log` |
+| typecheck + build | ✅ typecheck **۱۰/۱۰** · build **۶/۶** — هر دو **پس از** بامپ `zod` 3→4 | `docs/evidence/build-final.log` |
+| تست واحد دو اپ | ✅ فروشگاه (exit 0) · ادمین **۴۰/۴۰** | — |
+| E2E مرورگری | ✅ `BROWSER_E2E_PASSED` — مهمان `ORD-000013` ← پرداخت mock ← ادمین همان سفارش را می‌بیند ← تأیید نظر؛ **۰ خطای کنسول** | `docs/evidence/e2e-browser.log` + `e2e-browser/*.png` |
+| امنیت | ✅ `SECURITY_CHECK_PASSED` — ۷ بخش (سرفصل‌ها/CSP، 401، IDOR بدون PII، کوکی، CSRF 403، RBAC 403، rate-limit 429) | `docs/evidence/security-check.log` |
+| ماتریس بصری | ✅ **۱۹۲/۱۹۲ ترکیب، ۰ خطای کنسول، ۰ ناهمخوانی تم** | `docs/evidence/visual-sweep.log` |
+| `pnpm audit --prod` | 🟡 **۱۰ → ۱** (۲ HIGH صفر شد)؛ تنها مورد باقی‌مانده `@nestjs/core` که مهاجرت Nest 11 لازم دارد | جدول ترمیم در گام ۳۲ طرح |
+
+## مهاجرت NestJS 10 → 11 — ۲۰۲۶-۱۰-۲۸ — runtime-tested
+آخرین ضعف audit (`@nestjs/core ≤11.1.17`، GHSA-36xv-jgw5-4q75 — پچ در `≥11.1.18`) با مهاجرت صفر شد:
+- **بامپ:** `@nestjs/common` / `core` / `platform-express` 10.4.22 → **11.2.8** و `@nestjs/cli` 10 → 11.0.24 در [apps/api/package.json](../apps/api/package.json). هیچ پکیج Nest دیگر (`config/jwt/swagger/…`) در پروژه نیست.
+- **تغییر کد: صفر** — نیازی به رفع شکست‌کننده نبود (بدون ValidationPipe/ExpressAdapter اختصاصی؛ `useBodyParser` و `NestExpressApplication` در 11 پایدار مانده‌اند). typecheck و `nest build` بدون هیچ اصلاحی سبز شدند.
+- **گیت‌های سبز روی Nest 11:** typecheck API (exit 0) · build API (exit 0) · سوئیت کامل **۶۴/۶۴ مجموعه · ۵۳۷/۵۳۷ تست** روی rehearsal · E2E مرورگری `BROWSER_E2E_PASSED` · امنیت `SECURITY_CHECK_PASSED` (۷ بخش) · sweep بصری **۱۹۲/۱۹۲** · استک محلی ری‌استارت روی بیلد جدید و هر سه سرویس سلامت.
+- **`pnpm audit --prod`: ۰ ضعف** (apps/api و ریشه مونوریپو، هر دو exit 0).
+| مورد | نتیجه | شاهد |
+|---|---|---|
+| سوئیت کامل API روی Nest 11 | ✅ ۶۴/۶۴ · ۵۳۷/۵۳۷، exit 0 | `docs/evidence/jest-nest11.log` |
+| E2E + امنیت + sweep روی Nest 11 | ✅ هر سه سبز (سفارش `ORD-000012` روی rehearsal) | `e2e-nest11.log` · `security-nest11.log` · `sweep-nest11.log` |
+| audit | ✅ **۰ ضعف** — `No known vulnerabilities found` | `docs/evidence/audit-final-nest11.log` |
+
+**دو ناهماهنگی داده که همین گیت‌ها لو داد** (هر دو رفع شد):
+1. **پروژکسیون بدون دفتر:** ۳ واریانت (از جمله `FFBBFFF-DEF` = اولین محصول خانه) `stockQty>0` داشتند ولی **هیچ ردیف `StockLedgerEntry` نبود** → UI «موجود» می‌گفت و checkout با `INSUFFICIENT_STOCK` رد می‌کرد. [fix-demo-stock.mjs](../packages/database/scripts/fix-demo-stock.mjs) حالا idempotent پروژکسیون را با دفتر آشتی می‌دهد (بند ۱۳۵)؛ اجرای دوم `projection-repaired=0`.
+2. **رسانهٔ یتیم:** ردیف `Media` با فایل گم‌شده + `alt` خراب (۹ بایت مojibake) + **صفر ارجاع** → ۴۰۴ در `/media` ادمین و قرمزشدن sweep. با مسیر رسمی `DELETE /admin/capabilities/media/:id` از DB زنده حذف شد و همان ردیف با گاردِ «صفر ارجاع + فایل غایب» از baseline هم رفت تا بعد از هر reset برنگردد.
+
+**دو حادثهٔ زیرساختی این اجرا (برای تکرارکنندهها):**
+- **کلستر مبدا `5433/ghasedak` بالا نمی‌آمد** (خاموشی غیراستاندارد؛ بک‌اندها با `0xC0000142` می‌مردند) → بازیابی با `pg_ctl start`. در نتیجه reset سوئیت بی‌صدا شکست می‌خورد و **هر ۶۴ سوئیت `SKIP` می‌شد**؛ [run-jest-suite.mjs](../scripts/run-jest-suite.mjs) حالا علت واقعیِ reset را چاپ می‌کند (پیش‌تر فقط «SKIP» می‌داد و مقصر نامشخص بود).
+- همان کلستر **۳ مهاجرت عقب‌مانده** داشت (`step23_ai_usage_day`، `step24_ai_budget_shared`، `step21_perf_hot_indexes` — همه add-only) که جدول `AiUsageDay` را از مبدا ناموجود کرده بود؛ با `prisma migrate deploy` اعمال شد و `migrate status` سبز است.
+
 ## فاز ۱۳ (۲۰۲۶-۰۹-۳۰) — runtime-tested
 | قابلیت | وضعیت | مدرک |
 |---|---|---|

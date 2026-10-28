@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { CheckoutClient, type ShippingMethodDTO } from "@/components/commerce/CheckoutClient";
+import type { ShippingMethodDTO } from "@/components/commerce/CheckoutClient";
+// گام ۲۱ (کارایی) — لود تنبل فرم چک‌اوت (wrapper کلاینت؛ ssr:false در RSC ممنوع است)
+import { CheckoutClientLazy } from "@/components/commerce/CheckoutClientLazy";
 
 export const metadata: Metadata = {
   title: "تکمیل خرید",
@@ -32,7 +34,7 @@ export default async function CheckoutPage() {
       <p className="mb-5 text-[13px] text-muted">
         نیازی به ثبت‌نام نیست — فقط اطلاعات ارسال.
       </p>
-      <CheckoutClient methods={methods} />
+      <CheckoutClientLazy methods={methods} />
     </div>
   );
 }

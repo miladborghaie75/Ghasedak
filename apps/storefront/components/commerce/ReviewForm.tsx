@@ -111,7 +111,8 @@ export function ReviewForm({ slug }: { slug: string }) {
             aria-checked={rating === s}
             aria-label={`${s} ستاره`}
             onClick={() => setRating(s)}
-            className={`text-xl leading-none transition ${s <= rating ? "text-amber-500" : "text-line hover:text-amber-300"}`}
+            // حداقل ۲۴×۲۴px (WCAG 2.5.8 — خطای target-size در گام ۱۹)
+            className={`inline-flex min-h-6 min-w-6 items-center justify-center text-xl leading-none transition ${s <= rating ? "text-amber-500" : "text-line hover:text-amber-300"}`}
           >
             ★
           </button>
@@ -126,14 +127,14 @@ export function ReviewForm({ slug }: { slug: string }) {
             rows={3}
             maxLength={1500}
             placeholder="کیفیت دوخت، فرم، اندازهٔ واقعی… چی که برای بقیه مفید است؟"
-            className="mt-3 w-full rounded-card border border-line bg-white px-3 py-2 text-[13px] leading-7 text-ink outline-none focus:border-primary-strong"
+            className="mt-3 w-full rounded-card border border-line bg-surface px-3 py-2 text-[13px] leading-7 text-ink outline-none focus:border-primary-strong"
           />
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={60}
             placeholder="نام (اختیاری)"
-            className="mt-2 w-full rounded-card border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-primary-strong"
+            className="mt-2 w-full rounded-card border border-line bg-surface px-3 py-2 text-[13px] text-ink outline-none focus:border-primary-strong"
           />
           <input
             value={mobile}
@@ -141,7 +142,7 @@ export function ReviewForm({ slug }: { slug: string }) {
             inputMode="tel"
             dir="ltr"
             placeholder="موبایل — مثل ۰۹۱۲۳۴۵۶۷۸۹"
-            className="mt-2 w-full rounded-card border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-primary-strong"
+            className="mt-2 w-full rounded-card border border-line bg-surface px-3 py-2 text-[13px] text-ink outline-none focus:border-primary-strong"
           />
           <button
             type="button"
@@ -161,7 +162,7 @@ export function ReviewForm({ slug }: { slug: string }) {
             dir="ltr"
             maxLength={6}
             placeholder="کد ۶ رقمی پیامک‌شده"
-            className="mt-3 w-full rounded-card border border-line bg-white px-3 py-2 text-center text-lg tracking-[0.4em] text-ink outline-none focus:border-primary-strong"
+            className="mt-3 w-full rounded-card border border-line bg-surface px-3 py-2 text-center text-lg tracking-[0.4em] text-ink outline-none focus:border-primary-strong"
           />
           <button
             type="button"

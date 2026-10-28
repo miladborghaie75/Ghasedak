@@ -7,7 +7,8 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { QuickAddHost } from "@/components/commerce/QuickAddHost";
 import { ConsentGate } from "@/components/analytics/ConsentGate";
-import { ChatWidget } from "@/components/commerce/ChatWidget";
+// گام ۲۱ (کارایی) — لود تنبل ویجت چت (wrapper کلاینت؛ ssr:false در RSC ممنوع است)
+import { ChatWidgetLazy } from "@/components/commerce/ChatWidgetLazy";
 import { ThemeInit } from "@/components/providers/theme-init";
 import { MotionReveal } from "@/components/MotionReveal";
 import { site, SITE_URL } from "@/lib/site";
@@ -48,17 +49,22 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   // کاتالوگ واقعی — یک‌بار در سرور خوانده و به کلاینت hydrate می‌شود (موج ۱)
-  const catalog = await loadCatalog();
+  // گام ۲۱ (کارایی): خواندن‌های مستقل سروری هم‌زمان شروع می‌شوند — قبلاً سریالی
+  // بودند و TTFB از جمع سفرها به API ساخته می‌شد. (fetch مخصوص motion حذف شد:
+  // نتیجه‌اش در JSX هرگز استفاده نمی‌شد — کار مرده در هر درخواست.)
+  const api = process.env.API_ORIGIN ?? "http://localhost:4000";
+  const catalogP = loadCatalog();
+  const themeP = fetch(`${api}/api/v1/admin/public/theme`, { next: { revalidate: 60 } }).catch(() => null);
+  const maintenanceP = getMaintenance();
+
+  const catalog = await catalogP;
   hydrateCatalog(catalog);
 
   // تم از پنل ادمین (Setting theme) — بدون تغییر کد (بند ۴۰/۵۰)
   let themeCss = "";
-  // موشن اسکرول — شدت/خاموشی از ادمین (Setting: motion)
-  let motionAttrs = "";
   try {
-    const api = process.env.API_ORIGIN ?? "http://localhost:4000";
-    const r = await fetch(`${api}/api/v1/admin/public/theme`, { next: { revalidate: 60 } });
-    if (r.ok) {      const t = (await r.json()) as { primary?: string; ink?: string; bg?: string; fontHeading?: string; fontBody?: string } | null;
+    const r = await themeP;
+    if (r?.ok) {      const t = (await r.json()) as { primary?: string; ink?: string; bg?: string; fontHeading?: string; fontBody?: string } | null;
       if (t?.primary) {
         /*
          * فقط توکن‌هایی که مدین واقعاً تعیین کرده تزریق می‌شوند.
@@ -75,18 +81,13 @@ export default async function RootLayout({
         themeCss = `:root{${decls.join(";")};}`;
       }
     }
-    const rm = await fetch(`${api}/api/v1/admin/public/motion`, { next: { revalidate: 60 } });
-    if (rm.ok) {
-      const m = (await rm.json()) as { enabled?: boolean; intensity?: string } | null;
-      motionAttrs = ` data-motion-enabled="${m?.enabled === false ? "off" : "on"}" data-motion-intensity="${m?.intensity ?? "subtle"}"`;
-    }
   } catch {
     // API در دسترس نیست — تم پیش‌فرض
   }
 
   // حالت تعمیر (گام ۱۰): ادمین از پنل فعالش می‌کند؛ فروشگاه یک‌جا، در ریشه،
   // بسته می‌شود و به‌جای همهٔ صفحه‌ها فقط اطلاعِ تماس‌خدار نشان می‌دهد.
-  const maintenance = await getMaintenance();
+  const maintenance = await maintenanceP;
   if (maintenance.enabled) {
     return (
       <html lang="fa" dir="rtl" data-motion-enabled="off" data-motion-intensity="subtle" suppressHydrationWarning>
@@ -104,6 +105,8 @@ export default async function RootLayout({
         {themeCss ? <style dangerouslySetInnerHTML={{ __html: themeCss }} /> : null}
         <ThemeInit />
         <AppProviders>
+          {/* گام ۲۱ (کارایی) — پیش‌اتصال به دامنهٔ ثالث حیاتی (GA4 بعد از رضایت؛ React آن را به <head> می‌برد) */}
+          <link rel="preconnect" href="https://www.googletagmanager.com" />
           <a
             href="#main"
             className="sr-only focus:not-sr-only focus:absolute focus:start-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-plum focus:px-4 focus:py-2 focus:text-sm focus:text-on-accent print:hidden"
@@ -117,8 +120,8 @@ export default async function RootLayout({
           <QuickAddHost />
           {/* گام ۱۵ — رضایت آنالیتیکس: بنر تصمیم + لود GA4 فقط پس از رضایت */}
           <ConsentGate />
-          {/* گام ۱۸-۳ — دستیار خرید قاصدک (چت‌بات هوشمند) */}
-          <ChatWidget />
+          {/* گام ۱۸-۳ — دستیار خرید قاصدک (چت‌بات هوشمند؛ گام ۲۱: لود تنبل) */}
+          <ChatWidgetLazy />
           {/* دادهٔ ساخت‌یافتهٔ سطح سایت (گام ۲۰): هویت فروشگاه + جست‌وجوی سایت */}
           <script
             type="application/ld+json"

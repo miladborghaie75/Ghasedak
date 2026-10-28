@@ -48,11 +48,25 @@ interface Ticket {
   saving?: boolean;
 }
 
-let ticketSeq = 0;
-const newTicket = (): Ticket => {
-  ticketSeq += 1;
-  return { id: `t${Date.now()}-${ticketSeq}`, label: `Ticket ${ticketSeq}`, lines: [], customerMobile: "", customerName: "", discountTotal: 0, held: false, createdAt: Date.now() };
-};
+/**
+ * تیکت با شمارهٔ **صریح** — لیبل باید روی سرور و کلاینت یکسان باشد.
+ * شمارندهٔ سطح ماژول در سرور بین درخواست‌ها مشترک است (درخواست ۱۴م → "Ticket 14"
+ * ولی کلاینت همیشه از صفر شروع می‌کند) ⇒ خطای hydration #418 روی /pos.
+ */
+const newTicket = (seq: number): Ticket => ({
+  id: `t${Date.now()}-${seq}`,
+  label: `Ticket ${seq}`,
+  lines: [],
+  customerMobile: "",
+  customerName: "",
+  discountTotal: 0,
+  held: false,
+  createdAt: Date.now(),
+});
+
+/** شمارهٔ بعدینِ برچسب از روی تیکت‌های موجود — قطعی، بدون شمارندهٔ ماژول */
+const nextSeq = (ts: Ticket[]): number =>
+  ts.reduce((m, t) => Math.max(m, Number(/Ticket (\d+)/.exec(t.label)?.[1] ?? 0)), 0) + 1;
 
 const METHOD_FA: Record<string, string> = {
   CASH: "نقدی", CARD: "کارت", ONLINE: "آنلاین", BANK_TRANSFER: "کارت به کارت", CHECK: "چک",
@@ -72,7 +86,7 @@ const REFUND_METHOD_FA: Record<string, string> = { CASH: "نقد از صندوق
 export default function PosClient() {
   const { call, loading } = useAdminApi();
   const [shift, setShift] = useState<ShiftInfo | null>(null);
-  const [tickets, setTickets] = useState<Ticket[]>([newTicket()]);
+  const [tickets, setTickets] = useState<Ticket[]>(() => [newTicket(1)]);
   const [activeId, setActiveId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -200,7 +214,7 @@ export default function PosClient() {
     setTickets((ts) => ts.map((t) => (t.id === id ? { ...t, ...patch } : t)));
 
   const addTicket = () => {
-    const t = newTicket();
+    const t = newTicket(nextSeq(tickets));
     setTickets((ts) => [...ts, t]);
     setActiveId(t.id);
   };
@@ -224,7 +238,7 @@ export default function PosClient() {
   };
 
   const dropTicket = (id: string) => {
-    if (tickets.length === 1) { setTickets([newTicket()]); return; }
+    if (tickets.length === 1) { setTickets([newTicket(1)]); return; }
     setTickets((ts) => ts.filter((t) => t.id !== id));
   };
 
@@ -369,7 +383,7 @@ export default function PosClient() {
           });
         }
         // Ticket مصرف‌شده حذف و Ticket خالی جدید
-        setTickets((ts) => [...ts.filter((t) => t.id !== active.id), newTicket()]);
+        setTickets((ts) => { const kept = ts.filter((t) => t.id !== active.id); return [...kept, newTicket(nextSeq(kept))]; });
       } else setError(r.error?.message ?? "خطا در ثبت فاکتور");
     } finally {
       setBusy(false);

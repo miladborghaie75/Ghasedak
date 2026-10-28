@@ -90,7 +90,17 @@ for (const spec of specs) {
   try {
     resetRehearsal();
   } catch (e) {
-    console.log("SKIP (reset failed)");
+    // علت واقعی را پنهان نکن — وگرنه هر ۶۴ سوئیت فقط «SKIP» می‌دهند و مقصر معلوم نیست
+    const raw = [String(e?.stderr ?? ""), String(e?.message ?? e)].join("\n");
+    const why =
+      raw
+        .split("\n")
+        .filter((l) => /error|P\d{4}|invalid|can't|cannot|does not exist|unknown|missing|timeout|refused/i.test(l))
+        .map((l) => l.trim())
+        .slice(0, 3)
+        .join(" | ")
+        .slice(0, 400) || String(e?.message ?? e).slice(0, 200);
+    console.log(`SKIP (reset failed) — ${why}`);
     suitesFail++; failed.push(spec);
     continue;
   }

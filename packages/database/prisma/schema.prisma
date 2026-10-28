@@ -202,6 +202,10 @@ model Product {
   variants         ProductVariant[]
   reviews          Review[]
   wishlist         WishlistItem[]
+
+  // گام ۲۱ — داغ‌ترین کوئری فروشگاه: کاتالوگ عمومی status=PUBLISHED + مرور بر حسب تاریخ.
+  // با هدف ۵٬۰۰۰ محصول، بدون این ایندکس هر بار صفحه Seq Scan روی کل جدول است.
+  @@index([status, createdAt])
 }
 
 model ProductImage {
@@ -381,6 +385,11 @@ model Order {
   returnRequests         ReturnRequest[]
   shipments              Shipment[]
   reservations           StockReservation[]
+
+  // گام ۲۱ — ایندکس‌های داغ: فهرست/فیلتر ادمین بر حسب status + createdAt
+  // و مرور سفارش‌ها بر حسب تاریخ (بدون این‌ها لیست سفارش‌ها با Seq Scan رشد می‌کند).
+  @@index([status, createdAt])
+  @@index([createdAt])
 }
 
 model OrderItem {
@@ -642,6 +651,7 @@ model SettlementBatch {
   attempts       PaymentAttempt[]
   postedBy       User?            @relation("SettlementPostedBy", fields: [postedById], references: [id], onUpdate: NoAction)
   provider       PaymentProvider  @relation(fields: [providerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  journalEntry   JournalEntry?    @relation("SettlementJournal", fields: [journalEntryId], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@unique([providerId, reference], map: "SettlementBatch_provider_reference_key")
   @@index([status])
@@ -723,6 +733,8 @@ model Review {
   user               User?        @relation(fields: [userId], references: [id])
 
   @@index([productId])
+  // گام ۲۱ — صف تأیید ادمین (status=PENDING) + مرور بر حسب تاریخ
+  @@index([status, createdAt])
 }
 
 model OtpCode {
@@ -1477,6 +1489,7 @@ model JournalEntry {
   isReversalOf     JournalEntry?     @relation("JournalReversal", fields: [isReversalOfId], references: [id])
   reversals        JournalEntry[]    @relation("JournalReversal")
   lines            JournalLine[]
+  settlementBatches SettlementBatch[] @relation("SettlementJournal")
 
   @@unique([fiscalYearId, number])
   @@index([sourceType, sourceId])

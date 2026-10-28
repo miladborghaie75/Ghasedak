@@ -148,11 +148,13 @@ export function ProductCard({ product }: CardProps) {
 
       {/* بدنه کارت — همه وسط‌چین (بند ۱۱) */}
       <div className="flex flex-1 flex-col items-center px-1.5 pb-2 pt-2 text-center">
-        <h3 className="line-clamp-2 min-h-[44px] text-[13px] font-semibold leading-[22px] text-ink">
+        {/* h2 نه h3: کارت مستقیم زیر H1 صفحه‌های دسته/جست‌وجو می‌نشیند؛
+            پرش سطح (H1→H3) خطای heading-order می‌داد (گام ۱۹). */}
+        <h2 className="line-clamp-2 min-h-[44px] text-[13px] font-semibold leading-[22px] text-ink">
           <Link href={`/p/${product.slug}`} className="outline-none after:absolute after:inset-0 hover:text-primary">
             {product.name}
           </Link>
-        </h3>
+        </h2>
 
         {/*
          * امتیاز نظرات تأییدشده (بند ۴۱/۸۸) — «هر ردیف بدنهٔ کارت ارتفاع ثابت دارد»

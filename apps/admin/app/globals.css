@@ -495,3 +495,16 @@ body {
     max-height: 92dvh;
   }
 }
+
+/* گام ۱۹ — جایگزین `maximumScale: 1` (منع زوم سراسری که WCAG 1.4.4 را می‌شکست):
+   دابل‌تپ روی کنترل‌ها زوم نکند، اما pinch-zoom و زوم صفحه آزاد بماند. */
+button,
+input,
+textarea,
+select,
+a,
+[role="button"],
+[role="radio"],
+[role="checkbox"] {
+  touch-action: manipulation;
+}

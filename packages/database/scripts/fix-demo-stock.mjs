@@ -70,5 +70,52 @@ if (second && wh) {
   }
 }
 
+/**
+ * پروژکسیون ↔ دفتر (بند ۱۳۵: دفتر منبع حقیقت است).
+ * اگر واریانت در پروژکسیون `stockQty > 0` نشان می‌دهد ولی دفتر هیچ ردیفی ندارد،
+ * خریدِ مشتری در چک‌اوت رد می‌شود («موجودی کافی نیست») در حالی که UI موجود نشانش می‌دهد.
+ * راه‌حل همان کاری است که همین اسکریپت برای SKUهای دمو می‌کند: OPENING با همان تعداد،
+ * با کلید idempotent — پس اجرای چندباره چیزی تکراری نمی‌سازد و اختلاف صفر می‌شود.
+ */
+const unbacked = await p.$queryRawUnsafe(`
+  SELECT v.sku, v."stockQty" AS projected
+  FROM "ProductVariant" v
+  WHERE v."stockQty" > 0
+    AND v."deletedAt" IS NULL
+    AND NOT EXISTS (SELECT 1 FROM "StockLedgerEntry" e WHERE e."variantSku" = v.sku)
+`);
+let repaired = 0;
+for (const row of unbacked) {
+  const key = `opening:${row.sku}:${wh.id}`;
+  const exists = await p.stockLedgerEntry.findUnique({ where: { idempotencyKey: key } });
+  if (exists) continue;
+  await p.$transaction(async (tx) => {
+    const agg = await tx.stockLedgerEntry.aggregate({
+      where: { warehouseId: wh.id, variantSku: row.sku },
+      _sum: { qtyIn: true, qtyOut: true },
+    });
+    const onHand = (agg._sum.qtyIn ?? 0) - (agg._sum.qtyOut ?? 0);
+    if (onHand !== 0) return; // دفتر چیزی گفته → دست نمی‌زنیم
+    await tx.stockLedgerEntry.create({
+      data: {
+        warehouseId: wh.id,
+        variantSku: row.sku,
+        type: "OPENING",
+        qtyIn: row.projected,
+        qtyOut: 0,
+        balanceBefore: 0,
+        balanceAfter: row.projected,
+        unitCost: 400000n,
+        refType: "seed",
+        refId: "demo",
+        idempotencyKey: key,
+      },
+    });
+  });
+  repaired++;
+  console.log(`repaired ${row.sku}: +${row.projected} OPENING`);
+}
+console.log(`projection-repaired=${repaired}`);
+
 console.log("OPENING STOCK OK");
 await p.$disconnect();

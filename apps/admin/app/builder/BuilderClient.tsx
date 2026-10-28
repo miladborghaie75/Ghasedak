@@ -271,12 +271,28 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
   }, [call]);
 
   const loadPage = useCallback(
-    async (s: string) => {
+    async (s: string, knownMissing?: boolean) => {
       // شمارهٔ درخواست — تا پاسخِ کهنه (مثلاً وقتی مدیر سریع بین مسیرها
       // می‌پرد) بلوک‌های صفحهٔ قبلی را روی صفحهٔ جدید ننویسد.
       const seq = ++loadSeq.current;
       setLoadingPage(true);
       loadedSlugRef.current = null;
+      // صفحه هنوز ساخته نشده (در فهرست سایت `cms: null` است) — همان حالت خالی
+      // را بگذار **بدون** درخواست بی‌نتیجه؛ وگرنه هر بازکردن بوم روی دیتابیس تازه
+      // یک ۴۰۴ِ قابل‌انتظار به کنسول می‌دهد (API درست «صفحه نیست» را ۴۰۴ می‌کند).
+      if (knownMissing) {
+        setBlocks([]);
+        setStatus("DRAFT");
+        setPendingChanges(false);
+        setTitle("");
+        setSeoTitle("");
+        setSeoDesc("");
+        setSelectedId(null);
+        schedulePush(0, EMPTY_PAGE);
+        loadedSlugRef.current = s;
+        setLoadingPage(false);
+        return false;
+      }
       const r = await call<{
         slug: string;
         status: string;
@@ -340,7 +356,9 @@ export default function BuilderClient({ initialSlug }: { initialSlug?: string })
         items.find((p) => p.slug)?.slug ??
         "home";
       setSlug(target);
-      await loadPage(target);
+      // فقط وقتی از فهرستِ سایت می‌دانیم صفحه هنوز ساخته نشده، از درخواستِ ۴۰۴ بپر
+      const row = items.find((p) => p.slug === target);
+      await loadPage(target, Boolean(row && !row.cms));
     })();
     return () => {
       alive = false;
