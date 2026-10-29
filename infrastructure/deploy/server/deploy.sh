@@ -95,6 +95,12 @@ systemctl daemon-reload
 systemctl enable ghasedak-api ghasedak-storefront ghasedak-admin >/dev/null 2>&1
 systemctl restart ghasedak-api ghasedak-storefront ghasedak-admin
 sleep 4
+# بوت Nest روی این سرور تا ~۱۵ ثانیه طول می‌کشد (map صدها روت) — تا وقتی API واقعاً
+# جواب ندهد سلامت‌سنجی نکنیم وگرنه هر استقرار «شکست‌خورده» گزارش می‌شود.
+for i in $(seq 1 45); do
+  curl -fsS -m 2 http://127.0.0.1:4000/api/v1/health >/dev/null 2>&1 && break
+  sleep 1
+done
 for s in ghasedak-api ghasedak-storefront ghasedak-admin; do
   state="$(systemctl is-active "$s" 2>/dev/null || true)"
   printf '   %-22s %s\n' "$s" "$state"
