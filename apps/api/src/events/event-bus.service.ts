@@ -31,7 +31,10 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
       this.logger.log("Background workers disabled (GHASEDAK_WORKERS=off) — EventBus timer not started");
       return;
     }
-    this.timer = setInterval(() => void this.drain(), 5_000);
+    this.timer = setInterval(
+      () => void this.drain().catch((e) => this.logger.warn(`event-bus drain failed: ${e instanceof Error ? e.message : e}`)),
+      5_000,
+    );
   }
 
   onModuleDestroy(): void {

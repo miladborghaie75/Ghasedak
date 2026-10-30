@@ -33,12 +33,17 @@ export async function postUpstream<T = unknown>(
   path: string,
   body: unknown,
   timeoutMs = 8000,
+  clientIp?: string,
 ): Promise<UpstreamResult<T>> {
   let res: Response;
   try {
     res = await fetch(`${apiOrigin()}${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        // برای محدودیت نرخ سمت API؛ بدون این همهٔ مدیرها/مهاجم‌ها سطل 127.0.0.1 را شریک می‌شوند
+        ...(clientIp ? { "x-forwarded-for": clientIp } : {}),
+      },
       body: JSON.stringify(body),
       cache: "no-store",
       signal: AbortSignal.timeout(timeoutMs),

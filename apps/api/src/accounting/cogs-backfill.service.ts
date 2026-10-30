@@ -65,7 +65,10 @@ export class CogsBackfillService implements OnModuleInit, OnModuleDestroy {
       this.logger.log("Background workers disabled (GHASEDAK_WORKERS=off) — CogsBackfill timer not started");
       return;
     }
-    this.timer = setInterval(() => void this.scanRecent(), 10 * 60_000);
+    this.timer = setInterval(
+      () => void this.scanRecent().catch((e) => this.logger.warn(`cogs backfill failed: ${e instanceof Error ? e.message : e}`)),
+      10 * 60_000,
+    );
   }
 
   onModuleDestroy(): void {

@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Headers, Logger, NotFoundException, Param, Post, Query, UnauthorizedException } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { PaymentsService } from "./payments.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { RequirePermission } from "../auth/permissions.guard";
@@ -7,7 +8,7 @@ import { RequireCsrf } from "../auth/csrf.guard";
 interface StartBody {
   orderId: string;
   methodId?: string;
-  idempotencyKey: string;
+  idempotencyKey?: string;
   callbackUrl?: string;
   guestMobile?: string;
 }
@@ -48,6 +49,10 @@ export class PaymentsController {
   /** شروع پرداخت آنلاین (بند ۶) */
   @Post("start")
   async start(@Body() body: StartBody) {
+    // بدنه DTO runtime ندارد؛ نبودِ orderId پیش‌تر به findUnique({id: undefined}) و ۵۰۰ می‌رسید.
+    if (!body?.orderId) {
+      throw new BadRequestException({ code: "VALIDATION_ERROR", message: "شناسهٔ سفارش لازم است." });
+    }
     let methodId = body.methodId;
     if (!methodId) {
       const m = await this.prisma.paymentMethod.findFirst({ where: { code: "online", active: true } });
@@ -56,10 +61,12 @@ export class PaymentsController {
       }
       methodId = m.id;
     }
+    // کلید idempotency اجباری نیست: اگر کلاینت نفرستد، همین‌جا یکتاسازی می‌شود.
+    // پیش از این مقدار undefined به Prisma می‌رسید و findUnique خطا می‌داد → ۵۰۰.
     const r = await this.payments.startOnlinePayment({
       orderId: body.orderId,
       methodId,
-      idempotencyKey: body.idempotencyKey,
+      idempotencyKey: body.idempotencyKey?.trim() || randomUUID(),
       callbackUrl: body.callbackUrl ?? "",
       guestMobile: body.guestMobile,
     });

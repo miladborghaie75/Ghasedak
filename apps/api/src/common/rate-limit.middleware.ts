@@ -50,16 +50,27 @@ export const RULES: Array<{ match: RegExp; max: number; windowMs: number }> = [
   { match: /\/customer-chat$/, max: 20, windowMs: 60_000 },
 ];
 
+/** حلقهٔ محلی = فقط پراکسیِ خودمان (Next) می‌تواند از آن وصل شود. */
+function isLoopbackPeer(req: Request): boolean {
+  const addr = req.socket?.remoteAddress ?? "";
+  return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1";
+}
+
 /** کلاینتِ هر درخواست — هیچ IP خامی ذخیره نمی‌شود؛ فقط هش می‌شود. (export برای تست) */
 export function clientKeyOf(req: Request): string {
   // اعتماد به header فقط وقتی مجاز است که استقرار صریحاً پراکسیِ قابل اعتماد را اعلام
   // کرده باشد (TRUST_PROXY=1 یا TRUST_PROXY_HOPS=n). مقدار «اولین» ورودیِ XFF ساختِ
   // خود کلاینت است و ممنوع؛ مقدارِ معتبر را نزدیک‌ترین پراکسیِ قابل اعتماد اضافه می‌کند،
   // پس از راستِ فهرست شمرده می‌شود.
+  //
+  // استثنای امن: اگر اتصال از خودِ همین سرور (127.0.0.1) آمده باشد — یعنی پراکسیِ Next
+  // که فروشگاه/پنل را سرو می‌کند — آخرین مقدار XFF همان IP واقعی است که nginx اضافه
+  // کرده است. بدون این، همهٔ مشتری‌ها سطلِ «127.0.0.1» را شریک می‌شدند: ۵ ورود ناموفق
+  // از هر جای دنیا می‌توانست مدیر را قفل کند و سقف ۱۰ سفارش در دقیقه سراسری می‌شد.
   const hops = positiveInt(process.env.TRUST_PROXY_HOPS, process.env.TRUST_PROXY === "1" ? 1 : 0);
-  if (hops > 0) {
-    const forwarded = (req.headers["x-forwarded-for"] as string | undefined)?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
-    const trusted = forwarded[Math.max(0, forwarded.length - hops)];
+  const forwarded = (req.headers["x-forwarded-for"] as string | undefined)?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
+  if (forwarded.length > 0 && (hops > 0 || isLoopbackPeer(req))) {
+    const trusted = forwarded[Math.max(0, forwarded.length - Math.max(1, hops))];
     if (trusted) return trusted;
   }
   return req.ip || "unknown";

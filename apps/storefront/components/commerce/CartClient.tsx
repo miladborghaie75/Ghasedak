@@ -23,13 +23,17 @@ interface Detail {
   qty: number;
 }
 
-/** برچسب تنوع: رنگ + سایز (+ کاپ/فنر اگر دارد) */
+/** برچسب تنوع: رنگ + سایز (+ کاپ/فنر اگر دارد) — بخشِ نامشخص حذف می‌شود */
 function variantLabel(v: VariantV2): string {
-  const parts = [getTerm(v.colorId).label, `سایز ${getTerm(v.sizeId).label}`];
+  // واریانت بدون رنگ/سایز نباید «— · سایز —» نشان دهد (محصول DEMO و محصولات
+  // بدون ترم متصل). فقط بخش‌های موجود با هم ترکیب می‌شوند.
+  const parts = [v.colorId ? getTerm(v.colorId).label : "", v.sizeId ? `سایز ${getTerm(v.sizeId).label}` : ""].filter(
+    Boolean,
+  );
   const extras = v.optionIds
     .filter((id) => id.startsWith("cup-"))
     .map((id) => `کاپ ${getTerm(id).label}`);
-  return [...parts, ...extras].join(" · ");
+  return [...parts, ...extras].join(" · ") || "بدون تنوع";
 }
 
 export function CartClient() {

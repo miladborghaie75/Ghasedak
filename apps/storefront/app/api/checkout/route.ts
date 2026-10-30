@@ -5,6 +5,7 @@
 import { COPY } from "@/lib/copy";
 import { getMaintenance } from "@/lib/maintenance";
 import { csrfOk } from "@/lib/csrf";
+import { clientIpHeaders } from "@/lib/client-ip";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,8 @@ export async function POST(req: Request) {
     headers: {
       "content-type": "application/json",
       "x-idempotency-key": idem,
+      // IP واقعی مشتری برای محدودیت نرخ سمت API (وگرنه همه روی 127.0.0.1 می‌افتند)
+      ...clientIpHeaders(req),
       // نشست مشتری (کوکی سمت‌سرور) جلو می‌رود تا اگر واردشده است سفارش به حسابش بچسبد؛
       // بدون نشست، API مثل قبل سفارش مهمان می‌سازد.
       ...(req.headers.get("cookie") ? { cookie: req.headers.get("cookie") as string } : {}),

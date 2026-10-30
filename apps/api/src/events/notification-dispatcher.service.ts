@@ -36,7 +36,10 @@ export class NotificationDispatcherService implements OnModuleInit, OnModuleDest
       this.logger.log("Background workers disabled (GHASEDAK_WORKERS=off) — NotificationDispatcher timer not started");
       return;
     }
-    this.timer = setInterval(() => void this.dispatchOnce(), 30_000);
+    this.timer = setInterval(
+      () => void this.dispatchOnce().catch((e) => this.logger.warn(`notification dispatch failed: ${e instanceof Error ? e.message : e}`)),
+      30_000,
+    );
   }
 
   onModuleDestroy(): void {

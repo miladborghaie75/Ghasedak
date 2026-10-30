@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, NotFoundException, Param, Post, Query } from "@nestjs/common";
 import { OrdersService, type CheckoutInput } from "./orders.service";
 import { RequirePermission } from "../auth/permissions.guard";
 import { RequireCsrf } from "../auth/csrf.guard";
@@ -93,6 +93,12 @@ export class OrdersController {
   ) {
     const perms = identity?.permissions ?? [];
     const full = perms.includes("*") || perms.includes("orders.view");
-    return full ? this.orders.byCode(code) : this.orders.byCodePublic(code);
+    const order = full ? await this.orders.byCode(code) : await this.orders.byCodePublic(code);
+    // پیش از این مسیر برای کد ناموجود ۲۰۰ با بدنهٔ null برمی‌گرداند؛ ۲۰۰ بدون بدنه
+    // "یافت نشد" و "یافت شد" را برای کلاینت/خزنده یکی می‌کرد. الان ۴۰۴ صریح است.
+    if (!order) {
+      throw new NotFoundException({ code: "NOT_FOUND", message: "سفارش یافت نشد." });
+    }
+    return order;
   }
 }

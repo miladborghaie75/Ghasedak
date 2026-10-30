@@ -126,7 +126,10 @@ export class DataHealthService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     // هر ۶ ساعت اسکن *فقط-خواندنی* + هشدار؛ اصلاح خودکار توسط worker ممنوع
-    this.timer = setInterval(() => void this.scanAndWarn(), 6 * 60 * 60_000);
+    this.timer = setInterval(
+      () => void this.scanAndWarn().catch((e) => this.logger.warn(`data health scan failed: ${e instanceof Error ? e.message : e}`)),
+      6 * 60 * 60_000,
+    );
     void this.scanAndWarn();
   }
 

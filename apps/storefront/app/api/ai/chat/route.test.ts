@@ -7,14 +7,24 @@
  * داخلی مدیرپسند بالادست (بند ۱۱۱).
  */
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { test, beforeEach, after } from "node:test";
 import { registerHooks } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+// ریشهٔ اپ برای بازنویسی الیاس «@/» — رانرِ خام Node آن را نمی‌شناسد.
+const APP_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 
 // next@15.5.26 هیچ «exports» map ندارد؛ «next/server» خام در Node رزولو نمی‌شود
 // ولی «next/server.js» کار می‌کند. هوکِ رزولوشن همین یک بازنویسی را انجام می‌دهد.
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "next/server") return nextResolve("next/server.js", context);
+    if (specifier.startsWith("@/")) {
+      const base = fileURLToPath(new URL(specifier.slice(2), pathToFileURL(APP_ROOT)));
+      const candidate = [`${base}.ts`, `${base}.tsx`, `${base}/index.ts`].find((p) => existsSync(p));
+      if (candidate) return nextResolve(pathToFileURL(candidate).href, context);
+    }
     return nextResolve(specifier, context);
   },
 });

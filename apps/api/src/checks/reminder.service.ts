@@ -94,7 +94,10 @@ export class ReminderService implements OnModuleInit, OnModuleDestroy {
       this.logger.log("Background workers disabled (GHASEDAK_WORKERS=off) — Reminder timer not started");
       return;
     }
-    this.timer = setInterval(() => void this.runScheduled(), 60_000);
+    this.timer = setInterval(
+      () => void this.runScheduled().catch((e) => this.logger.warn(`reminder run failed: ${e instanceof Error ? e.message : e}`)),
+      60_000,
+    );
     // اولین تلاش بلافاصله بعد از بوت — اگر امروز هنوز اجرا نشده، اجرا می‌شود (idempotent)
     void this.runScheduled();
   }

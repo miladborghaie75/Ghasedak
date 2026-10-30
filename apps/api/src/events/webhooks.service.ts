@@ -60,7 +60,12 @@ export class WebhooksService implements OnModuleInit, OnModuleDestroy {
       this.logger.log("Background workers disabled (GHASEDAK_WORKERS=off) — Webhook retry timer not started");
       return;
     }
-    this.timer = setInterval(() => void this.drain(), 30_000);
+    // catch اجباری: رد شدنِ Promise بدون گیرنده (DB قطع/restart) روی Node 26
+    // فرایند کل API را می‌کشد؛ تیک بعدی خودش دوباره تلاش می‌کند.
+    this.timer = setInterval(
+      () => void this.drain().catch((e) => this.logger.warn(`webhook drain failed: ${e instanceof Error ? e.message : e}`)),
+      30_000,
+    );
   }
 
   onModuleDestroy(): void {

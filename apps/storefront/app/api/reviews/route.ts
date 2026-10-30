@@ -4,6 +4,7 @@
  * IP واقعی کلاینت در x-forwarded-for فوروارد می‌شود تا rate-limit سمت API
  * به‌جای «IPِ سرور Next» روی IP واقعی کاربر بنشیند.
  */
+import { clientIpHeaders } from "@/lib/client-ip";
 import { csrfOk, csrfForbidden } from "@/lib/csrf";
 
 export const dynamic = "force-dynamic";
@@ -34,12 +35,11 @@ export async function POST(req: Request) {
   }
 
   const api = process.env.API_ORIGIN ?? "http://localhost:4000";
-  const fwd = req.headers.get("x-forwarded-for") ?? "";
   const upstream = await fetch(`${api}${endpoint}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(fwd ? { "x-forwarded-for": fwd } : {}),
+      ...clientIpHeaders(req),
     },
     body: JSON.stringify(body.payload ?? {}),
     signal: AbortSignal.timeout(15_000),

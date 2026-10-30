@@ -30,8 +30,13 @@ export function buildAxes(product: ProductV2): VariantAxis[] {
     .filter((id) => !termsOf("size").some((t) => t.id === id) && lookupTermLabel(id) != null)
     .map((id) => ({ id, attribute: "size" as AttributeKey, label: lookupTermLabel(id) as string, order: 999 }));
 
-  axes.push({ key: "color", terms: [...termsOf("color").filter((t) => colorIds.includes(t.id)), ...dynColor] });
-  axes.push({ key: "size", terms: [...termsOf("size").filter((t) => sizeIds.includes(t.id)), ...dynSize] });
+  // محور بدون هیچ ترم نمایش داده نمی‌شود — وگرنه محصولی مثل DEMO که
+  // رنگ/سایز به واریانتش وصل نیست، دو fieldset خالی «رنگ» و «سایز» می‌سازد
+  // و مشتری فکر می‌کند انتخاب‌ها لود نشده‌اند.
+  const colorTerms = [...termsOf("color").filter((t) => colorIds.includes(t.id)), ...dynColor];
+  const sizeTerms = [...termsOf("size").filter((t) => sizeIds.includes(t.id)), ...dynSize];
+  if (colorTerms.length > 0) axes.push({ key: "color", terms: colorTerms });
+  if (sizeTerms.length > 0) axes.push({ key: "size", terms: sizeTerms });
 
   if (categoryHas.underwire(product.category)) {
     const uw = optionIds.filter((id) => id.startsWith("uw-"));

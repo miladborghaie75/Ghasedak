@@ -33,7 +33,10 @@ export class HealthWatchService implements OnModuleInit, OnModuleDestroy {
       this.logger.log("Background workers disabled (GHASEDAK_WORKERS=off) — HealthWatch timer not started");
       return;
     }
-    this.timer = setInterval(() => void this.run(), 60_000);
+    this.timer = setInterval(
+      () => void this.run().catch((e) => this.logger.warn(`health watch failed: ${e instanceof Error ? e.message : e}`)),
+      60_000,
+    );
   }
 
   onModuleDestroy(): void {

@@ -6,11 +6,18 @@ export const dynamic = "force-dynamic";
 
 async function loginAction(formData: FormData): Promise<void> {
   "use server";
-  const { cookies } = await import("next/headers");
+  const { cookies, headers } = await import("next/headers");
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  // nginx مقدار واقعی را آخر XFF اضافه می‌کند؛ اولین ورودی قابل جعل است.
+  const h = await headers();
+  const clientIp = (h.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .at(-1);
   // کوکی session را از پاسخ API به مرورگر منتقل می‌کنیم (Server Action → fetch مطلق)
-  const result = await postUpstream("/api/v1/auth/login", { email, password });
+  const result = await postUpstream("/api/v1/auth/login", { email, password }, 8000, clientIp);
   if (!result.ok) {
     // ۴۰۱ یعنی رمز/ایمیل غلط؛ هر خطای دیگر (API خاموش، ۵۰۰) پیام جدا دارد —
     // قبلاً هر دو به «ایمیل یا رمز نادرست» یا مرز خطا تبدیل می‌شدند.

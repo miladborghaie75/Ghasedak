@@ -6,6 +6,7 @@
  * - Forward عمومی به endpoint مستقل مشتری، بدون ارسال کوکی یا کلید مدیریتی
  */
 import { NextRequest, NextResponse } from "next/server";
+import { clientIp } from "@/lib/client-ip";
 
 /**
  * In-memory rate limiter for public AI chat endpoint
@@ -79,8 +80,8 @@ async function forwardToApi(body: AIChatRequest): Promise<Response> {
 }
 
 export async function POST(req: NextRequest) {
-  // Rate limit check
-  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
+  // Rate limit check — آخرین hop قابل اعتماد (nginx)، نه اولین مقدار قابل جعل
+  const ip = clientIp(req);
   const rateLimit = checkRateLimit(ip);
   if (!rateLimit.allowed) {
     return NextResponse.json(

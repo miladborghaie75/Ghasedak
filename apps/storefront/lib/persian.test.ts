@@ -45,15 +45,14 @@ test("RESERVED_SLUGS: مسیرهای سطح‌یک فروشگاه رزرو هس�
   assert.equal(isReservedSlug("Cart"), true); // مقایسه بدون توجه به حروف است
 });
 
-test("ensureUniqueSlug: پس‌وند -۲/-۳ و بدون حلقهٔ بی‌پایان", () => {
+test("ensureUniqueSlug: پس‌وند -۲/-۳ و بدون حلقهٔ بی‌پایان", async () => {
   const taken = new Set(["bra", "bra-2", "bra-3"]);
-  assert.equal(ensureUniqueSlug("panty", (s) => taken.has(s)), "panty");
-  assert.equal(ensureUniqueSlug("bra", (s) => taken.has(s)), "bra-4");
-  // نسخهٔ async هم باید کار کند (تابع وجود را به‌صورت async می‌خواند)
+  // ensureUniqueSlug طبق قرارداد خودش Promise برمی‌گرداند؛ مقایسهٔ مستقیم
+  // با رشته قبلاً همیشه شکست می‌خورد (Promise !== "panty") و CI را قرمز می‌کرد.
+  assert.equal(await ensureUniqueSlug("panty", (s) => taken.has(s)), "panty");
+  assert.equal(await ensureUniqueSlug("bra", (s) => taken.has(s)), "bra-4");
+  // callback async هم باید پشتیبانی شود
   const takenAsync = new Set(["bra", "bra-2", "bra-3"]);
   const asyncExists = async (s: string) => takenAsync.has(s);
-  // نکته: implementations فعلی sync است؛ برای async باید wrapper بنویسیم
-  // اما این تست فقط تضمین می‌کند که callback async هم قابل قبول است (Promise<boolean>)
-  // برای پوشش واقعی async، ensureUniqueSlug باید Promise<boolean> را مدیریت کند
-  assert.equal(ensureUniqueSlug("bra", (s) => takenAsync.has(s)), "bra-4");
+  assert.equal(await ensureUniqueSlug("bra", asyncExists), "bra-4");
 });

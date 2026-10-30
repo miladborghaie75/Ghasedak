@@ -4,6 +4,7 @@
  */
 import { COPY } from "@/lib/copy";
 import { csrfOk } from "@/lib/csrf";
+import { clientIpHeaders } from "@/lib/client-ip";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
   // 3) ایجاد attempt + redirect
   const startRes = await fetch(`${api}/api/v1/payments/start`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...clientIpHeaders(req) },
     body: JSON.stringify({
       orderId: order.id,
       methodId: online?.id,
