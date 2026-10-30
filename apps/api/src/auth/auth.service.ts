@@ -98,12 +98,22 @@ export class AuthService {
           .catch(() => undefined);
       }
     }
+    const session = await this.startSession(user.id);
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    return session;
+  }
+
+  /**
+   * ساخت نشست برای هر کاربرِ فعال (ادمین یا مشتری) — تنها جایی که توکن صادر می‌شود.
+   * ورود با رمز، ورود با OTP و هر مسیر ورود آینده همین را صدا می‌زنند تا
+   * هش‌کردن توکن، انقضا و ردیف AdminSession در یک جا باشد.
+   */
+  async startSession(userId: string): Promise<{ token: string; expiresAt: Date }> {
     const token = randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
     await this.prisma.adminSession.create({
-      data: { userId: user.id, tokenHash: this.hashToken(token), expiresAt },
+      data: { userId, tokenHash: this.hashToken(token), expiresAt },
     });
-    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     return { token, expiresAt };
   }
 

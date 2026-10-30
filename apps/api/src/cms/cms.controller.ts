@@ -108,7 +108,7 @@ export class CmsService {
    * به‌جز صفحه‌های محتواییِ خودِ سایت (about/contact/…) که منبعشان همین CMS است.
    */
   private static readonly RESERVED_FOR_CMS = new Set(
-    RESERVED_SLUGS.filter((s) => !SITE_PAGES.some((d) => d.slug === s)),
+    Array.from(RESERVED_SLUGS).filter((s) => !SITE_PAGES.some((d) => d.slug === s)),
   );
 
   /**

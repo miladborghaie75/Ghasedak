@@ -2,7 +2,7 @@
  * هستهٔ جست‌وجوی فارسی (گام ۲۰) — منطق خالص و جدا از repo تا با node:test
  * بدون شبکه/DB قابل تست باشد (فایل `persian-search.test.ts`).
  */
-import { persianLoose } from "@ghasedak/contracts";
+import { normalizePersianForSearch, expandSearchQuery as contractsExpandSearchQuery } from "@ghasedak/contracts";
 
 /** حداقلِ حداقل‌ها برای هر سند قابل جست‌وجو */
 export interface SearchableDoc {
@@ -37,18 +37,18 @@ export const SYNONYM_MIN_DIRECT_HITS = 3;
 export function expandQuery(term: string): string[] {
   const out = new Set<string>();
   const add = (raw: string): void => {
-    const val = persianLoose(raw);
+    const val = normalizePersianForSearch(raw);
     if (val && !term.includes(val)) out.add(val);
   };
   for (const [key, values] of Object.entries(SEARCH_SYNONYMS)) {
-    const k = persianLoose(key);
+    const k = normalizePersianForSearch(key);
     if (!k) continue;
     if (term.includes(k)) {
       for (const v of values) add(v);
       continue;
     }
     if (values.some((v) => {
-      const val = persianLoose(v);
+      const val = normalizePersianForSearch(v);
       return val !== "" && term.includes(val);
     })) {
       add(k);
@@ -65,11 +65,11 @@ export function expandQuery(term: string): string[] {
  *  - اگر نتیجهٔ مستقیم کم بود، مترادف‌های دامنه ضمیمه می‌شوند بدون جابه‌جایی ترتیب مستقیم‌ها.
  */
 export function searchDocs<T extends SearchableDoc>(q: string, pool: T[]): T[] {
-  const term = persianLoose(q);
+  const term = normalizePersianForSearch(q);
   if (!term) return pool;
   const hay = pool.map((doc) => ({
     doc,
-    text: `${persianLoose(doc.name)} ${persianLoose(doc.short ?? "")}`,
+    text: `${normalizePersianForSearch(doc.name)} ${normalizePersianForSearch(doc.short ?? "")}`,
   }));
   const direct = hay.filter((h) => h.text.includes(term)).map((h) => h.doc);
   if (direct.length >= SYNONYM_MIN_DIRECT_HITS) return direct;

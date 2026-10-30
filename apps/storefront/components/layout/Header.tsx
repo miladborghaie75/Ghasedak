@@ -26,6 +26,15 @@ export function Header() {
 
   const actionButtons = (
     <div className="flex items-center gap-1">
+      {/* حساب مشتری — ورود/ثبت‌نام/سفارش‌ها */}
+      <Link
+        href="/account"
+        aria-label="حساب من"
+        className="flex size-11 items-center justify-center rounded-full text-muted transition-colors hover:bg-primary-tint hover:text-primary-strong"
+      >
+        <UserIcon />
+      </Link>
+
       {/* علاقه‌مندی */}
       <Link
         href="/wishlist"
@@ -179,6 +188,9 @@ function MobileMenu({
       <Link href="/guides/size" onClick={onNavigate} className="flex h-12 items-center rounded-xl px-3 text-sm font-medium text-ink hover:bg-primary-tint">
         {COPY.sizeGuide}
       </Link>
+      <Link href="/account" onClick={onNavigate} className="flex h-12 items-center rounded-xl px-3 text-sm font-medium text-ink hover:bg-primary-tint">
+        حساب من
+      </Link>
       <Link href="/wishlist" onClick={onNavigate} className="flex h-12 items-center rounded-xl px-3 text-sm font-medium text-ink hover:bg-primary-tint">
         علاقه‌مندی‌ها
       </Link>
@@ -190,6 +202,14 @@ function MobileMenu({
 }
 
 /* ── آیکون‌های خطی ۱٫۵px ─────────────────────────────── */
+function UserIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+      <circle cx="12" cy="8.5" r="3.5" />
+      <path d="M4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5" strokeLinecap="round" />
+    </svg>
+  );
+}
 function HeartIcon() {
   return (
     <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>

@@ -177,15 +177,19 @@ Start-Process -WindowStyle Hidden -FilePath cmd -ArgumentList '/c','npx next sta
 
 `GET /api/v1/health` را با هر ابزاری (UptimeRobot، Uptime Kuma، cron سرور) پایش کنید؛ فقط وقتی `status` برابر `ok` است سالم است. این پاسخ شامل `checks.db`، `version` و `uptimeSeconds` هم می‌شود و پاسخ آنی است (زیر ۱ ثانیه).
 
-### ۱۱.۲ کانال هشدار (تلگرام با env — بدون UI اضافه)
+### ۱۱.۲ کانال هشدار (تلگرام و بله با env — بدون UI اضافه)
 
 ```ini
-ALERT_TELEGRAM_BOT_TOKEN=<توکن ربات از BotFather>
+ALERT_TELEGRAM_BOT_TOKEN=<توکن ربات از BotFather تلگرام>
 ALERT_TELEGRAM_CHAT_ID=<شناسهٔ چت/کانال — با ربات‌تان پیام بدهید و id را از getUpdates بخوانید>
+ALERT_BALE_BOT_TOKEN=<توکن بازو از @botfather بله>
+ALERT_BALE_CHAT_ID=<شناسهٔ چت — از getUpdates بازو خوانده می‌شود>
 ALERT_EMAIL=<اختیاری — گیرندهٔ ایمیل جایگزین؛ پیش‌فرض SMTP_USER>
 ```
 
-رفتار: تلگرام (فراخوانی مستقیم Bot API) ← اگر نبود/شکست خورد، ایمیل از همان SMTP صف `Notification` ← اگر هیچ‌کدام ست نیست، **dry-run** با لاگ ساخت‌یافته (`component=alerting, status=DRY_RUN`) — در تست هرگز ارسال واقعی نمی‌شود. هر نوع هشدار حداکثر یک‌بار در ۳۰ دقیقه ارسال می‌شود (طوفان‌گریز).
+API بله هم‌شکل تلگرام است (`https://tapi.bale.ai/bot<token>/sendMessage` با `{chat_id, text}`)، پس هیچ وابستگی جدیدی اضافه نشده.
+
+رفتار: تلگرام ← اگر نبود/شکست خورد، بله ← اگر هیچ‌کدام نبود، ایمیل از همان SMTP صف `Notification` ← اگر هیچ‌کدام ست نیست، **dry-run** با لاگ ساخت‌یافته (`component=alerting, status=DRY_RUN`) — در تست هرگز ارسال واقعی نمی‌شود. هر نوع هشدار حداکثر یک‌بار در ۳۰ دقیقه ارسال می‌شود (طوفان‌گریز).
 
 ### ۱۱.۳ فهرست هشدارها و آستانه‌ها
 

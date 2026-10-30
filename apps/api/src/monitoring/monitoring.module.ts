@@ -5,7 +5,7 @@ import { HealthWatchService } from "./health-watch.service";
 
 /**
  * ماژول مانیتورینگ (گام ۲۳ — بستهٔ C):
- *  - `AlertingService` — ارسال هشدار (تلگرام → ایمیل → dry-run)؛ به رأس هشدار پیوست می‌شود.
+ *  - `AlertingService` — ارسال هشدار (تلگرام → بله → ایمیل → dry-run)؛ به رأس هشدار پیوست می‌شود.
  *  - `HealthWatchService` — تایمر سلامت/دیسک/بکاپ که رویداد هشدار شلیک می‌کند.
  *
  * ارتباط با بقیهٔ سیستم از رأس سطح-ماژول (`alert-bus.ts`) می‌رود تا filter خطاها،

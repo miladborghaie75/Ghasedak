@@ -60,12 +60,12 @@ install -m 600 /root/.ssh/authorized_keys /root/.ssh/authorized_keys   # مطم�
 | ۲ | Merchant ID زرین‌پال و `ZARINPAL_SANDBOX=false` | پنل ادمین ← سیستم ← پیامک و درگاه پرداخت |
 | ۳ | کلید اپراتور پیامک | همان صفحه، کارت پیامک |
 | ۴ | SMTP (ایمیل تراکنشی) | همان صفحه، کارت «کلیدهای API» + ری‌استارت API |
-| ۵ | ربات تلگرام هشدار (`ALERT_TELEGRAM_BOT_TOKEN` / `CHAT_ID`) | `/opt/ghasedak/.env` سپس ری‌استارت API |
+| ۵ | ربات تلگرام هشدار (`ALERT_TELEGRAM_*`) و/یا بازوی بله (`ALERT_BALE_*`) | `/opt/ghasedak/.env` سپس ری‌استارت API |
 | ۶ | `NEXT_PUBLIC_GA4_MEASUREMENT_ID` + `GA4_API_SECRET` (قبل از build!) | همان env سپس `deploy.sh` |
 | ۷ | ورود کاتالوگ واقعی و حذف دادهٔ DEMO (گام ۳۹) | پنل ادمین ← محصولات |
 | ۸ | ساخت حساب ادمین با ایمیل واقعی خودتان | پنل ادمین ← کاربران |
 
-> هشدارها بدون توکن تلگرام در حالت **dry-run** فقط لاگ می‌زنند (`component=alerting, status=DRY_RUN`) —
+> هشدارها بدون توکن تلگرام/بله در حالت **dry-run** فقط لاگ می‌زنند (`component=alerting, status=DRY_RUN`) —
 > یعنی تا گام ۵ را انجام ندهید هیچ پیامی به‌دست شما نمی‌رسد.
 
 ---

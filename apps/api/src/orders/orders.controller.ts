@@ -12,9 +12,11 @@ export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
 
   @Post("checkout")
-  async checkout(@Body() body: CheckoutInput) {
+  async checkout(@Body() body: CheckoutInput, @Identity() identity?: { userId: string } | null) {
     const idem = body.idempotencyKey ?? randomUUID();
-    const r = await this.orders.createGuestOrder(body);
+    // اگر مشتری واردشده باشد، سفارش به حسابش گره می‌خورد (وگرنه رفتار مهمانِ قبلی)
+    const link = await this.orders.customerLink(identity?.userId ?? null, String(body.guestMobile ?? ""));
+    const r = await this.orders.createGuestOrder(body, link);
     return { ...r, idempotencyKey: idem };
   }
 

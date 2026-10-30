@@ -137,8 +137,31 @@ export class OrdersService {
     };
   }
 
+  /**
+   * پیوند مشتریِ واردشده به سفارش — فقط وقتی نشستِ مشتری فعال باشد.
+   * سفارش مهمان بدون نشست همچنان بدون userId می‌ماند (رفتار قبلی دست‌نخورده).
+   */
+  async customerLink(
+    userId: string | null | undefined,
+    guestMobile: string,
+  ): Promise<{ userId: string; customerId: string } | null> {
+    if (!userId) return null;
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.role !== "CUSTOMER" || user.status !== "ACTIVE") return null;
+    const mobile = user.mobile ?? guestMobile;
+    const customer = await this.prisma.customer.upsert({
+      where: { userId: user.id },
+      update: { mobile },
+      create: { userId: user.id, mobile, ...(user.name ? { name: user.name } : {}) },
+    });
+    return { userId: user.id, customerId: customer.id };
+  }
+
   /** ایجاد سفارش مهمان — اتمیک: رزرو + سفارش + items + snapshot (بند ۹۲) */
-  async createGuestOrder(input: CheckoutInput): Promise<{ code: string; total: bigint; id: string }> {
+  async createGuestOrder(
+    input: CheckoutInput,
+    link: { userId: string; customerId: string } | null = null,
+  ): Promise<{ code: string; total: bigint; id: string }> {
     if (!Array.isArray(input.lines) || input.lines.length === 0) {
       throw new BadRequestException({ code: "CART_EMPTY", message: "سبد خرید خالی است." });
     }
@@ -254,9 +277,11 @@ export class OrdersService {
           code,
           channelId: channel.id,
           warehouseId: channel.defaultWarehouseId,
-          guestName: input.guestName,
-          guestMobile: input.guestMobile,
-          addressSnapshot: addressSnapshot as object,
+        guestName: input.guestName,
+        guestMobile: input.guestMobile,
+        // مشتریِ واردشده → سفارش به حسابش می‌چسبد (دیدن در «حساب من»)
+        ...(link ? { userId: link.userId, customerId: link.customerId } : {}),
+        addressSnapshot: addressSnapshot as object,
           ...(utmSnapshot ? { utmSnapshot: utmSnapshot as object } : {}),
           status: "PENDING",
           paymentStatus: "PENDING",

@@ -58,6 +58,9 @@ export async function POST(req: Request) {
     headers: {
       "content-type": "application/json",
       "x-idempotency-key": idem,
+      // نشست مشتری (کوکی سمت‌سرور) جلو می‌رود تا اگر واردشده است سفارش به حسابش بچسبد؛
+      // بدون نشست، API مثل قبل سفارش مهمان می‌سازد.
+      ...(req.headers.get("cookie") ? { cookie: req.headers.get("cookie") as string } : {}),
     },
     body: JSON.stringify(bodyObj),
     signal: AbortSignal.timeout(15_000),

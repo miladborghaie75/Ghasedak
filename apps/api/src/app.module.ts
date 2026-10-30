@@ -28,6 +28,7 @@ import { WishlistModule } from "./wishlist/wishlist.module";
 import { ImportModule } from "./import/import.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
 import { MonitoringModule } from "./monitoring/monitoring.module";
+import { AccountModule } from "./account/account.module";
 import { CustomerChatModule } from "./customer-chat/customer-chat.module";
 import { AiBudgetModule } from "./common/ai-budget.module";
 import { GeoModule } from "./geo/geo.module";
@@ -43,7 +44,7 @@ import { RateLimitMiddleware } from "./common/rate-limit.middleware";
  * PermissionsGuard سراسری: مجوز در همه مسیرهای @RequirePermission به‌صورت server-side چک می‌شود (بند ۷).
  */
 @Module({
-  imports: [PrismaModule, HealthModule, AuthModule, ProductsModule, AccountingModule, InventoryModule, OrdersModule, PaymentsModule, PosModule, ReturnsModule, ShippingModule, EventsModule, CatalogModule, AdminPanelModule, CustomersModule, PricingModule, TreasuryModule, ChecksModule, ReportsModule, CmsModule, ReviewsModule, PayrollModule, CartModule, WishlistModule, GeoModule, CogsModule, ImportModule, AnalyticsModule, PhotographyModule, MonitoringModule, CustomerChatModule, AiBudgetModule],
+  imports: [PrismaModule, HealthModule, AuthModule, ProductsModule, AccountingModule, InventoryModule, OrdersModule, PaymentsModule, PosModule, ReturnsModule, ShippingModule, EventsModule, CatalogModule, AdminPanelModule, CustomersModule, PricingModule, TreasuryModule, ChecksModule, ReportsModule, CmsModule, ReviewsModule, PayrollModule, CartModule, WishlistModule, GeoModule, CogsModule, ImportModule, AnalyticsModule, PhotographyModule, MonitoringModule, CustomerChatModule, AiBudgetModule, AccountModule],
   providers: [
     { provide: APP_GUARD, useClass: PermissionsGuard },
     // گارد CSRF سراسری — فقط مسیرهایی که @RequireCsrf دارند (اکشن‌های حساس مالی) بررسی می‌شوند

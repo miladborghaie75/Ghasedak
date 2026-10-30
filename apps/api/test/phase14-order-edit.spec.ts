@@ -68,53 +68,115 @@ describe("Phase 14 item 6 — order edit", () => {
     return r;
   };
 
-  it("1) ویرایش خطوط: تعداد 1→3 + افزودن SKU دوم → محاسبه دوباره + رزرو + ORDER_EDITED", async () => {
-    const o = await makeOrder([{ sku: "DEMO-BRA-80B-BLK", qty: 1 }]);
-    const before = await prisma.order.findUniqueOrThrow({ where: { id: o.id }, include: { items: true } });
-    expect(before.items).toHaveLength(1);
-
-    const edited = await orders.editOrder({
-      orderId: o.id,
-      actorId,
-      reason: "تست ویرایش",
-      lines: [{ sku: "DEMO-BRA-80B-BLK", qty: 3 }, { sku: "DEMO-BRA-75B-BLK", qty: 1 }],
+  // Helper to create a test variant with known stock
+  const createTestVariant = async (sku: string, stock: number, price: bigint = 1000n) => {
+    const host = await prisma.product.findFirstOrThrow({ where: { deletedAt: null } });
+    await prisma.productVariant.create({ data: { productId: host.id, sku, price, stockQty: 0 } });
+    // Seed stock via ledger OPENING (same as seed.ts)
+    const wh = await prisma.warehouse.findUniqueOrThrow({ where: { code: "MAIN" } });
+    const seedActor = await prisma.user.findUniqueOrThrow({ where: { email: "admin@ghasedak.demo" }, select: { id: true } });
+    await prisma.$queryRaw`SELECT "sku" FROM "ProductVariant" WHERE "sku" = ${sku} FOR UPDATE`;
+    const agg = await prisma.stockLedgerEntry.aggregate({
+      where: { warehouseId: wh.id, variantSku: sku },
+      _sum: { qtyIn: true, qtyOut: true },
     });
+    const balanceBefore = (agg._sum.qtyIn ?? 0) - (agg._sum.qtyOut ?? 0);
+    const balanceAfter = balanceBefore + stock;
+    await prisma.stockLedgerEntry.create({
+      data: {
+        warehouseId: wh.id,
+        variantSku: sku,
+        type: "OPENING",
+        qtyIn: stock,
+        qtyOut: 0,
+        balanceBefore,
+        balanceAfter,
+        unitCost: 500n,
+        refType: "opening",
+        refId: "test-seed",
+        idempotencyKey: `test:opening:${sku}`,  // idempotent per test run
+        actorId: seedActor.id,
+        note: "موجودی تست واحد",
+      },
+    });
+    await prisma.productVariant.update({ where: { sku }, data: { stockQty: stock } });
+    // Create price for website channel
+    const webLevel = await prisma.priceLevel.findUniqueOrThrow({ where: { code: "WEB" } });
+    await prisma.variantPrice.upsert({
+      where: { variantSku_priceLevelId: { variantSku: sku, priceLevelId: webLevel.id } },
+      update: { price },
+      create: { variantSku: sku, priceLevelId: webLevel.id, price },
+    });
+  };
 
-    const after = await prisma.order.findUniqueOrThrow({ where: { id: o.id }, include: { items: true } });
-    expect(after.items).toHaveLength(2);
-    expect(after.total).toBe(edited.total);
-    // محاسبه دوباره: subtotal جدید = total - shipping
-    const lineSum = after.items.reduce((a, it) => a + Number(it.lineTotal), 0);
-    expect(lineSum).toBe(Number(after.subtotal));
-    // رزرو انبار به‌روز
-    const res = await prisma.stockReservation.findMany({ where: { refType: "order", refId: o.id, state: "ACTIVE" } });
-    const qty80 = res.filter((r) => r.variantSku === "DEMO-BRA-80B-BLK").reduce((a, r) => a + r.qty, 0);
-    expect(qty80).toBe(3);
-    // تاریخچه بازبینی
-    const ev = await prisma.orderEvent.findFirstOrThrow({ where: { orderId: o.id, type: "ORDER_EDITED" } });
-    const payload = ev.payload as { before: { total: number }; after: { total: number } };
-    expect(payload.before.total).toBe(Number(before.total));
-    expect(payload.after.total).toBe(Number(after.total));
-    // رویداد ادمین
-    const outbox = await prisma.domainEventOutbox.findFirst({ where: { name: "OrderEdited", payload: { path: ["orderId"], equals: o.id } } });
-    expect(outbox).toBeTruthy();
+  // Helper to clean up test variant
+  const cleanupTestVariant = async (sku: string) => {
+    await prisma.variantPrice.deleteMany({ where: { variantSku: sku } }).catch(() => undefined);
+    await prisma.stockLedgerEntry.deleteMany({ where: { variantSku: sku, idempotencyKey: { startsWith: "test:opening:" } } }).catch(() => undefined);
+    await prisma.productVariant.delete({ where: { sku } }).catch(() => undefined);
+  };
+
+  it("1) ویرایش خطوط: تعداد 1→3 + افزودن SKU دوم → محاسبه دوباره + رزرو + ORDER_EDITED", async () => {
+    const sku1 = `TEST-EDIT-1-${Date.now()}`;
+    const sku2 = `TEST-EDIT-2-${Date.now()}`;
+    await createTestVariant(sku1, 10);
+    await createTestVariant(sku2, 10);
+    try {
+      const o = await makeOrder([{ sku: sku1, qty: 1 }]);
+      const before = await prisma.order.findUniqueOrThrow({ where: { id: o.id }, include: { items: true } });
+      expect(before.items).toHaveLength(1);
+
+      const edited = await orders.editOrder({
+        orderId: o.id,
+        actorId,
+        reason: "تست ویرایش",
+        lines: [{ sku: sku1, qty: 3 }, { sku: sku2, qty: 1 }],
+      });
+
+      const after = await prisma.order.findUniqueOrThrow({ where: { id: o.id }, include: { items: true } });
+      expect(after.items).toHaveLength(2);
+      expect(after.total).toBe(edited.total);
+      // محاسبه دوباره: subtotal جدید = total - shipping
+      const lineSum = after.items.reduce((a, it) => a + Number(it.lineTotal), 0);
+      expect(lineSum).toBe(Number(after.subtotal));
+      // رزرو انبار به‌روز
+      const res = await prisma.stockReservation.findMany({ where: { refType: "order", refId: o.id, state: "ACTIVE" } });
+      const qty1 = res.filter((r) => r.variantSku === sku1).reduce((a, r) => a + r.qty, 0);
+      expect(qty1).toBe(3);
+      // تاریخچه بازبینی
+      const ev = await prisma.orderEvent.findFirstOrThrow({ where: { orderId: o.id, type: "ORDER_EDITED" } });
+      const payload = ev.payload as { before: { total: number }; after: { total: number } };
+      expect(payload.before.total).toBe(Number(before.total));
+      expect(payload.after.total).toBe(Number(after.total));
+      // رویداد ادمین
+      const outbox = await prisma.domainEventOutbox.findFirst({ where: { name: "OrderEdited", payload: { path: ["orderId"], equals: o.id } } });
+      expect(outbox).toBeTruthy();
+    } finally {
+      await cleanupTestVariant(sku1);
+      await cleanupTestVariant(sku2);
+    }
   });
 
   it("2) سفارش پرداخت‌شده → ORDER_PAID ممنوع", async () => {
-    const o = await makeOrder([{ sku: "DEMO-BRA-80B-BLK", qty: 1 }]);
-    await prisma.order.update({ where: { id: o.id }, data: { paymentStatus: "PAID" } });
-    await expect(orders.editOrder({ orderId: o.id, lines: [{ sku: "DEMO-BRA-80B-BLK", qty: 2 }] })).rejects.toMatchObject({ response: { code: "ORDER_PAID" } });
+    const sku = `TEST-PAID-${Date.now()}`;
+    await createTestVariant(sku, 10);
+    try {
+      const o = await makeOrder([{ sku, qty: 1 }]);
+      await prisma.order.update({ where: { id: o.id }, data: { paymentStatus: "PAID" } });
+      await expect(orders.editOrder({ orderId: o.id, lines: [{ sku, qty: 2 }] })).rejects.toMatchObject({ response: { code: "ORDER_PAID" } });
+    } finally {
+      await cleanupTestVariant(sku);
+    }
   });
 
   it("3) تعداد بیش از موجودی → INSUFFICIENT_STOCK و هیچ تغییر نمانده", async () => {
-    const o = await makeOrder([{ sku: "DEMO-BRA-80B-BLK", qty: 1 }]);
-    const totalBefore = (await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).total;
-    // واریانتِ بدون ردیف دفتری (sellable صفر واقعی، زیر سقف ۹۹) را خودش می‌سازد؛
-    // قبلاً به SKU دموی ردیف‌ندار تکیه داشت که با تعمیر موجودی آغازین دیگر صفر نیست.
-    const host = await prisma.product.findFirstOrThrow({ where: { deletedAt: null } });
-    const zeroSku = `ZLEDGER-${Date.now()}`;
-    await prisma.productVariant.create({ data: { productId: host.id, sku: zeroSku, price: 1000n, stockQty: 0 } });
+    const sku1 = `TEST-INSUFF-1-${Date.now()}`;
+    const zeroSku = `TEST-INSUFF-0-${Date.now()}`;
+    await createTestVariant(sku1, 10);
+    await createTestVariant(zeroSku, 0);
     try {
+      const o = await makeOrder([{ sku: sku1, qty: 1 }]);
+      const totalBefore = (await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).total;
       await expect(orders.editOrder({ orderId: o.id, lines: [{ sku: zeroSku, qty: 50 }] })).rejects.toMatchObject({ response: { code: "INSUFFICIENT_STOCK" } });
       // هیچ تغییر نمانده باشد
       const after = await prisma.order.findUniqueOrThrow({ where: { id: o.id } });
@@ -122,7 +184,8 @@ describe("Phase 14 item 6 — order edit", () => {
       const evCount = await prisma.orderEvent.count({ where: { orderId: o.id, type: "ORDER_EDITED" } });
       expect(evCount).toBe(0);
     } finally {
-      await prisma.productVariant.delete({ where: { sku: zeroSku } }).catch(() => undefined);
+      await cleanupTestVariant(sku1);
+      await cleanupTestVariant(zeroSku);
     }
   });
 });
