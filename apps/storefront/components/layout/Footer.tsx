@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BRANCHES, site } from "@/lib/site";
 import { COPY } from "@/lib/copy";
 import { CATEGORIES as categories } from "@/lib/categories";
+import { EnamadSeal } from "./EnamadSeal";
 
 export function Footer() {
   return (
@@ -84,31 +85,7 @@ export function Footer() {
         </div>
 
         <div className="mt-8 flex flex-col items-center gap-2 border-t border-line pt-5">
-          {/*
-            نشان اعتماد الکترونیکی (اینماد) — کد رسمی صادرشده برای همین دامنه.
-            «referrerPolicy="origin"» عمداً همان چیزی است که کد رسمی می‌خواهد؛
-            سامانه با آن دامنهٔ میزبان نشان را می‌سنجد. بدون noreferrer.
-          */}
-          <a
-            href="https://trustseal.enamad.ir/?id=8443966&Code=Ts1ukgqIv9Qa9Kmapjmv8ohTbtavNXBv"
-            target="_blank"
-            rel="noopener"
-            referrerPolicy="origin"
-            aria-label="نشان اعتماد الکترونیکی (اینماد) — مشاهدهٔ مجوز در سامانه"
-            className="inline-flex min-h-11 items-center rounded-xl p-1 transition-opacity hover:opacity-90"
-          >
-            <img
-              src="https://trustseal.enamad.ir/logo.aspx?id=8443966&Code=Ts1ukgqIv9Qa9Kmapjmv8ohTbtavNXBv"
-              alt="نشان اعتماد الکترونیکی (اینماد)"
-              referrerPolicy="origin"
-              width={80}
-              height={80}
-              loading="lazy"
-              decoding="async"
-              className="h-20 w-20 cursor-pointer object-contain"
-              {...{ code: "Ts1ukgqIv9Qa9Kmapjmv8ohTbtavNXBv" }}
-            />
-          </a>
+          <EnamadSeal />
           <p className="text-center text-xs leading-6 text-muted">
             © {new Date().getFullYear()} {site.fullName} — همه حقوق محفوظ است.
           </p>
