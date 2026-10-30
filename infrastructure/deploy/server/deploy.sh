@@ -109,9 +109,6 @@ done
 
 # ---------- 7) nginx + SSL ----------
 log "7/8 — nginx + گواهی"
-# فایل تأیید اینماد — در ریشهٔ وب، مستقل از اپ؛ با هر استقرار بازسازی می‌شود
-mkdir -p /var/www/enamad
-install -m 644 "$HERE/static/35045448.txt" /var/www/enamad/35045448.txt
 CERT_DIR=""
 for d in /etc/letsencrypt/live/www.lebaszirghasedak.ir /etc/letsencrypt/live/*; do
   [ -f "$d/fullchain.pem" ] && { CERT_DIR="$d"; break; }
